@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Classification v2.0 — Taxonomy Proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #fafaf8;
+  --bg2: #ffffff;
+  --bg3: #f5f5f0;
+  --border: #e8e8e3;
+  --border2: #d8d8d3;
+  --text: #1a1a1a;
+  --text2: #4a4a4a;
+  --muted: #8a8a8a;
+  --indigo: #4f46e5;
+  --indigo-light: #eef2ff;
+  --indigo-border: #c7d2fe;
+  --emerald: #059669;
+  --emerald-light: #ecfdf5;
+  --amber: #d97706;
+  --amber-light: #fffbeb;
+  --rose: #e11d48;
+  --rose-light: #fff1f2;
+  --cyan: #0891b2;
+  --cyan-light: #ecfeff;
+  --violet: #7c3aed;
+  --violet-light: #f5f3ff;
+  --slate: #475569;
+  --slate-light: #f8fafc;
+  --serif: 'Cormorant Garamond', Georgia, serif;
+  --sans: 'Inter', -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { font-family: var(--sans); background: var(--bg); color: var(--text); line-height: 1.7; font-size: 15px; }
+::selection { background: var(--indigo); color: white; }
+
+/* ── NAV ── */
+nav {
+  position: fixed; top: 0; left: 0; height: 100vh; width: 216px;
+  padding: 2.25rem 1.75rem; background: var(--bg); border-right: 1px solid var(--border);
+  z-index: 100; display: flex; flex-direction: column; overflow-y: auto;
+}
+.nav-brand { font-family: var(--serif); font-size: 1rem; font-weight: 600; color: var(--text); margin-bottom: 0.2rem; }
+.nav-sub { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 2.5rem; }
+.nav-section { margin-bottom: 1.5rem; }
+.nav-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 0.55rem; }
+nav ul { list-style: none; }
+nav ul li { margin-bottom: 0.3rem; }
+nav ul a { color: var(--text2); text-decoration: none; font-size: 0.8rem; display: block; padding: 0.15rem 0; transition: color 0.15s; }
+nav ul a:hover, nav ul a.active { color: var(--text); font-weight: 500; }
+.nav-meta { margin-top: auto; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+.nav-meta p { font-size: 0.7rem; color: var(--muted); line-height: 1.6; }
+.nav-meta strong { color: var(--text2); }
+
+/* ── MAIN ── */
+main { margin-left: 216px; }
+section { padding: 5rem 4.5rem; max-width: 1080px; border-bottom: 1px solid var(--border); opacity: 0; transform: translateY(20px); transition: opacity 0.65s ease, transform 0.65s ease; }
+section.visible { opacity: 1; transform: translateY(0); }
+section:last-of-type { border-bottom: none; }
+
+/* ── TYPOGRAPHY ── */
+.section-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); margin-bottom: 0.85rem; display: block; }
+h1 { font-family: var(--serif); font-size: clamp(2.2rem, 4vw, 3rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.4rem; }
+h2 { font-family: var(--serif); font-size: clamp(1.6rem, 2.8vw, 2rem); font-weight: 400; line-height: 1.2; margin-bottom: 0.85rem; }
+h3 { font-family: var(--serif); font-size: 1.2rem; font-weight: 500; margin-bottom: 0.5rem; }
+p { color: var(--text2); font-size: 0.9rem; max-width: 680px; margin-bottom: 1.1rem; line-height: 1.75; }
+p.wide { max-width: none; }
+p:last-child { margin-bottom: 0; }
+
+/* ── HERO ── */
+#cover { min-height: 85vh; display: flex; flex-direction: column; justify-content: center; }
+.hero-intro { font-family: var(--serif); font-size: 1.15rem; line-height: 1.8; color: var(--text2); max-width: 700px; margin-bottom: 2.75rem; }
+.schema-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem; }
+.schema-stat { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem 1.5rem; }
+.schema-stat .ss-val { font-family: var(--serif); font-size: 2.2rem; line-height: 1; margin-bottom: 0.25rem; }
+.schema-stat .ss-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.schema-stat.hl { border-color: var(--indigo-border); background: var(--indigo-light); }
+.schema-stat.hl .ss-val { color: var(--indigo); }
+
+.axes-banner { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.axis-half { padding: 1.5rem 1.75rem; }
+.axis-half:first-child { border-right: 1px solid var(--border); background: var(--bg2); }
+.axis-half:last-child { background: var(--indigo-light); }
+.axis-num { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); margin-bottom: 0.4rem; letter-spacing: 0.06em; }
+.axis-title { font-family: var(--serif); font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; }
+.axis-desc { font-size: 0.78rem; color: var(--text2); line-height: 1.65; }
+.axis-fields { margin-top: 0.85rem; display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.field-pill { font-family: var(--mono); font-size: 0.65rem; background: var(--bg3); border: 1px solid var(--border); padding: 0.2rem 0.5rem; border-radius: 4px; color: var(--text2); }
+
+/* ── TAXONOMY SECTION ── */
+.taxonomy-intro { margin-bottom: 2.5rem; }
+
+.taxonomy-col-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; padding-bottom: 0.75rem; border-bottom: 2px solid var(--border); }
+.col-badge { font-size: 0.62rem; font-weight: 600; padding: 0.25rem 0.65rem; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.06em; }
+.col-badge.ai { background: #dbeafe; color: #1e40af; }
+.col-badge.not { background: #f1f5f9; color: #475569; }
+.col-title { font-family: var(--serif); font-size: 1.3rem; font-weight: 500; }
+
+.taxonomy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; }
+
+.sub-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border2);
+  border-radius: 0 8px 8px 0;
+  padding: 1.25rem 1.4rem;
+  margin-bottom: 0.85rem;
+  transition: box-shadow 0.2s;
+}
+.sub-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+.sub-card:last-child { margin-bottom: 0; }
+
+.sub-card.c1a { border-left-color: #4f46e5; }
+.sub-card.c1b { border-left-color: #7c3aed; }
+.sub-card.c1c { border-left-color: #0891b2; }
+.sub-card.c1d { border-left-color: #059669; }
+.sub-card.c1e { border-left-color: #d97706; }
+.sub-card.c0a { border-left-color: #94a3b8; }
+.sub-card.c0b { border-left-color: #64748b; }
+.sub-card.c0c-thin { border-left-color: #e11d48; }
+.sub-card.c0c-thick { border-left-color: #f59e0b; }
+.sub-card.c0d { border-left-color: #10b981; }
+.sub-card.c0e { border-left-color: #cbd5e1; }
+
+.sub-header { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.6rem; }
+.sub-id { font-family: var(--mono); font-size: 0.7rem; font-weight: 500; color: var(--muted); }
+.sub-name { font-family: var(--serif); font-size: 1.05rem; font-weight: 600; color: var(--text); }
+.sub-examples { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); margin-bottom: 0.6rem; line-height: 1.6; }
+.sub-examples strong { color: var(--text2); font-weight: 500; }
+.sub-signal { font-size: 0.78rem; color: var(--text2); line-height: 1.6; padding-top: 0.6rem; border-top: 1px solid var(--border); }
+.sub-signal em { font-style: normal; color: var(--text); font-weight: 500; }
+
+.split-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 0.5rem 0 0.5rem; }
+
+.inline-code {
+  font-family: var(--mono);
+  font-size: 0.82em;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  color: var(--indigo);
+}
+
+/* ── RAD SECTION ── */
+.rad-definition { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 1.75rem 2rem; margin-bottom: 2rem; }
+.rad-question { font-family: var(--serif); font-size: 1.25rem; font-style: italic; line-height: 1.6; color: var(--text); margin-bottom: 0; border-left: 3px solid var(--indigo); padding-left: 1.25rem; }
+
+.rad-levels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+.rad-card { border-radius: 8px; padding: 1.25rem 1.25rem; border: 1px solid var(--border); }
+.rad-card.rad-h { background: #fff1f2; border-color: #fecdd3; }
+.rad-card.rad-m { background: #fffbeb; border-color: #fde68a; }
+.rad-card.rad-l { background: var(--emerald-light); border-color: #a7f3d0; }
+.rad-card.rad-na { background: var(--slate-light); border-color: #e2e8f0; }
+.rad-badge { font-family: var(--mono); font-size: 0.68rem; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 4px; display: inline-block; margin-bottom: 0.6rem; }
+.rad-h .rad-badge { background: #ffe4e6; color: #be123c; }
+.rad-m .rad-badge { background: #fef3c7; color: #92400e; }
+.rad-l .rad-badge { background: #d1fae5; color: #065f46; }
+.rad-na .rad-badge { background: #e2e8f0; color: #475569; }
+.rad-title { font-family: var(--serif); font-size: 0.95rem; font-weight: 600; margin-bottom: 0.45rem; }
+.rad-desc { font-size: 0.75rem; color: var(--text2); line-height: 1.65; }
+.rad-signal { font-size: 0.7rem; margin-top: 0.55rem; padding-top: 0.55rem; border-top: 1px solid rgba(0,0,0,0.07); color: var(--muted); font-style: italic; }
+
+.rad-matrix-wrap { margin-bottom: 2rem; }
+.rad-matrix-wrap h3 { margin-bottom: 1rem; }
+.matrix-table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 0.78rem; }
+.matrix-table th, .matrix-table td { padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: left; }
+.matrix-table th { background: var(--bg3); font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.matrix-table td:first-child { font-family: var(--mono); font-size: 0.72rem; font-weight: 600; background: var(--bg3); }
+.matrix-table tr:last-child td { border-bottom: none; }
+.matrix-table td:last-child, .matrix-table th:last-child { border-right: none; }
+.cell-ai { color: var(--indigo); font-weight: 500; }
+.cell-hi { background: #fff8f8; }
+.cell-med { background: #fffdf5; }
+.cell-lo { background: #f6fef9; }
+.cell-na { color: var(--muted); font-style: italic; }
+
+.perplexity-case { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-top: 2rem; }
+.case-header { background: var(--indigo); color: white; padding: 1rem 1.5rem; display: flex; align-items: center; gap: 1rem; }
+.case-header h3 { font-family: var(--serif); font-size: 1rem; font-weight: 500; color: white; margin: 0; }
+.case-header .case-tag { font-family: var(--mono); font-size: 0.62rem; background: rgba(255,255,255,0.2); padding: 0.2rem 0.5rem; border-radius: 3px; }
+.case-body { padding: 1.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+.case-col-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 0.5rem; }
+.case-col p { font-size: 0.82rem; color: var(--text2); line-height: 1.7; }
+.case-output { background: var(--bg3); border-top: 1px solid var(--border); padding: 1rem 1.5rem; }
+.case-output .co-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 0.45rem; }
+.case-output code { font-family: var(--mono); font-size: 0.73rem; color: var(--text2); display: block; line-height: 1.8; }
+.case-output code span.k { color: var(--indigo); font-weight: 500; }
+.case-output code span.v { color: var(--emerald); }
+
+/* ── SCHEMA SECTION ── */
+.schema-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; margin: 1.5rem 0; }
+.schema-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.schema-table th { padding: 0.75rem 1.1rem; background: var(--bg3); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 600; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.schema-table td { padding: 0.7rem 1.1rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.schema-table tr:last-child td { border-bottom: none; }
+.schema-table .field-name { font-family: var(--mono); font-size: 0.75rem; font-weight: 500; color: var(--text); white-space: nowrap; }
+.schema-table .field-type { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
+.schema-table .field-values { font-size: 0.77rem; color: var(--text2); line-height: 1.6; }
+.schema-table .field-note { font-size: 0.75rem; color: var(--muted); line-height: 1.55; }
+.schema-table tr.dim1 td { border-left: 3px solid var(--indigo); }
+.schema-table tr.dim2 td { border-left: 3px solid var(--amber); }
+.schema-table tr.dim3 td { border-left: 3px solid var(--emerald); }
+.schema-table tr.out td { border-left: 3px solid var(--border2); }
+.dim-tag { display: inline-block; font-size: 0.58rem; padding: 0.1rem 0.4rem; border-radius: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; vertical-align: middle; margin-left: 0.3rem; }
+.dim-tag.d1 { background: var(--indigo-light); color: var(--indigo); }
+.dim-tag.d2 { background: var(--amber-light); color: var(--amber); }
+.dim-tag.d3 { background: var(--emerald-light); color: var(--emerald); }
+
+.samples-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-top: 2rem; }
+.sample-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.sample-header { padding: 0.85rem 1.1rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.sample-co { font-family: var(--serif); font-size: 1rem; font-weight: 600; }
+.stag { font-family: var(--mono); font-size: 0.6rem; padding: 0.15rem 0.45rem; border-radius: 3px; font-weight: 600; }
+.stag-1b { background: #ede9fe; color: #5b21b6; }
+.stag-1d { background: #d1fae5; color: #065f46; }
+.stag-0c-thick { background: #fef3c7; color: #92400e; }
+.stag-0c-thin { background: #ffe4e6; color: #be123c; }
+.stag-0e { background: #f1f5f9; color: #475569; }
+.sample-body { padding: 0.9rem 1.1rem; }
+.sample-row { display: flex; gap: 0.6rem; align-items: baseline; margin-bottom: 0.3rem; font-size: 0.77rem; }
+.sample-key { font-family: var(--mono); font-size: 0.68rem; color: var(--muted); min-width: 110px; flex-shrink: 0; }
+.sample-val { color: var(--text2); line-height: 1.5; }
+.sample-val.mono { font-family: var(--mono); font-size: 0.72rem; }
+.sample-val.ind { color: var(--indigo); font-weight: 500; }
+.sample-val.em { color: var(--emerald); font-weight: 500; }
+.sample-val.am { color: var(--amber); font-weight: 500; }
+.sample-val.ro { color: var(--rose); font-weight: 500; }
+.sample-val.sl { color: var(--slate); font-weight: 500; }
+
+/* ── INSIGHT BOXES ── */
+.insight { padding: 1.1rem 1.4rem; border-radius: 8px; margin: 1.5rem 0; font-size: 0.85rem; line-height: 1.7; }
+.insight p { font-size: 0.85rem; max-width: none; margin-bottom: 0.35rem; }
+.insight p:last-child { margin-bottom: 0; }
+.insight-blue { background: var(--indigo-light); border: 1px solid var(--indigo-border); color: var(--text2); }
+.insight-blue strong { color: #3730a3; }
+.insight-amber { background: var(--amber-light); border: 1px solid #fde68a; color: var(--text2); }
+.insight-amber strong { color: #92400e; }
+.insight-emerald { background: var(--emerald-light); border: 1px solid #a7f3d0; color: var(--text2); }
+.insight-emerald strong { color: #065f46; }
+
+/* ── RULES SECTION ── */
+.rules-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.5rem 0; }
+.rule-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; }
+.rule-title { font-size: 0.78rem; font-weight: 600; color: var(--text); margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.5rem; }
+.rule-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.rule-body { font-size: 0.78rem; color: var(--text2); line-height: 1.7; }
+.rule-body code { font-family: var(--mono); font-size: 0.72rem; background: var(--bg3); padding: 0.05rem 0.3rem; border-radius: 3px; color: var(--text); }
+
+footer { padding: 2.5rem 4.5rem; text-align: center; color: var(--muted); font-size: 0.75rem; border-top: 1px solid var(--border); }
+
+/* ── PROMPT SECTION ── */
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2rem;
+}
+.tab-btn {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  padding: 0.55rem 1.2rem;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  letter-spacing: 0.04em;
+  transition: color 0.15s;
+}
+.tab-btn:hover { color: var(--text2); }
+.tab-btn.active { color: var(--indigo); border-bottom-color: var(--indigo); font-weight: 500; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+.prompt-pre {
+  font-family: var(--mono);
+  font-size: 0.71rem;
+  line-height: 1.8;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.75rem 2rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text2);
+  overflow-x: auto;
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 1100px) {
+  nav { display: none; } main { margin-left: 0; } section { padding: 3rem 1.5rem; }
+  .taxonomy-grid, .samples-grid, .rules-grid, .rad-levels { grid-template-columns: 1fr; }
+  .axes-banner, .case-body { grid-template-columns: 1fr; }
+  .schema-summary { grid-template-columns: repeat(2, 1fr); }
+}
+@media print { section { opacity: 1 !important; transform: none !important; } nav { display: none; } main { margin-left: 0; } }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">Classification v2.0</div>
+  <div class="nav-sub">Taxonomy Proposal</div>
+  <div class="nav-section">
+    <div class="nav-label">Sections</div>
+    <ul>
+      <li><a href="#cover">Overview</a></li>
+      <li><a href="#taxonomy">Taxonomy</a></li>
+      <li><a href="#rad">RAD Score</a></li>
+      <li><a href="#schema">Output Schema</a></li>
+      <li><a href="#prompt">Prompt</a></li>
+    </ul>
+  </div>
+  <div class="nav-meta">
+    <p><strong>Advisors</strong><br>Jan Bena<br>Bo Bian</p>
+    <p style="margin-top:0.75rem;"><strong>Dataset</strong><br>267,790 startups<br>Crunchbase US</p>
+  </div>
+</nav>
+
+<main>
+
+<!-- ══════════════════════════════════════════
+     SECTION 1 — COVER
+═══════════════════════════════════════════ -->
+<section id="cover">
+  <span class="section-label">Research Design Proposal</span>
+  <h1>A Two-Axis Classification<br>Framework for AI-Native Startups</h1>
+  <p class="hero-intro">
+    This document proposes replacing the current binary AI-native classification (1/0) with a richer, 
+    two-axis framework. Each startup receives an <strong>AI-native subclass</strong> (one of 11 categories 
+    capturing the nature and depth of AI dependency) and a <strong>Resource-Adjusted Dependency score</strong> 
+    (RAD) capturing how structurally dependent the company is on third-party GenAI infrastructure versus 
+    proprietary capability. A <strong>temporal cohort flag</strong> anchors every classification to the 
+    GPT-4 inflection point of March 2023.
+  </p>
+
+  <div class="schema-summary">
+    <div class="schema-stat hl">
+      <div class="ss-val">11</div>
+      <div class="ss-label">Subclasses (5 AI-native, 6 not)</div>
+    </div>
+    <div class="schema-stat hl">
+      <div class="ss-val">4</div>
+      <div class="ss-label">RAD score levels</div>
+    </div>
+    <div class="schema-stat hl">
+      <div class="ss-val">11</div>
+      <div class="ss-label">Output fields per company</div>
+    </div>
+  </div>
+
+  <div class="axes-banner">
+    <div class="axis-half">
+      <div class="axis-num">Dimension 1</div>
+      <div class="axis-title">AI-Native Classification &amp; Subclass</div>
+      <div class="axis-desc">
+        Binary 1/0 determination of whether the core product would cease to exist without AI/ML, 
+        combined with a genre label capturing the nature of that dependency.
+      </div>
+      <div class="axis-fields">
+        <span class="field-pill">ai_native</span>
+        <span class="field-pill">subclass</span>
+        <span class="field-pill">conf_classification</span>
+      </div>
+    </div>
+    <div class="axis-half">
+      <div class="axis-num">Dimension 2</div>
+      <div class="axis-title">Resource-Adjusted Dependency (RAD)</div>
+      <div class="axis-desc">
+        Measures structural dependence on third-party GenAI APIs versus proprietary models, 
+        independent of the 1/0 verdict and adjusted for company scale and resources.
+      </div>
+      <div class="axis-fields">
+        <span class="field-pill">rad_score</span>
+        <span class="field-pill">cohort</span>
+        <span class="field-pill">conf_rad</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     SECTION 2 — TAXONOMY
+═══════════════════════════════════════════ -->
+<section id="taxonomy">
+  <span class="section-label">Dimension 1</span>
+  <h2>The Full Taxonomy</h2>
+  <p class="taxonomy-intro">
+    The 11 subclasses are grouped into two families. The AI-native family (1A–1E) distinguishes five 
+    types of AI-dependent business. The not-AI-native family (0A–0E) introduces a split within LLM 
+    integrators between thin and thick wrappers, separating API dependency from business defensibility.
+  </p>
+
+  <div class="taxonomy-grid">
+
+    <!-- LEFT: AI-NATIVE -->
+    <div>
+      <div class="taxonomy-col-header">
+        <span class="col-badge ai">ai_native = 1</span>
+        <span class="col-title">AI-Native</span>
+      </div>
+
+      <div class="sub-card c1a">
+        <div class="sub-header">
+          <span class="sub-id">1A</span>
+          <span class="sub-name">Foundation Layer</span>
+        </div>
+        <div class="sub-examples"><strong>Examples:</strong> Anthropic, Mistral, Cohere, Pinecone, Modal, Together AI</div>
+        <div class="sub-signal">Building the base stack — frontier model training, novel architectures, ML compute, vector databases. <em>They produce infrastructure that other AI products are built on.</em></div>
+      </div>
+
+      <div class="sub-card c1b">
+        <div class="sub-header">
+          <span class="sub-id">1B</span>
+          <span class="sub-name">Applied Vertical AI</span>
+        </div>
+        <div class="sub-examples"><strong>Examples:</strong> Abridge (clinical docs), Harvey (legal), Glean (enterprise search), DeepScribe (medical scribe)</div>
+        <div class="sub-signal">AI purpose-built for a domain where AI <em>is</em> the product. The entire workflow is reimagined — not augmented. Product would not exist in a meaningfully similar form without AI.</div>
+      </div>
+
+      <div class="sub-card c1c">
+        <div class="sub-header">
+          <span class="sub-id">1C</span>
+          <span class="sub-name">AI-Native Tooling &amp; MLOps</span>
+        </div>
+        <div class="sub-examples"><strong>Examples:</strong> Weights &amp; Biases, Scale AI, Braintrust, Humanloop, Arize AI</div>
+        <div class="sub-signal">Building for the AI development lifecycle itself. <em>Their customer is an AI developer or team.</em> Would have no product without AI being a widespread development target.</div>
+      </div>
+
+      <div class="sub-card c1d">
+        <div class="sub-header">
+          <span class="sub-id">1D</span>
+          <span class="sub-name">Autonomous Agent Systems</span>
+        </div>
+        <div class="sub-examples"><strong>Examples:</strong> Cognition (Devin), Adept, Dust, MultiOn, browser automation agents</div>
+        <div class="sub-signal">Core product is AI <em>acting autonomously</em> in the world: planning, executing, operating software. Not a chatbot that responds, not a tool that assists.</div>
+      </div>
+
+      <div class="sub-card c1e">
+        <div class="sub-header">
+          <span class="sub-id">1E</span>
+          <span class="sub-name">Generative Content Platforms</span>
+        </div>
+        <div class="sub-examples"><strong>Examples:</strong> Midjourney, ElevenLabs, Runway, Suno, Stability AI, HeyGen</div>
+        <div class="sub-signal">GenAI is the creative engine. The product <em>is</em> the generation capability. The deliverable to the customer is generated content that cannot exist without generative models.</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: NOT AI-NATIVE -->
+    <div>
+      <div class="taxonomy-col-header">
+        <span class="col-badge not">ai_native = 0</span>
+        <span class="col-title">Not AI-Native</span>
+      </div>
+
+      <div class="sub-card c0a">
+        <div class="sub-header">
+          <span class="sub-id">0A</span>
+          <span class="sub-name">Traditional Tech / SaaS</span>
+        </div>
+        <div class="sub-examples"><strong>Examples:</strong> Classic Salesforce CRM, Stripe, Shopify (pre-AI), Shipsi</div>
+        <div class="sub-signal">Conventional software with no meaningful AI angle. <em>Strip all AI references and the product description still holds. The value proposition is unchanged.</em></div>
+      </div>
+
+      <div class="sub-card c0b">
+        <div class="sub-header">
+          <span class="sub-id">0B</span>
+          <span class="sub-name">AI-Augmented</span>
+        </div>
+        <div class="sub-examples"><strong>Examples:</strong> Notion (AI writing assist), Salesforce Einstein, Grammarly (pre-LLM), HubSpot AI</div>
+        <div class="sub-signal">AI genuinely improves the product but is not what the company sells. <em>The company could remove AI features tomorrow and remain competitive.</em></div>
+      </div>
+
+      <div class="split-label">0C — LLM Integrators: split by wrapper depth</div>
+
+      <div class="sub-card c0c-thin">
+        <div class="sub-header">
+          <span class="sub-id">0C-THIN</span>
+          <span class="sub-name">Thin LLM Wrapper</span>
+        </div>
+        <div class="sub-examples"><strong>Examples:</strong> Commodity AI summarization tools, basic AI chatbots with no proprietary training</div>
+        <div class="sub-signal">Minimal proprietary layer. <em>A developer could replicate the core product in days using the same APIs.</em> No data flywheel, no fine-tuning, high substitution risk.</div>
+      </div>
+
+      <div class="sub-card c0c-thick">
+        <div class="sub-header">
+          <span class="sub-id">0C-THICK</span>
+          <span class="sub-name">Thick LLM Integrator</span>
+        </div>
+        <div class="sub-examples"><strong>Examples:</strong> Perplexity AI, Jasper, Cursor (deep IDE integration + codebase context)</div>
+        <div class="sub-signal">Significant proprietary investment: fine-tuned models, unique datasets, deep workflow integration, or UX moat. <em>Replacing the LLM API would be painful. They have built value beyond the API call.</em></div>
+      </div>
+
+      <div class="sub-card c0d">
+        <div class="sub-header">
+          <span class="sub-id">0D</span>
+          <span class="sub-name">AI-Adjacent / Ecosystem</span>
+        </div>
+        <div class="sub-examples"><strong>Examples:</strong> CoreWeave (GPU cloud), Labelbox (human-in-the-loop labeling), AI compliance consultancies</div>
+        <div class="sub-signal">Revenue grows because AI is growing, but the company's <em>own product would not technically change if AI stopped advancing.</em> Beneath or beside the AI stack, not part of it.</div>
+      </div>
+
+      <div class="sub-card c0e">
+        <div class="sub-header">
+          <span class="sub-id">0E</span>
+          <span class="sub-name">Non-Tech</span>
+        </div>
+        <div class="sub-examples"><strong>Examples:</strong> Easy Access Limousine, Futuremood (sunglasses), food/retail manufacturers</div>
+        <div class="sub-signal">Physical products, retail, traditional services. <em>No technology in the core product at all.</em> AI plays no role in product, operations, or value proposition.</div>
+      </div>
+    </div>
+
+  </div><!-- /taxonomy-grid -->
+
+  <div class="insight insight-blue" style="margin-top: 2rem;">
+    <p><strong>Key classification boundary:</strong> The 1B vs 0C-THICK line is the hardest call in this taxonomy. The question is whether proprietary data or fine-tuning makes the AI <em>qualitatively different</em> (→ 1B) or just <em>better</em> (→ 0C-THICK). Harvey AI's legal corpus fine-tuning puts it in 1B. Perplexity stays at 0C-THICK because the underlying problem (information retrieval) predates and survives GenAI.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     SECTION 3 — RAD
+═══════════════════════════════════════════ -->
+<section id="rad">
+  <span class="section-label">Dimension 2</span>
+  <h2>The RAD Score</h2>
+
+  <p>
+    Consider two companies that both correctly receive <code class="inline-code">ai_native = 1</code>: 
+    Anthropic, which trains its own frontier models with a team of hundreds, and a recently founded 
+    startup that wraps the Anthropic API to automate legal document review. Both products cease to exist 
+    without AI. But only one of them ceases to exist if Anthropic changes its pricing. The classification 
+    captures what a company <em>is</em>. It says nothing about how exposed it is to the layer beneath it.
+  </p>
+  <p>
+    The subclass taxonomy cannot fix this. A 1B Applied Vertical AI company can be built on fine-tuned 
+    proprietary models or on a single API call; the subclass does not distinguish them. The exposure 
+    question is separate from the identity question and requires its own axis. RAD (Resource-Adjusted 
+    AI Dependency) formalizes it: independent of the 1/0 verdict, how dependent is this company on 
+    current third-party GenAI infrastructure versus its own proprietary capability? With this axis in 
+    the dataset, questions the binary cannot reach become tractable: what share of AI-native startups 
+    have no credible path to technical independence, and how does that share shift across founding cohorts?
+  </p>
+
+  <div class="rad-definition">
+    <p class="rad-question">
+      "If this company had $500M in funding and 5 years, could they build a competitive product 
+      without relying on third-party GenAI APIs?"
+    </p>
+  </div>
+
+  <p>
+    This dimension is most useful for AI-native companies (Class 1), where it separates a foundational 
+    lab from an API-dependent product, a distinction the 1/0 alone cannot make. It is also assigned 
+    to 0B and 0C companies where AI plays a structural role.
+  </p>
+
+  <div class="rad-levels">
+    <div class="rad-card rad-h">
+      <span class="rad-badge">RAD-H</span>
+      <div class="rad-title">High Dependency</div>
+      <div class="rad-desc">Product structurally tied to current-generation GenAI. Even with substantial resources, cannot independently replicate at competitive cost.</div>
+      <div class="rad-signal">Signal: "powered by GPT-4", no proprietary model mentions, founded post-2023 with no research signals</div>
+    </div>
+    <div class="rad-card rad-m">
+      <span class="rad-badge">RAD-M</span>
+      <div class="rad-title">Medium / Transitional</div>
+      <div class="rad-desc">GenAI-dependent today but with credible independence signals: proprietary fine-tuning, sufficient scale, or pre-2023 AI technology predating the GenAI wave.</div>
+      <div class="rad-signal">Signal: fine-tuning mentioned, in-house research, large funding with technical hiring, pre-2023 AI tech</div>
+    </div>
+    <div class="rad-card rad-l">
+      <span class="rad-badge">RAD-L</span>
+      <div class="rad-title">Low Dependency</div>
+      <div class="rad-desc">AI is peripheral, or the company demonstrably builds and trains its own models. A shutdown of all third-party AI APIs would not materially affect the product.</div>
+      <div class="rad-signal">Signal: trains own models, own research lab, API-independent architecture, AI is backend optimization only</div>
+    </div>
+    <div class="rad-card rad-na">
+      <span class="rad-badge">RAD-NA</span>
+      <div class="rad-title">Not Applicable</div>
+      <div class="rad-desc">Assigned to 0A, 0D, and 0E companies where AI plays no structural role. Forcing a score here would misrepresent the data.</div>
+      <div class="rad-signal">Always assigned with conf_rad = 5; the N/A designation is certain</div>
+    </div>
+  </div>
+
+  <div class="rad-matrix-wrap">
+    <h3>The 2 × 3 Matrix</h3>
+    <p>Running RAD parallel to the 1/0 classification produces six distinct buckets. The top-right cell (1 × RAD-L) is the rarest: companies that are AI-native and technically self-sufficient, with no structural dependency on external foundation models.</p>
+    <div class="matrix-table-wrap" style="overflow-x:auto; margin-top:1rem;">
+    <table class="matrix-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>RAD-H &nbsp;·&nbsp; High Dependency</th>
+          <th>RAD-M &nbsp;·&nbsp; Medium / Transitional</th>
+          <th>RAD-L &nbsp;·&nbsp; Low Dependency</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="cell-ai">ai_native = 1</span></td>
+          <td class="cell-hi">Pure GenAI play. Product impossible without 2023-era models; collapses if the foundation model layer commoditizes. <em>e.g. ElevenLabs (early), most agentic startups</em></td>
+          <td class="cell-med">GenAI-dependent today but building toward independence, or using pre-2023 AI with a proprietary stack. <em>e.g. DeepScribe (classical NLP roots), Harvey AI (fine-tuned legal models)</em></td>
+          <td class="cell-lo"><strong>Rarest category.</strong> AI-native with no structural dependency on external models. <em>e.g. Anthropic, Mistral, Pinecone</em></td>
+        </tr>
+        <tr>
+          <td>ai_native = 0</td>
+          <td class="cell-hi">Heavy LLM integrators. Core workflow wraps APIs but the business problem predates AI. <em>e.g. 0C-THIN wrappers, most AI-powered SaaS</em></td>
+          <td class="cell-med">Traditional tech with serious ML investment; large enough that building proprietary AI is plausible. <em>e.g. Perplexity (0C-THICK), enterprise SaaS with ML teams</em></td>
+          <td class="cell-lo"><span class="cell-na">AI peripheral; removal does not affect product viability. Overlaps with 0A / 0B.</span></td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <h3>The Perplexity Case</h3>
+  <div class="perplexity-case">
+    <div class="case-header">
+      <h3>Perplexity AI</h3>
+      <span class="case-tag">0C-THICK</span>
+      <span class="case-tag">RAD-M</span>
+      <span class="case-tag">PRE-GENAI</span>
+    </div>
+    <div class="case-body">
+      <div class="case-col">
+        <div class="case-col-label">Why 0C-THICK, not 1B</div>
+        <p>The business problem Perplexity solves — search and information retrieval — predates GenAI and could theoretically be addressed with other means. GenAI changed the <em>interface</em>, not the category. This is the definitional difference between a thick integrator and a vertical AI native.</p>
+      </div>
+      <div class="case-col">
+        <div class="case-col-label">Why RAD-M, not RAD-H</div>
+        <p>Perplexity has built a proprietary web index, significant user-base scale, and deep UX investment. At their funding level and team size, building toward model independence is plausible and economically rational. A thin wrapper startup has no such cushion.</p>
+      </div>
+    </div>
+    <div class="case-output">
+      <div class="co-label">Sample Output Row</div>
+      <code>
+        <span class="k">ai_native</span>: <span class="v">0</span> &nbsp;·&nbsp;
+        <span class="k">subclass</span>: <span class="v">0C-THICK</span> &nbsp;·&nbsp;
+        <span class="k">rad_score</span>: <span class="v">RAD-M</span> &nbsp;·&nbsp;
+        <span class="k">cohort</span>: <span class="v">PRE-GENAI</span> &nbsp;·&nbsp;
+        <span class="k">conf_classification</span>: <span class="v">4</span> &nbsp;·&nbsp;
+        <span class="k">conf_rad</span>: <span class="v">4</span>
+      </code>
+    </div>
+  </div>
+
+  <div class="insight insight-amber" style="margin-top: 1.5rem;">
+    <p><strong>Temporal cohort:</strong> Every company is flagged as <code style="font-family:var(--mono);font-size:0.82rem;background:rgba(0,0,0,0.05);padding:0.1rem 0.3rem;border-radius:3px;">PRE-GENAI</code> (founded before 2023) or <code style="font-family:var(--mono);font-size:0.82rem;background:rgba(0,0,0,0.05);padding:0.1rem 0.3rem;border-radius:3px;">GENAI-ERA</code> (founded 2023 or later). The boundary is GPT-4's launch in March 2023, the first frontier model capable of powering commercial products at scale. Pre-2023 AI-native claims require scrutiny: classical ML or retroactive rebranding. Post-2023 companies default to RAD-H unless proprietary model signals are present.</p>
+  </div>
+
+  <h3 style="margin-top: 2rem;">Assignment Rules</h3>
+  <div class="rules-grid">
+    <div class="rule-card">
+      <div class="rule-title"><div class="rule-dot" style="background:var(--indigo);"></div>All AI-native companies (1A–1E)</div>
+      <div class="rule-body">Always receive <code>RAD-H</code>, <code>RAD-M</code>, or <code>RAD-L</code>. Never <code>RAD-NA</code>. A 1A company (Anthropic) and a 1D company (GPT-wrapper agent) both receive ai_native = 1, but their RAD scores diverge sharply. This is where the axis earns its place.</div>
+    </div>
+    <div class="rule-card">
+      <div class="rule-title"><div class="rule-dot" style="background:var(--amber);"></div>0B and 0C companies</div>
+      <div class="rule-body">Always receive a RAD score. 0C-THIN and 0C-THICK are always <code>RAD-H</code> or <code>RAD-M</code> by definition — they are dependent on external APIs. Never <code>RAD-L</code> or <code>RAD-NA</code>.</div>
+    </div>
+    <div class="rule-card">
+      <div class="rule-title"><div class="rule-dot" style="background:var(--slate);"></div>0A, 0D, 0E companies</div>
+      <div class="rule-body">Always <code>RAD-NA</code>. AI plays no structural role; forcing a dependency score would misrepresent the data. <code>conf_rad</code> is always 5 for NA assignments — the designation is certain.</div>
+    </div>
+    <div class="rule-card">
+      <div class="rule-title"><div class="rule-dot" style="background:var(--emerald);"></div>Ambiguity defaults</div>
+      <div class="rule-body">When RAD evidence is ambiguous: post-2023 companies default to <code>RAD-H</code>; pre-2023 companies with AI keywords default to <code>RAD-M</code>. <code>conf_rad</code> is capped at 3 when defaulting by cohort heuristic only.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     SECTION 4 — OUTPUT SCHEMA
+═══════════════════════════════════════════ -->
+<section id="schema">
+  <span class="section-label">Output Design</span>
+  <h2>The New Output Schema</h2>
+  <p>
+    Each company produces exactly one CSV row with 11 fields. The schema is designed so that 
+    <code style="font-family:var(--mono);font-size:0.82rem;background:var(--bg3);padding:0.1rem 0.35rem;border-radius:3px;">ai_native</code> and <code style="font-family:var(--mono);font-size:0.82rem;background:var(--bg3);padding:0.1rem 0.35rem;border-radius:3px;">subclass</code> 
+    can be analysed independently of <code style="font-family:var(--mono);font-size:0.82rem;background:var(--bg3);padding:0.1rem 0.35rem;border-radius:3px;">rad_score</code>, 
+    and both dimensions carry their own confidence scores to support quality filtering.
+  </p>
+
+  <div class="schema-table-wrap">
+    <table class="schema-table">
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Type</th>
+          <th>Values / Format</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="dim1">
+          <td><span class="field-name">CompanyID</span></td>
+          <td><span class="field-type">string</span></td>
+          <td class="field-values">org_uuid from source dataset</td>
+          <td class="field-note">Unique identifier for joining back to Crunchbase</td>
+        </tr>
+        <tr class="dim1">
+          <td><span class="field-name">CompanyName</span></td>
+          <td><span class="field-type">string</span></td>
+          <td class="field-values">As provided in input</td>
+          <td class="field-note"></td>
+        </tr>
+        <tr class="dim1">
+          <td>
+            <span class="field-name">ai_native</span>
+            <span class="dim-tag d1">Dim 1</span>
+          </td>
+          <td><span class="field-type">int</span></td>
+          <td class="field-values">1 or 0</td>
+          <td class="field-note">Core product would not exist without AI/ML as primary mechanism</td>
+        </tr>
+        <tr class="dim1">
+          <td>
+            <span class="field-name">subclass</span>
+            <span class="dim-tag d1">Dim 1</span>
+          </td>
+          <td><span class="field-type">string</span></td>
+          <td class="field-values">1A · 1B · 1C · 1D · 1E<br>0A · 0B · 0C-THIN · 0C-THICK · 0D · 0E</td>
+          <td class="field-note">Specifies the genre of AI dependency or non-dependency</td>
+        </tr>
+        <tr class="dim2">
+          <td>
+            <span class="field-name">rad_score</span>
+            <span class="dim-tag d2">Dim 2</span>
+          </td>
+          <td><span class="field-type">string</span></td>
+          <td class="field-values">RAD-H · RAD-M · RAD-L · RAD-NA</td>
+          <td class="field-note">Structural dependency on third-party GenAI APIs vs. proprietary capability</td>
+        </tr>
+        <tr class="dim3">
+          <td>
+            <span class="field-name">cohort</span>
+            <span class="dim-tag d3">Temporal</span>
+          </td>
+          <td><span class="field-type">string</span></td>
+          <td class="field-values">PRE-GENAI · GENAI-ERA</td>
+          <td class="field-note">Boundary: GPT-4 launch, March 2023. Informs RAD priors and scrutiny level.</td>
+        </tr>
+        <tr class="out">
+          <td>
+            <span class="field-name">conf_classification</span>
+          </td>
+          <td><span class="field-type">int 1–5</span></td>
+          <td class="field-values">5 = ai_native + subclass fully unambiguous<br>4 = one plausible alternative subclass<br>3 = ai_native clear, subclass borderline<br>1–2 = uncertain or insufficient info</td>
+          <td class="field-note">Capped at 4 if only short_description available; capped at 4 for PRE-GENAI with ambiguous AI claims</td>
+        </tr>
+        <tr class="out">
+          <td>
+            <span class="field-name">conf_rad</span>
+          </td>
+          <td><span class="field-type">int 1–5</span></td>
+          <td class="field-values">5 = explicit API/model statement in description<br>4 = strong indirect signals (fine-tuning, research team)<br>3 = cohort + scale heuristic only<br>1–2 = cannot determine</td>
+          <td class="field-note">Always 5 for RAD-NA. Capped at 3 for 0C companies with no model architecture described.</td>
+        </tr>
+        <tr class="out">
+          <td><span class="field-name">reasons_3_points</span></td>
+          <td><span class="field-type">string</span></td>
+          <td class="field-values">3 concise points separated by " | "</td>
+          <td class="field-note">At least one point must explicitly address the RAD assignment</td>
+        </tr>
+        <tr class="out">
+          <td><span class="field-name">sources_used</span></td>
+          <td><span class="field-type">string</span></td>
+          <td class="field-values">Semicolon-separated subset of:<br>id · name · short_description · long_description · keywords · year</td>
+          <td class="field-note">Which input fields informed the classification</td>
+        </tr>
+        <tr class="out">
+          <td><span class="field-name">verification_critique</span></td>
+          <td><span class="field-type">string</span></td>
+          <td class="field-values">≤ 35 words</td>
+          <td class="field-note">Self-check; must flag if either confidence score is below 3 and explain why</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="margin-top: 2.5rem;">Sample Output Rows</h3>
+  <p>Four representative cases illustrating how the schema handles different classification scenarios.</p>
+
+  <div class="samples-grid">
+
+    <div class="sample-card">
+      <div class="sample-header">
+        <span class="sample-co">Cognition Labs</span>
+        <span class="stag stag-1d">1D</span>
+        <span class="stag" style="background:#d1fae5;color:#065f46;">RAD-H</span>
+        <span class="stag" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;">GENAI-ERA</span>
+      </div>
+      <div class="sample-body">
+        <div class="sample-row"><span class="sample-key">ai_native</span><span class="sample-val ind">1</span></div>
+        <div class="sample-row"><span class="sample-key">subclass</span><span class="sample-val mono ind">1D</span></div>
+        <div class="sample-row"><span class="sample-key">rad_score</span><span class="sample-val mono ro">RAD-H</span></div>
+        <div class="sample-row"><span class="sample-key">cohort</span><span class="sample-val mono">GENAI-ERA</span></div>
+        <div class="sample-row"><span class="sample-key">conf_classification</span><span class="sample-val">5</span></div>
+        <div class="sample-row"><span class="sample-key">conf_rad</span><span class="sample-val">5</span></div>
+        <div class="sample-row" style="margin-top:0.5rem;align-items:flex-start;"><span class="sample-key">reasons</span><span class="sample-val" style="font-size:0.74rem;color:var(--muted);">Autonomous agent system requires frontier LLM reasoning | Born 2023, structurally dependent on GPT-4-tier capabilities | Categorically distinct from chatbots — Devin acts, not responds</span></div>
+      </div>
+    </div>
+
+    <div class="sample-card">
+      <div class="sample-header">
+        <span class="sample-co">Perplexity AI</span>
+        <span class="stag stag-0c-thick">0C-THICK</span>
+        <span class="stag" style="background:#fef3c7;color:#92400e;">RAD-M</span>
+        <span class="stag" style="background:#f8fafc;color:#475569;border:1px solid #e2e8f0;">PRE-GENAI</span>
+      </div>
+      <div class="sample-body">
+        <div class="sample-row"><span class="sample-key">ai_native</span><span class="sample-val sl">0</span></div>
+        <div class="sample-row"><span class="sample-key">subclass</span><span class="sample-val mono am">0C-THICK</span></div>
+        <div class="sample-row"><span class="sample-key">rad_score</span><span class="sample-val mono am">RAD-M</span></div>
+        <div class="sample-row"><span class="sample-key">cohort</span><span class="sample-val mono">PRE-GENAI</span></div>
+        <div class="sample-row"><span class="sample-key">conf_classification</span><span class="sample-val">4</span></div>
+        <div class="sample-row"><span class="sample-key">conf_rad</span><span class="sample-val">4</span></div>
+        <div class="sample-row" style="margin-top:0.5rem;align-items:flex-start;"><span class="sample-key">reasons</span><span class="sample-val" style="font-size:0.74rem;color:var(--muted);">Search problem predates GenAI — integrator not AI-native | Proprietary search index + scale justify thick classification | RAD-M: scale makes model independence plausible</span></div>
+      </div>
+    </div>
+
+    <div class="sample-card">
+      <div class="sample-header">
+        <span class="sample-co">SummarizeIt</span>
+        <span class="stag stag-0c-thin">0C-THIN</span>
+        <span class="stag" style="background:#ffe4e6;color:#be123c;">RAD-H</span>
+        <span class="stag" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;">GENAI-ERA</span>
+      </div>
+      <div class="sample-body">
+        <div class="sample-row"><span class="sample-key">ai_native</span><span class="sample-val sl">0</span></div>
+        <div class="sample-row"><span class="sample-key">subclass</span><span class="sample-val mono ro">0C-THIN</span></div>
+        <div class="sample-row"><span class="sample-key">rad_score</span><span class="sample-val mono ro">RAD-H</span></div>
+        <div class="sample-row"><span class="sample-key">cohort</span><span class="sample-val mono">GENAI-ERA</span></div>
+        <div class="sample-row"><span class="sample-key">conf_classification</span><span class="sample-val">5</span></div>
+        <div class="sample-row"><span class="sample-key">conf_rad</span><span class="sample-val">5</span></div>
+        <div class="sample-row" style="margin-top:0.5rem;align-items:flex-start;"><span class="sample-key">reasons</span><span class="sample-val" style="font-size:0.74rem;color:var(--muted);">Minimal proprietary layer over commodity API | Explicitly states no proprietary models or training | Replicable by solo developer in days — maximum substitution risk</span></div>
+      </div>
+    </div>
+
+    <div class="sample-card">
+      <div class="sample-header">
+        <span class="sample-co">Futuremood</span>
+        <span class="stag stag-0e">0E</span>
+        <span class="stag" style="background:#f8fafc;color:#475569;border:1px solid #e2e8f0;">RAD-NA</span>
+        <span class="stag" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;">GENAI-ERA</span>
+      </div>
+      <div class="sample-body">
+        <div class="sample-row"><span class="sample-key">ai_native</span><span class="sample-val sl">0</span></div>
+        <div class="sample-row"><span class="sample-key">subclass</span><span class="sample-val mono sl">0E</span></div>
+        <div class="sample-row"><span class="sample-key">rad_score</span><span class="sample-val mono sl">RAD-NA</span></div>
+        <div class="sample-row"><span class="sample-key">cohort</span><span class="sample-val mono">GENAI-ERA</span></div>
+        <div class="sample-row"><span class="sample-key">conf_classification</span><span class="sample-val">5</span></div>
+        <div class="sample-row"><span class="sample-key">conf_rad</span><span class="sample-val">5</span></div>
+        <div class="sample-row" style="margin-top:0.5rem;align-items:flex-start;"><span class="sample-key">reasons</span><span class="sample-val" style="font-size:0.74rem;color:var(--muted);">Physical product manufacturer — sunglasses | Keywords confirm beauty/fashion/retail | No AI anywhere in product, operations, or value proposition</span></div>
+      </div>
+    </div>
+
+  </div><!-- /samples-grid -->
+
+  <div class="insight insight-emerald" style="margin-top: 2rem;">
+    <p><strong>What this enables:</strong> With this schema, the dataset supports questions the binary classification cannot answer. For example: <em>"Of the 16,676 AI-native startups identified by GPT-5-mini, what share are RAD-H, with no credible path to technical independence?"</em> Or: <em>"How does the distribution of RAD scores shift across the PRE-GENAI vs GENAI-ERA cohort?"</em> These are publishable findings. The binary 1/0 cannot get there.</p>
+  </div>
+
+</section>
+
+<!-- ══════════════════════════════════════════
+     SECTION 5 — PROMPT
+═══════════════════════════════════════════ -->
+<section id="prompt">
+  <span class="section-label">Reference</span>
+  <h2>The Classification Prompt</h2>
+  <p>The complete system prompt used to classify each company. Each batch API call receives one company's fields and returns a single 11-field CSV row.</p>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="p1">Dimension 1 — Classification</button>
+    <button class="tab-btn" data-tab="p2">Dimension 2 — RAD Score</button>
+    <button class="tab-btn" data-tab="p3">Output Format &amp; Rules</button>
+    <button class="tab-btn" data-tab="p4">Few-Shot Examples</button>
+  </div>
+
+  <div class="tab-pane active" id="tab-p1"><pre class="prompt-pre" id="pre-p1"></pre></div>
+  <div class="tab-pane" id="tab-p2"><pre class="prompt-pre" id="pre-p2"></pre></div>
+  <div class="tab-pane" id="tab-p3"><pre class="prompt-pre" id="pre-p3"></pre></div>
+  <div class="tab-pane" id="tab-p4"><pre class="prompt-pre" id="pre-p4"></pre></div>
+</section>
+
+<footer>
+  <p>Dataset: 267,790 startups (Crunchbase US) &nbsp;·&nbsp; Advisors: Jan Bena &amp; Bo Bian</p>
+</footer>
+
+</main>
+
+<script>
+// Scroll-triggered section reveals
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.06, rootMargin: '0px 0px -30px 0px' });
+document.querySelectorAll('section').forEach(s => observer.observe(s));
+document.getElementById('cover').classList.add('visible');
+
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.tab;
+    btn.closest('section').querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.closest('section').querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + target).classList.add('active');
+  });
+});
+
+// Prompt content
+document.getElementById('pre-p1').textContent = `You are a world-class AI research assistant classifying startups across two parallel \ndimensions: (1) AI-Native classification with sub-genre, and (2) Resource-Adjusted \nAI Dependency (RAD score). Both dimensions are assigned simultaneously and carry \nindependent analytical value.\n\n════════════════════════════════════════════════════════════════\nDIMENSION 1: AI-NATIVE CLASSIFICATION & SUB-GENRE\n════════════════════════════════════════════════════════════════\n\nDEFINITION\n"AI-native" means the startup's core product or service would fundamentally not exist \nwithout AI/ML as the primary mechanism — not as a feature, not as an enhancement, \nbut as the engine. Apply this test strictly: if the product could exist in a \nmeaningfully similar form without AI, it is not AI-native.\n\n──────────────────────────────────────────\nAI-NATIVE SUBCLASSES (ai_native = 1)\n──────────────────────────────────────────\n\n1A | Foundation Layer\n     Companies building the base of the AI stack: training frontier models, developing \n     novel architectures, building ML compute orchestration, vector databases, or \n     conducting core AI research. The artifact they produce IS the model or the \n     infrastructure that other AI products are built on. These are the hardest to \n     replicate and the most defensible positions in the AI ecosystem.\n     Real examples: Anthropic, Mistral, Cohere, Pinecone, Modal, Together AI.\n     Key signal: They are building FOR other AI builders, not for end users.\n\n1B | Applied Vertical AI\n     AI purpose-built for a specific domain where AI IS the product, not a feature. \n     The entire workflow is reimagined around AI capability, and domain expertise is \n     deeply embedded in the model or pipeline. The product could not exist in a \n     meaningfully similar form without AI — not just a worse version, but a \n     categorically different and inferior one.\n     Real examples: Abridge (clinical documentation), Harvey (legal AI), \n     Glean (enterprise search), DeepScribe (medical scribe), POCUS Systems (diagnostics).\n     Key signal: Vertical-specific AI that replaces or fundamentally transforms a \n     domain workflow, not just augments it.\n\n1C | AI-Native Infrastructure & Tooling\n     Companies building for the AI development lifecycle itself. Their reason for \n     existence is the AI ecosystem — they would have no product without AI being a \n     widespread development target. Includes evaluation frameworks, fine-tuning \n     platforms, AI observability, prompt management, synthetic data generation, \n     AI safety tooling, and LLMOps platforms.\n     Real examples: Weights & Biases, Scale AI, Braintrust, Humanloop, Arize AI.\n     Key signal: Their customer is an AI developer or AI team, not an end user \n     in a vertical domain.\n\n1D | Autonomous Agent Systems\n     Core product is AI acting autonomously in the world — executing multi-step tasks, \n     operating software, managing complex workflows with minimal human-in-the-loop. \n     Categorically distinct from chatbots (which respond) and from AI-augmented tools \n     (which assist). These systems plan, decide, and act.\n     Real examples: Cognition (Devin), Adept, Dust, Browser Use, MultiOn.\n     Key signal: The AI takes actions in the world, not just generates text or \n     recommendations for a human to act on.\n\n1E | Generative Content Platforms\n     Products where GenAI is the creative engine — not an enhancement but the actual \n     output mechanism. The product IS the generation capability applied to a creative \n     domain. Without GenAI, the product does not produce its core output.\n     Real examples: Midjourney, ElevenLabs, Runway, Suno, Stability AI, HeyGen.\n     Key signal: The deliverable to the customer is generated content (image, audio, \n     video, 3D) that could not be produced by the system without generative models.\n\n──────────────────────────────────────────\nNOT AI-NATIVE SUBCLASSES (ai_native = 0)\n──────────────────────────────────────────\n\n0A | Traditional Tech / SaaS\n     Conventional software with no meaningful AI angle. Pure logistics platforms, CRMs, \n     ERPs, marketplace businesses, fintech infrastructure. AI may appear in marketing \n     language but plays no structural role in the product or value proposition.\n     Real examples: Shopify (pre-AI), Stripe, classic Salesforce CRM, Shipsi.\n     Key signal: Remove all AI references — the product description still makes \n     complete sense and the value proposition is unchanged.\n\n0B | AI-Augmented\n     Traditional product category where AI genuinely improves the product but is not \n     what the company sells. The core value proposition predates and survives without \n     AI. AI is a meaningful feature, not the mechanism.\n     Real examples: Notion (with AI writing assist), Salesforce (with Einstein), \n     Grammarly (pre-LLM version), HubSpot (with AI recommendations).\n     Key signal: The company could publish a press release tomorrow announcing they \n     removed their AI features, and the product would still be competitive.\n\n0C-THIN | Thin LLM Wrapper\n     Company has built atop LLM APIs with minimal proprietary layer. The underlying \n     business problem existed before GenAI and could be addressed with other means. \n     Thin wrappers have little proprietary data, minimal fine-tuning, and are easily \n     replicable by a small team in weeks. High substitution risk — if the API provider \n     changes pricing or terms, the business model collapses with no fallback.\n     Real examples: Simple ChatGPT-based writing assistants, basic AI customer service \n     bots with no proprietary training, commodity AI summarization tools.\n     Key signal: A developer could replicate the core product in a weekend using the \n     same APIs. No proprietary data flywheel, no fine-tuning, no unique workflow moat.\n\n0C-THICK | Thick LLM Integrator\n     Company has built meaningfully atop LLM APIs but with significant proprietary \n     investment: fine-tuned or domain-adapted models, unique datasets, deep workflow \n     integration, strong UX moat, or network effects that create real defensibility. \n     The underlying problem predates GenAI but they have built genuine competitive \n     advantages on top of the GenAI layer.\n     Real examples: Perplexity AI (proprietary search index + UX), \n     Jasper (brand voice + templates + enterprise workflows), \n     Cursor (deep IDE integration + codebase-aware context).\n     Key signal: Replacing the LLM API would be painful and expensive, but the company \n     has built proprietary value that survives beyond just the API call.\n\n0D | AI-Adjacent / Ecosystem\n     Companies that benefit from the AI wave but are not themselves AI-powered. They \n     exist in the AI ecosystem as enablers, beneficiaries, or service providers — but \n     their own product or service does not use AI as a mechanism.\n     Real examples: CoreWeave (GPU cloud), Labelbox (human-in-the-loop labeling), \n     AI recruiting firms, AI compliance consultancies, AI hardware resellers.\n     Key signal: Their revenue grows because AI is growing, but their own product \n     would not change technically if AI stopped advancing.\n\n0E | Non-Tech\n     Physical products, retail, traditional services, manufacturing with no meaningful \n     technology angle. AI plays no role in the product, operations, or value proposition.\n     Real examples: Easy Access Limousine, Futuremood (sunglasses), \n     food and beverage manufacturers, traditional professional services firms.\n     Key signal: No technology in the core product at all.`;
+
+document.getElementById('pre-p2').textContent = `════════════════════════════════════════════════════════════════\nDIMENSION 2: RAD SCORE (Resource-Adjusted AI Dependency)\n════════════════════════════════════════════════════════════════\n\nDEFINITION\nRAD measures how structurally dependent a company is on current third-party GenAI \ninfrastructure (APIs, foundation models) versus their own proprietary AI capability — \nadjusted for the company's apparent resources and scale.\n\nCore counterfactual: "If this company had $500M in funding and 5 years, could they \nbuild a competitive product without relying on third-party GenAI APIs?"\n\nThis dimension is independent from ai_native. A 1B company can be RAD-H (built on \nOpenAI APIs) or RAD-L (training their own domain-specific models). This distinction \nis one of the most important signals for evaluating startup defensibility.\n\n──────────────────────────────────────────\nRAD SCORE VALUES\n──────────────────────────────────────────\n\nRAD-H | High Structural Dependency\n     Even with substantial resources, the product fundamentally requires current-\n     generation GenAI capabilities that the company could not independently replicate \n     at competitive cost. The product's existence is structurally tied to the 2023+ \n     GenAI wave. Pure API businesses at any scale default here unless there is explicit \n     evidence of proprietary model development.\n     Signals: "powered by GPT-4", "using Claude API", no mention of proprietary models, \n     founded post-2023 with no research team signals, thin technical moat descriptions.\n\nRAD-M | Medium / Transitional Dependency\n     GenAI-dependent today, but with credible signals of partial independence: \n     (a) proprietary model development or domain fine-tuning underway,\n     (b) sufficient scale that building proprietary AI is plausible and economically \n         rational (Perplexity-tier — large enough to go independent if motivated), or\n     (c) the underlying AI technique predates the 2023 GenAI wave (computer vision, \n         classical NLP, recommendation systems) and was viable pre-ChatGPT.\n     Signals: mentions of proprietary models, fine-tuning, in-house research team, \n     pre-2023 AI technology, large funding rounds with technical hiring signals.\n\nRAD-L | Low Structural Dependency\n     AI is either peripheral (could be removed without killing the product) or the \n     company demonstrably builds and trains proprietary AI at the core. A shutdown of \n     all third-party AI APIs would not materially affect the product. This includes \n     companies with deeply proprietary AI that predates the GenAI wave.\n     Signals: trains own models, own research lab, API-independent architecture \n     described, AI is a backend optimization not a customer-facing mechanism.\n\nRAD-NA | Not Applicable\n     Assigned to 0A, 0D, and 0E companies where AI plays no structural role. The \n     RAD question is meaningless for these companies. Do not assign RAD-H, RAD-M, \n     or RAD-L to companies in these classes — it would misrepresent the data.\n\n──────────────────────────────────────────\nRAD ASSIGNMENT RULES\n──────────────────────────────────────────\n\n- ALL ai_native = 1 companies (1A–1E): always receive RAD-H, RAD-M, or RAD-L.\n  Never assign RAD-NA to an AI-native company.\n- 0B companies: assign RAD-H, RAD-M, or RAD-L based on depth of AI integration.\n- 0C-THIN and 0C-THICK companies: always RAD-H or RAD-M. Never RAD-L or RAD-NA.\n  (By definition these companies are dependent on external AI APIs.)\n- 0A, 0D, 0E companies: always RAD-NA.\n- When RAD evidence is ambiguous for a post-2023 company: default to RAD-H.\n- When RAD evidence is ambiguous for a pre-2023 company with AI keywords: default RAD-M.\n\n════════════════════════════════════════════════════════════════\nTEMPORAL COHORT\n════════════════════════════════════════════════════════════════\n\nThe GPT-4 launch in March 2023 represents the real GenAI inflection point — the first \nfrontier model capable enough to power commercial products at scale. Use this as the \ncohort boundary.\n\nPRE-GENAI  | Founded before 2023. AI claims predate the GenAI wave. Scrutinize whether \n             AI-native claims refer to genuine classical ML/NLP (valid and may be RAD-M \n             or RAD-L) or retroactive GenAI rebranding (skeptical, likely 0B or 0C).\n\nGENAI-ERA  | Founded 2023 or later. GenAI was available from inception. AI-native \n             claims are more plausible. Default RAD assumption is RAD-H unless \n             proprietary model signals are present.`;
+
+document.getElementById('pre-p3').textContent = `════════════════════════════════════════════════════════════════\nOUTPUT FORMAT\n════════════════════════════════════════════════════════════════\n\nOutput exactly ONE CSV line per company with these 11 fields in order:\n\nCompanyID, CompanyName, ai_native, subclass, rad_score, cohort,\nconf_classification, conf_rad, reasons_3_points, sources_used, \nverification_critique\n\nFIELD DEFINITIONS:\n- ai_native .............. 1 or 0\n- subclass ............... one of {1A, 1B, 1C, 1D, 1E, 0A, 0B, 0C-THIN, 0C-THICK, 0D, 0E}\n- rad_score .............. one of {RAD-H, RAD-M, RAD-L, RAD-NA}\n- cohort ................. one of {PRE-GENAI, GENAI-ERA}\n- conf_classification .... integer 1–5: confidence in ai_native + subclass assignment\n- conf_rad ............... integer 1–5: confidence in RAD score assignment specifically\n                          (use 1 when description gives no information about API vs \n                          proprietary model usage; use 5 only when explicitly stated)\n- reasons_3_points ....... exactly 3 concise points separated by " | "\n                          (at least one reason must explicitly address the RAD assignment)\n- sources_used ........... semicolon-separated subset of \n                          {id; name; short_description; long_description; keywords; year}\n- verification_critique .. self-check ≤ 35 words; must flag if either confidence score \n                          is below 3 and why\n\n──────────────────────────────────────────\nCONFIDENCE SCORING RULES\n──────────────────────────────────────────\n\nconf_classification:\n- 5: ai_native, subclass fully unambiguous from descriptions + keywords\n- 4: subclass clear but one plausible alternative exists\n- 3: ai_native clear but subclass is a borderline call between two adjacent classes\n- 2: ai_native uncertain; conservative classification applied\n- 1: insufficient information; fallback rules applied\n- Cap at 4 if only short_description available (no long_description)\n- Cap at 4 if PRE-GENAI company with ambiguous AI claims\n\nconf_rad:\n- 5: explicit statement of proprietary model / API dependency in description\n- 4: strong indirect signals (research team, fine-tuning mentioned, pre-2023 AI tech)\n- 3: cohort + scale used as proxy; no direct model architecture signals\n- 2: minimal information; defaulting to cohort heuristic only\n- 1: cannot determine; RAD assigned by rule not by evidence\n- Always 5 for RAD-NA assignments to 0A/0D/0E (the NA assignment is always certain)\n- Cap at 3 for 0C-THIN/0C-THICK if no explicit API or model architecture described\n\n════════════════════════════════════════════════════════════════\nEDGE CASES & TIE-BREAKING\n════════════════════════════════════════════════════════════════\n\n- ai_native = 1 vs 0 equally plausible → classify 0, lower conf_classification, note in critique\n- LLM API wrappers → always 0C-THIN or 0C-THICK, never 1B, regardless of domain sophistication\n- "AI-powered" in marketing copy alone, absent from product mechanism → 0B not 0C\n- Vertical AI with own proprietary models → 1B with RAD-L or RAD-M\n- Vertical AI built on third-party LLMs → 1B or 0C-THICK depending on replaceability test\n- Pre-2023 computer vision / NLP companies → may be 1B with RAD-M or RAD-L\n- MLOps tool that requires AI to exist as a field, but is itself software → 1C\n- Human-in-the-loop data labeling → 0D not 1C (humans are the mechanism, not AI)\n- Chatbot ≠ autonomous agent → chatbots are 0C or 1B; agents are 1D\n- Insufficient information → ai_native=0, subclass=0A, rad_score=RAD-NA, cohort from year field,\n  conf_classification=1, conf_rad=5, reasons="", sources="", \n  verification_critique="Insufficient information; fallback classification applied."`;
+
+document.getElementById('pre-p4').textContent = `════════════════════════════════════════════════════════════════\nFEW-SHOT EXAMPLES\n════════════════════════════════════════════════════════════════\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nEXAMPLE 1 | 1A — Foundation Layer, PRE-GENAI\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nINPUT:\nCompanyID: ex-001\nCompanyName: Pinecone\nShort Description: Pinecone is a vector database built for AI applications, enabling \n  fast and scalable similarity search over embeddings.\nLong Description: Pinecone provides a fully managed vector database that allows \n  developers to store and query high-dimensional embeddings generated by ML models. \n  It powers semantic search, recommendation systems, and retrieval-augmented generation \n  (RAG) pipelines. Without vector search infrastructure, modern LLM applications \n  cannot retrieve relevant context at scale.\nKeywords: Artificial Intelligence, Database, Infrastructure, Machine Learning, Developer Tools\nYearFounded: 2019\n\nOUTPUT:\nex-001,Pinecone,1,1A,RAD-L,PRE-GENAI,5,4,\n"Core product IS the AI infrastructure layer — vector DB exists solely for ML applications |\nFounded 2019 as proprietary managed service; not dependent on third-party model APIs |\nProduct would not exist as a category without AI/ML creating the demand for embedding storage",\n"short_description;long_description;keywords;year",\n"Clear 1A. RAD-L: they ARE the infrastructure, not consumers of it. conf_rad=4 not 5: \narchitecture independence inferred, not explicitly stated."\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nEXAMPLE 2 | 1B — Applied Vertical AI, PRE-GENAI, RAD-M\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nINPUT:\nCompanyID: ex-002\nCompanyName: DeepScribe\nShort Description: DeepScribe is an ambient, AI-powered medical scribe that automates \n  clinical documentation.\nLong Description: DeepScribe uses AI, ML, and NLP to capture and transcribe natural \n  clinical conversations in real time, extract relevant medical information, and \n  classify it into a complete medical note. Combines AI with rules-based NLP and \n  three speech recognition engines for a fully automated ambient documentation solution.\nKeywords: Artificial Intelligence, Health Care, Machine Learning, Medical, Software\nYearFounded: 2017\n\nOUTPUT:\nex-002,DeepScribe,1,1B,RAD-M,PRE-GENAI,5,4,\n"AI/ML/NLP is the core product mechanism — clinical documentation impossible without it |\nFounded 2017: pre-GenAI, uses classical NLP + speech recognition suggesting proprietary stack |\nDomain-specific pipeline deeply embedded; not a generic LLM wrapper",\n"short_description;long_description;keywords;year",\n"Clear 1B. RAD-M: pre-2023 founding with proprietary NLP pipeline signals; \nmay have adopted GenAI later but core is classical ML. conf_rad=4: inferred from tech stack."\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nEXAMPLE 3 | 1C — AI Tooling, GENAI-ERA, RAD-H\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nINPUT:\nCompanyID: ex-003\nCompanyName: Braintrust\nShort Description: Braintrust is an AI evaluation platform that helps teams test, \n  score, and improve their LLM-powered applications.\nLong Description: Braintrust provides logging, tracing, and automated evaluation \n  pipelines for AI teams building on top of LLMs. Teams use Braintrust to run \n  eval suites, compare model outputs, and catch regressions before deploying \n  AI features to production. Their product has no purpose outside the AI development \n  ecosystem.\nKeywords: Artificial Intelligence, Developer Tools, LLMOps, Evaluation, Software\nYearFounded: 2023\n\nOUTPUT:\nex-003,Braintrust,1,1C,RAD-H,GENAI-ERA,5,4,\n"Product exists solely to serve the AI development lifecycle — no AI ecosystem, no product |\nEvaluation platform structurally dependent on LLM proliferation that began with GPT-4 |\nNo product-level dependency on specific LLM APIs, but existential dependency on AI as a field",\n"short_description;long_description;keywords;year",\n"Clear 1C. RAD-H nuance: not dependent on one API provider, but product is existentially \ntied to GenAI ecosystem growth. conf_rad=4: dependency is systemic not architectural."\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nEXAMPLE 4 | 1D — Autonomous Agent, GENAI-ERA, RAD-H\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nINPUT:\nCompanyID: ex-004\nCompanyName: Cognition Labs\nShort Description: Cognition builds Devin, the first AI software engineer that \n  autonomously plans and executes complex engineering tasks end-to-end.\nLong Description: Devin operates as a fully autonomous software engineering agent. \n  It reads codebases, writes code, runs tests, debugs, and deploys software without \n  human intervention. It uses frontier LLM reasoning to plan multi-step engineering \n  workflows and execute them through a computer interface.\nKeywords: Artificial Intelligence, Autonomous Agents, Developer Tools, Software Engineering\nYearFounded: 2023\n\nOUTPUT:\nex-004,Cognition Labs,1,1D,RAD-H,GENAI-ERA,5,5,\n"Core product is autonomous agentic system requiring frontier LLM reasoning to plan and act |\nFounded 2023 — product architecture structurally dependent on GPT-4-tier reasoning capabilities |\nCategorically distinct from chatbots: Devin acts, not just responds",\n"short_description;long_description;keywords;year",\n"Clear 1D. RAD-H: explicitly uses frontier LLM reasoning; product impossible without \ncurrent-gen models. conf_rad=5: long description directly states LLM dependency."\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nEXAMPLE 5 | 1E — Generative Content Platform, GENAI-ERA, RAD-H\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nINPUT:\nCompanyID: ex-005\nCompanyName: ElevenLabs\nShort Description: ElevenLabs provides AI-powered voice synthesis and cloning, \n  enabling realistic text-to-speech and voice generation at scale.\nLong Description: ElevenLabs builds generative voice AI that can clone any voice \n  from a short sample and synthesize natural-sounding speech in real time. \n  Their models are trained on large speech datasets and produce industry-leading \n  audio fidelity. The product IS the generative model — there is no ElevenLabs \n  without the underlying voice generation capability.\nKeywords: Artificial Intelligence, Voice Synthesis, Text-to-Speech, Generative AI, Audio\nYearFounded: 2022\n\nOUTPUT:\nex-005,ElevenLabs,1,1E,RAD-M,PRE-GENAI,5,4,\n"Core deliverable is AI-generated voice — product IS the generation capability |\nVoice cloning and synthesis are structurally impossible without deep generative models |\nFounded 2022: pre-GPT-4 era, likely built on proprietary speech models suggesting \npartial RAD independence",\n"short_description;long_description;keywords;year",\n"Clear 1E. RAD-M not RAD-H: founded pre-GPT-4, descriptions suggest proprietary \ntrained models rather than API dependency. conf_rad=4: inferred from founding year + \ndomain specificity, not explicitly stated."\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nEXAMPLE 6 | 0C-THICK — Thick LLM Integrator (Perplexity case)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nINPUT:\nCompanyID: ex-006\nCompanyName: Perplexity AI\nShort Description: Perplexity is an AI-powered answer engine providing accurate, \n  real-time answers with citations drawn from live web search.\nLong Description: Perplexity combines real-time web search infrastructure with LLM \n  synthesis to generate cited, up-to-date answers. The company has built proprietary \n  web indexing systems, a significant user base, and deep UX investment. Well-funded \n  with hundreds of employees and a growing proprietary data flywheel. The underlying \n  problem — search and information retrieval — predates GenAI.\nKeywords: Search, Artificial Intelligence, Information Retrieval, Answer Engine\nYearFounded: 2022\n\nOUTPUT:\nex-006,Perplexity AI,0,0C-THICK,RAD-M,PRE-GENAI,4,4,\n"Business problem (search/Q&A) predates GenAI — classifies as integrator not AI-native |\nThick wrapper: proprietary search index, data flywheel, and scale create real moat |\nRAD-M: company large enough and technically sophisticated enough to build toward \nmodel independence if motivated",\n"short_description;long_description;keywords;year",\n"0C-THICK not 1B: core problem predates GenAI; AI changed the interface not the category. \nRAD-M justified by scale and proprietary infra. conf_classification=4: 1B boundary is close."\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nEXAMPLE 7 | 0C-THIN — Thin LLM Wrapper, GENAI-ERA, RAD-H\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nINPUT:\nCompanyID: ex-007\nCompanyName: SummarizeIt\nShort Description: SummarizeIt uses AI to instantly summarize any document, article, \n  or PDF into clear bullet points.\nLong Description: SummarizeIt provides a web interface where users paste text or \n  upload documents and receive AI-generated summaries. Powered by leading language \n  models. Simple API integration. No proprietary models or training data.\nKeywords: Artificial Intelligence, Productivity, Summarization, SaaS, NLP\nYearFounded: 2023\n\nOUTPUT:\nex-007,SummarizeIt,0,0C-THIN,RAD-H,GENAI-ERA,5,5,\n"Thin LLM wrapper: minimal proprietary layer over commodity summarization API call |\nExplicitly states no proprietary models or training — high substitution risk |\nSummarization as a task predates GenAI; this implementation replicable by a solo \ndeveloper in days",\n"short_description;long_description;keywords;year",\n"Clear 0C-THIN. RAD-H confirmed by explicit 'no proprietary models' statement. \nBoth confidence scores high: description leaves no ambiguity on either dimension."\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nEXAMPLE 8 | 0B — AI-Augmented, PRE-GENAI, RAD-NA\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nINPUT:\nCompanyID: ex-008\nCompanyName: Shipsi\nShort Description: SHIPSI makes it simple for any retailer to provide on-demand \n  and scheduled delivery directly from their online and retail stores.\nLong Description: Shipsi empowers retailers with instant shipping options at checkout \n  using existing last-mile delivery networks. Founded 2017 in Austin, TX.\nKeywords: Logistics, Machine Learning, Predictive Analytics, Retail, E-Commerce, \n  Supply Chain Management\nYearFounded: 2017\n\nOUTPUT:\nex-008,Shipsi,0,0B,RAD-NA,PRE-GENAI,3,5,\n"Core product is a logistics coordination platform — delivery service predates and \nsurvives without ML |\nML appears in keywords but is absent from product descriptions — likely backend \nroute optimization, not customer-facing AI |\nTraditional marketplace/logistics model; AI not part of value proposition to customers",\n"short_description;long_description;keywords;year",\n"0B not 0A: ML keywords suggest meaningful but non-core AI use. RAD-NA: AI is \nbackend optimization only; not structural. conf_classification=3: 0A vs 0B borderline."\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nEXAMPLE 9 | 0D — AI-Adjacent, GENAI-ERA, RAD-NA\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nINPUT:\nCompanyID: ex-009\nCompanyName: CoreWeave\nShort Description: CoreWeave is a specialized cloud provider delivering GPU compute \n  infrastructure optimized for AI and machine learning workloads.\nLong Description: CoreWeave operates GPU clusters at scale, providing compute \n  infrastructure for training and inference of large AI models. Their business \n  scales directly with AI adoption. They do not build AI models — they provide \n  the physical compute layer that AI companies rent.\nKeywords: Cloud Computing, GPU, Infrastructure, AI Infrastructure, HPC\nYearFounded: 2017\n\nOUTPUT:\nex-009,CoreWeave,0,0D,RAD-NA,PRE-GENAI,5,5,\n"Company benefits from AI wave but is not itself an AI product — compute provider only |\nCore product (GPU cloud) would exist and be valuable regardless of AI advancement |\n0D not 1A: 1A requires building the AI stack, not the physical infrastructure beneath it",\n"short_description;long_description;keywords;year",\n"Clear 0D. RAD-NA: company sells compute, not AI. Important distinction from 1A: \nthey are beneath the AI stack, not part of it. Both confidence scores certain."\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nEXAMPLE 10 | Ambiguous — PRE-GENAI 1B vs 0C-THICK boundary\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nINPUT:\nCompanyID: ex-010\nCompanyName: Harvey AI\nShort Description: Harvey is an AI platform for lawyers that drafts contracts, \n  conducts legal research, and automates document review.\nLong Description: Harvey is built on customized large language models fine-tuned \n  on legal corpora and validated by legal experts. It integrates deeply into \n  law firm workflows for contract drafting, due diligence, and litigation support. \n  Fine-tuned models and proprietary legal datasets are core to the product — \n  generic LLMs would produce materially inferior outputs for legal work.\nKeywords: Artificial Intelligence, Legal, LegalTech, Enterprise Software, NLP\nYearFounded: 2022\n\nOUTPUT:\nex-010,Harvey AI,1,1B,RAD-M,PRE-GENAI,4,4,\n"Fine-tuned legal models and proprietary legal corpora are core — not a generic \nLLM wrapper |\nLegal workflow reimagined around AI capability; product inferior in kind without it |\nRAD-M: significant fine-tuning and proprietary data suggest partial independence \nfrom base model providers",\n"short_description;long_description;keywords;year",\n"1B not 0C-THICK: proprietary fine-tuning on legal data pushes this into AI-native \nterritory — the legal corpus IS the moat, not just the UX. conf_classification=4: \n0C-THICK boundary is the key risk. conf_rad=4: fine-tuning stated but depth unclear."`;
+
+// Nav active state
+const sections = document.querySelectorAll('section');
+const navLinks = document.querySelectorAll('nav ul a');
+const navObs = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const link = document.querySelector(`nav ul a[href="#${e.target.id}"]`);
+      if (link) link.classList.add('active');
+    }
+  });
+}, { threshold: 0.25 });
+sections.forEach(s => navObs.observe(s));
+</script>
+</body>
+</html>
