@@ -1,0 +1,22 @@
+# Data
+data/
+
+# API Keys
+keys/
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local
+coding_instructions.md
