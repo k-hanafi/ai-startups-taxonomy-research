@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "ai-native-startup-classification"
+version = "2.0.0"
+description = "Two-axis classifier for AI-native startups: 11 subclasses + RAD score via OpenAI Batch API"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.75.0",
+    "pandas>=2.2.0",
+    "pydantic>=2.7.0",
+    "tiktoken>=0.7.0",
+    "tenacity>=8.3.0",
+    "rich>=13.7.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
