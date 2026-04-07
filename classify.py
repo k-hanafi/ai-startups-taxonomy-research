@@ -179,6 +179,90 @@ def _cmd_merge(args: argparse.Namespace) -> None:
     print_report(state, output_path)
 
 
+def _cmd_test(args: argparse.Namespace) -> None:
+    """Classify a single company synchronously using flex processing.
+
+    Flex tier is priced at batch API rates with prompt caching on top.
+    Closes the prompt iteration feedback loop from $100 per batch to
+    near-free. Falls back to standard processing on 429 Resource
+    Unavailable.
+    """
+    setup_logging()
+
+    df = pd.read_csv(DATA_CSV)
+
+    if args.company_id:
+        match = df[df["org_uuid"] == args.company_id]
+    elif args.company_name:
+        match = df[df["name"].str.contains(args.company_name, case=False, na=False)]
+    else:
+        logger.error("Provide --company-id or --company-name.")
+        sys.exit(1)
+
+    if match.empty:
+        logger.error("No matching company found.")
+        sys.exit(1)
+
+    row = match.iloc[0]
+    row_dict = row.to_dict()
+    user_msg = format_user_message(row_dict)
+
+    from src.builder import _openai_strict_schema, load_system_prompt
+    from src.submitter import get_client
+
+    client = get_client()
+    system_prompt = load_system_prompt()
+    schema = _openai_strict_schema()
+
+    logger.info("Testing classification for: %s", row_dict.get("name", ""))
+
+    import json
+    from rich.console import Console
+    from rich.panel import Panel
+    from tenacity import retry, stop_after_attempt, wait_fixed
+
+    @retry(stop=stop_after_attempt(2), wait=wait_fixed(2), reraise=True)
+    def _call(tier: str) -> dict:
+        response = client.chat.completions.create(
+            model=args.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_msg},
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "ClassificationResult",
+                    "strict": True,
+                    "schema": schema,
+                },
+            },
+            max_tokens=450,
+            service_tier=tier,
+        )
+        return json.loads(response.choices[0].message.content)
+
+    try:
+        result = _call("flex")
+        tier_used = "flex"
+    except Exception:
+        logger.warning("Flex tier unavailable. Falling back to auto.")
+        result = _call("auto")
+        tier_used = "auto"
+
+    from src.schema import ClassificationResult
+    validated = ClassificationResult.model_validate(result)
+
+    console = Console()
+    console.print()
+    console.print(Panel(
+        "\n".join(f"[bold]{k}[/]: {v}" for k, v in validated.model_dump().items()),
+        title=f"Classification Result (service_tier={tier_used})",
+        expand=False,
+    ))
+    console.print()
+
+
 def _cmd_run(args: argparse.Namespace) -> None:
     """Full pipeline: prepare, submit, download, merge."""
     setup_logging()
@@ -273,6 +357,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--output", default=None,
                    help="Output CSV path (default: outputs/classified_startups_v2.csv)")
     p.set_defaults(func=_cmd_merge)
+
+    # test
+    p = subs.add_parser(
+        "test",
+        help="Classify one company synchronously using flex pricing for prompt iteration",
+    )
+    _add_common_args(p)
+    p.add_argument("--company-id", default=None, dest="company_id",
+                   help="org_uuid of the company to test")
+    p.add_argument("--company-name", default=None, dest="company_name",
+                   help="Partial name match (case-insensitive)")
+    p.set_defaults(func=_cmd_test)
 
     # run
     p = subs.add_parser(
