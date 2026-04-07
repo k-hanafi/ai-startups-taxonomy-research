@@ -1,0 +1,3 @@
+"""ai-native-startup-classification: v2 pipeline source package."""
+
+__version__ = "2.0.0"
