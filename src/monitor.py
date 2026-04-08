@@ -14,7 +14,9 @@ import logging
 import time
 
 from openai import OpenAI
+from rich.console import Console
 from rich.live import Live
+from rich.panel import Panel
 from rich.table import Table
 
 from src.config import (
@@ -24,11 +26,40 @@ from src.config import (
     MAX_BATCH_QUEUE_TOKENS,
 )
 from src.state import BatchRecord, PipelineState
-from src.submitter import create_batch, generate_run_id, get_client, upload_batch_file
+from src.submitter import (
+    BillingLimitError,
+    create_batch,
+    generate_run_id,
+    get_client,
+    upload_batch_file,
+)
 
 logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS: int = 30
+
+
+def _emit_billing_resume_help(state: PipelineState) -> None:
+    """Print clear next steps after OpenAI billing hard limit blocks submission."""
+    submitted = sum(1 for b in state.batches.values() if b.batch_id)
+    pending = len(state.pending_batches())
+    body = (
+        "[bold]OpenAI billing hard limit reached[/] (monthly budget cap).\n\n"
+        f"Batches already created on OpenAI: [cyan]{submitted}[/]\n"
+        f"Batches not yet submitted: [yellow]{pending}[/]\n\n"
+        "[bold]1.[/] Raise org (and project) limits:\n"
+        "    [link=https://platform.openai.com/settings/organization/limits]"
+        "https://platform.openai.com/settings/organization/limits[/]\n\n"
+        "[bold]2.[/] Resume submission and wait for completion:\n"
+        "    [green]python classify.py submit[/]\n\n"
+        "[bold]3.[/] Fetch results and merge:\n"
+        "    [green]python classify.py download[/]\n"
+        "    [green]python classify.py merge[/]\n\n"
+        "State is saved; you do not need to re-run [italic]prepare[/]."
+    )
+    Console().print()
+    Console().print(Panel(body, title="Resume pipeline", border_style="yellow"))
+    Console().print()
 
 
 def _build_status_table(state: PipelineState) -> Table:
@@ -151,16 +182,27 @@ def submit_and_monitor(
                 rec = state.pending_batches()[0]
                 logger.info("Submitting batch %d ...", rec.batch_number)
 
-                file_id = upload_batch_file(client, rec.file_path)
-                batch_id = create_batch(
-                    client,
-                    file_id,
-                    run_id=run_id,
-                    batch_number=rec.batch_number,
-                    total_batches=total_batches,
-                    row_range=rec.row_range,
-                    model=model,
-                )
+                try:
+                    file_id = upload_batch_file(client, rec.file_path)
+                    batch_id = create_batch(
+                        client,
+                        file_id,
+                        run_id=run_id,
+                        batch_number=rec.batch_number,
+                        total_batches=total_batches,
+                        row_range=rec.row_range,
+                        model=model,
+                    )
+                except BillingLimitError:
+                    state.save()
+                    logger.error(
+                        "Stopped at batch %d: billing hard limit. "
+                        "Earlier batches are unchanged in state.json.",
+                        rec.batch_number,
+                    )
+                    _emit_billing_resume_help(state)
+                    raise
+
                 rec.file_id = file_id
                 rec.batch_id = batch_id
                 rec.status = "submitted"

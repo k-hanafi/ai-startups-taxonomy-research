@@ -118,6 +118,11 @@ def download_completed(state: PipelineState) -> None:
         return
 
     for rec in completed:
+        if rec.error_file_id:
+            error_path = ERRORS_DIR / f"batch_{rec.batch_number:04d}_errors.jsonl"
+            if not error_path.exists():
+                _download_file(client, rec.error_file_id, error_path)
+
         if not rec.output_file_id:
             logger.warning("Batch %d completed but no output_file_id", rec.batch_number)
             continue
@@ -129,10 +134,6 @@ def download_completed(state: PipelineState) -> None:
             continue
 
         _download_file(client, rec.output_file_id, result_path)
-
-        if rec.error_file_id:
-            error_path = ERRORS_DIR / f"batch_{rec.batch_number:04d}_errors.jsonl"
-            _download_file(client, rec.error_file_id, error_path)
 
         parsed_records: list[dict] = []
         batch_prompt_toks = 0
