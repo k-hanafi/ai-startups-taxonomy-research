@@ -6,13 +6,13 @@ to start. --dry-run on prepare and run prints the full cost plan without
 touching the API.
 
 Usage:
-    python classify.py prepare [--dry-run]
+    python classify.py prepare [--dry-run] [--data path/to/input.csv]
     python classify.py submit  [--concurrency 3]
     python classify.py status
     python classify.py download
     python classify.py retry
     python classify.py merge   [--output path]
-    python classify.py run     [--dry-run] [--concurrency 3]
+    python classify.py run     [--dry-run] [--concurrency 3] [--data path/to/input.csv]
 """
 
 from __future__ import annotations
@@ -31,13 +31,23 @@ from src.formatter import build_custom_id, format_user_message
 from src.logger import setup_logging
 from src.merger import DEFAULT_OUTPUT_PATH, merge_batch_csvs, print_report
 from src.monitor import print_status, submit_and_monitor
+from src.submitter import BillingLimitError
 from src.state import BatchRecord, PipelineState
 from src.tokens import estimate_cost
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent
-DATA_CSV = _PROJECT_ROOT / "data" / "company_us_short_long_desc_.csv"
+DEFAULT_DATA_CSV = _PROJECT_ROOT / "data" / "company_us_short_long_desc_.csv"
+
+
+def _resolve_data(args: argparse.Namespace) -> Path:
+    """Return the dataset CSV path from --data or the default."""
+    raw = getattr(args, "data", None)
+    if raw:
+        p = Path(raw)
+        return p if p.is_absolute() else _PROJECT_ROOT / p
+    return DEFAULT_DATA_CSV
 
 
 # -- Subcommand handlers -------------------------------------------------------
@@ -47,8 +57,9 @@ def _cmd_prepare(args: argparse.Namespace) -> None:
     """Build JSONL batch files from the dataset. With --dry-run, print cost only."""
     setup_logging()
 
+    data_csv = _resolve_data(args)
     row_slice = _parse_rows(args.rows)
-    df = pd.read_csv(DATA_CSV)
+    df = pd.read_csv(data_csv)
     if row_slice is not None:
         df = df.iloc[row_slice]
 
@@ -62,7 +73,7 @@ def _cmd_prepare(args: argparse.Namespace) -> None:
         return
 
     files = build_batch_files(
-        DATA_CSV, model=args.model, batch_size=args.batch_size, row_slice=row_slice,
+        data_csv, model=args.model, batch_size=args.batch_size, row_slice=row_slice,
     )
 
     state = PipelineState.load()
@@ -128,7 +139,8 @@ def _cmd_retry(args: argparse.Namespace) -> None:
 
     logger.info("Found %d failed requests. Building retry batch...", len(failed_ids))
 
-    df = pd.read_csv(DATA_CSV)
+    data_csv = _resolve_data(args)
+    df = pd.read_csv(data_csv)
     id_set = {cid.removeprefix("startup-") for cid in failed_ids}
     retry_df = df[df["org_uuid"].isin(id_set)]
 
@@ -136,12 +148,6 @@ def _cmd_retry(args: argparse.Namespace) -> None:
         logger.warning("Could not match any failed custom_ids to the dataset.")
         return
 
-    files = build_batch_files(
-        DATA_CSV, model=args.model, batch_size=len(retry_df),
-        row_slice=slice(0, 0),  # placeholder, we override below
-    )
-
-    # Build a single retry JSONL manually
     from src.builder import OUTPUT_DIR, _openai_strict_schema, build_request_body, load_system_prompt
     import json
 
@@ -189,7 +195,8 @@ def _cmd_test(args: argparse.Namespace) -> None:
     """
     setup_logging()
 
-    df = pd.read_csv(DATA_CSV)
+    data_csv = _resolve_data(args)
+    df = pd.read_csv(data_csv)
 
     if args.company_id:
         match = df[df["org_uuid"] == args.company_id]
@@ -237,7 +244,7 @@ def _cmd_test(args: argparse.Namespace) -> None:
                     "schema": schema,
                 },
             },
-            max_tokens=450,
+            max_completion_tokens=450,
             service_tier=tier,
         )
         return json.loads(response.choices[0].message.content)
@@ -292,7 +299,7 @@ def _parse_rows(rows_str: str | None) -> slice | None:
 
 
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
-    """Add --model and --batch-size to a subcommand parser."""
+    """Add --model, --batch-size, and --data to a subcommand parser."""
     parser.add_argument(
         "--model", default=DEFAULT_MODEL,
         help=f"OpenAI model name (default: {DEFAULT_MODEL})",
@@ -300,6 +307,10 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--batch-size", type=int, default=DEFAULT_BATCH_SIZE, dest="batch_size",
         help=f"Requests per JSONL file (default: {DEFAULT_BATCH_SIZE})",
+    )
+    parser.add_argument(
+        "--data", default=None,
+        help="Path to input CSV (default: data/company_us_short_long_desc_.csv)",
     )
 
 
@@ -390,7 +401,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    args.func(args)
+    try:
+        args.func(args)
+    except BillingLimitError:
+        sys.exit(2)
 
 
 if __name__ == "__main__":
