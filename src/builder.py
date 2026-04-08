@@ -92,7 +92,7 @@ def build_request_body(
                     "schema": schema,
                 },
             },
-            "max_tokens": MAX_OUTPUT_TOKENS,
+            "max_completion_tokens": MAX_OUTPUT_TOKENS,
         },
     }
 
