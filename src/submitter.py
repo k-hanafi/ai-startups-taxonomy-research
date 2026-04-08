@@ -13,17 +13,40 @@ import datetime
 import logging
 from pathlib import Path
 
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
 from tenacity import (
+    before_sleep_log,
     retry,
+    retry_if_not_exception_type,
     stop_after_attempt,
     wait_random_exponential,
-    before_sleep_log,
 )
 
 from src.config import DEFAULT_BATCH_SIZE, DEFAULT_MODEL, OPENAI_API_KEY
 
 logger = logging.getLogger(__name__)
+
+
+class BillingLimitError(RuntimeError):
+    """OpenAI returned billing_hard_limit_reached; fix org/project budget then resume."""
+
+    pass
+
+
+def _bad_request_error_code(exc: BadRequestError) -> str | None:
+    """Extract OpenAI error.code from a BadRequestError body, if present."""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        err = body.get("error")
+        if isinstance(err, dict):
+            code = err.get("code")
+            if isinstance(code, str):
+                return code
+    # SDK / version fallbacks
+    text = str(exc).lower()
+    if "billing_hard_limit_reached" in text or "billing hard limit" in text:
+        return "billing_hard_limit_reached"
+    return None
 
 
 def get_client() -> OpenAI:
@@ -50,6 +73,7 @@ def upload_batch_file(client: OpenAI, file_path: str | Path) -> str:
 
 
 @retry(
+    retry=retry_if_not_exception_type(BillingLimitError),
     wait=wait_random_exponential(min=1, max=60),
     stop=stop_after_attempt(6),
     before_sleep=before_sleep_log(logger, logging.WARNING),
@@ -69,18 +93,31 @@ def create_batch(
     Returns the batch ID.
     Metadata tags attach run context. Visible in the OpenAI dashboard
     and useful for debugging overnight runs.
+
+    Raises:
+        BillingLimitError: Monthly billing hard limit reached — not retried.
     """
-    batch = client.batches.create(
-        input_file_id=file_id,
-        endpoint="/v1/chat/completions",
-        completion_window="24h",
-        metadata={
-            "run_id": run_id,
-            "batch_number": f"{batch_number}/{total_batches}",
-            "row_range": row_range,
-            "model": model,
-        },
-    )
+    try:
+        batch = client.batches.create(
+            input_file_id=file_id,
+            endpoint="/v1/chat/completions",
+            completion_window="24h",
+            metadata={
+                "run_id": run_id,
+                "batch_number": f"{batch_number}/{total_batches}",
+                "row_range": row_range,
+                "model": model,
+            },
+        )
+    except BadRequestError as e:
+        if _bad_request_error_code(e) == "billing_hard_limit_reached":
+            raise BillingLimitError(
+                "OpenAI billing hard limit reached (monthly budget cap). "
+                "Raise the limit at https://platform.openai.com/settings/organization/limits "
+                "(and check project budgets), then resume with: python classify.py submit"
+            ) from e
+        raise
+
     logger.info(
         "Created batch %s  (%s)  [%s/%s]",
         batch.id, row_range, batch_number, total_batches,
