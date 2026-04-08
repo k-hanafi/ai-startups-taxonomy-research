@@ -15,6 +15,7 @@ dependencies = [
     "tenacity>=8.3.0",
     "rich>=13.7.0",
     "python-dotenv>=1.0.0",
+    "openpyxl>=3.1.0",
 ]
 
 [project.optional-dependencies]
