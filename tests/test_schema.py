@@ -64,6 +64,28 @@ class TestValidInput:
             assert result.conf_classification == v
             assert result.conf_rad == v
 
+    def test_conf_rad_null_for_rad_na(self):
+        """conf_rad must be null whenever rad_score is RAD-NA."""
+        result = ClassificationResult.model_validate(
+            _make(ai_native=0, subclass="0A", rad_score="RAD-NA", conf_rad=None)
+        )
+        assert result.conf_rad is None
+
+    def test_accepts_insufficient_information_reasons_sentinel(self):
+        """Fallback rows use this literal instead of empty reasons_3_points."""
+        result = ClassificationResult.model_validate(
+            _make(
+                ai_native=0,
+                subclass="0A",
+                rad_score="RAD-NA",
+                conf_classification=1,
+                conf_rad=None,
+                reasons_3_points="Insufficient information",
+            )
+        )
+        assert result.reasons_3_points == "Insufficient information"
+        assert result.conf_rad is None
+
 
 # -- Invalid input (must reject) -----------------------------------------------
 
