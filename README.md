@@ -2,12 +2,11 @@
 
 1. **Large-scale Python classification pipeline of Crunchbase Data** to determine if AI/ML is fundamental to the value proposition of startups.
 
-2. **Conduct a comparative statistical analysis** of GPT-5-mini and GPT-5-nano models, evaluating their reasoning quality, classification characteristics, and cost-effectiveness. Beyond simple accuracy metrics, I analyzed agreement patterns, confidence distributions, correlations between model outputs, and the specific nature of disagreements to understand each model's "personality" and the practical trade-offs for production use. 
+2. **Results dashboard**: Standalone HTML built from merged classification output (`outputs/classified_startups_v2.csv`).
 
 ### Key Files
 
-- **Statistical Analysis Dashboard**: `data visualization/01_Presentation_Materials/dashboard.html`
-- **Main Analysis Script**: `data visualization/02_Analysis_Code/classification_analysis.py`
+- **Classification results dashboard**: `data visualization/01_Presentation_Materials/v2_dashboard.html` (rebuild with `python "data visualization/02_Analysis_Code/build_v2_dashboard.py"`)
 - **Batch Processing Scripts**: 
   - `GPT-5-mini batch API processing/scripts/MTA_multi_batch_gpt5_mini.py`
   - `GPT-5-nano batch API processing/scripts/MTA_multi_batch_gpt5_nano.py`
