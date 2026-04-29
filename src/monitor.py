@@ -223,16 +223,18 @@ def submit_and_monitor(
 
 
 def print_status(state: PipelineState) -> None:
-    """Print a one-shot status table (for classify.py status)."""
+    """Print a one-shot status table (for classify.py status).
+
+    Refreshes in-flight batches from the API when any exist. Uses
+    :func:`poll_all` so an empty in-flight set never calls
+    ``asyncio.gather()`` with zero arguments (which breaks ``asyncio.run``
+    on some Python versions).
+    """
     if not state.batches:
         logger.info("No batches tracked yet.")
         return
 
-    client = get_client()
-    asyncio.run(asyncio.gather(
-        *[_poll_batch(client, b) for b in state.in_flight_batches()]
-    ))
-    state.save()
+    asyncio.run(poll_all(state))
 
     from rich.console import Console
     Console().print(_build_status_table(state))

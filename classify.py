@@ -127,53 +127,99 @@ def _cmd_download(args: argparse.Namespace) -> None:
     download_completed(state)
 
 
-def _cmd_retry(args: argparse.Namespace) -> None:
-    """Collect failed custom_ids from error files and re-submit as a new batch."""
-    setup_logging()
-    state = PipelineState.load()
-    failed_ids = collect_failed_custom_ids(state)
+def _download_error_files(state: PipelineState) -> None:
+    """Download error JSONL files for batches that had failures."""
+    from src.downloader import ERRORS_DIR, _download_file
+    from src.submitter import get_client
 
+    batches_needing_download = [
+        rec for rec in state.completed_batches() + state.failed_batches()
+        if rec.error_file_id
+        and not (ERRORS_DIR / f"batch_{rec.batch_number:04d}_errors.jsonl").exists()
+    ]
+
+    if not batches_needing_download:
+        return
+
+    client = get_client()
+    for rec in batches_needing_download:
+        dest = ERRORS_DIR / f"batch_{rec.batch_number:04d}_errors.jsonl"
+        _download_file(client, rec.error_file_id, dest)
+
+
+def _cmd_retry(args: argparse.Namespace) -> None:
+    """Collect failed custom_ids from error files and re-submit as new batches.
+
+    Downloads error files if not already present, extracts the failed
+    custom_ids, pulls matching request lines from the original JSONL
+    batch files, and splits into properly-sized batches.
+    """
+    setup_logging()
+    import json
+    from src.builder import OUTPUT_DIR
+    from src.downloader import ERRORS_DIR
+
+    state = PipelineState.load()
+
+    logger.info("Downloading error files for batches with failures...")
+    _download_error_files(state)
+
+    failed_ids = collect_failed_custom_ids(state)
     if not failed_ids:
         logger.info("No failed requests to retry.")
         return
 
-    logger.info("Found %d failed requests. Building retry batch...", len(failed_ids))
+    failed_id_set = set(failed_ids)
+    logger.info("Found %d unique failed requests. Extracting from original JSONL files...", len(failed_id_set))
 
-    data_csv = _resolve_data(args)
-    df = pd.read_csv(data_csv)
-    id_set = {cid.removeprefix("startup-") for cid in failed_ids}
-    retry_df = df[df["org_uuid"].isin(id_set)]
+    retry_lines: list[str] = []
+    for rec in sorted(state.batches.values(), key=lambda b: b.batch_number):
+        if rec.failed_count == 0 or rec.file_path.endswith("retry_batch.jsonl"):
+            continue
+        fpath = Path(rec.file_path)
+        if not fpath.exists():
+            logger.warning("Original batch file missing: %s", fpath)
+            continue
+        with open(fpath, encoding="utf-8") as f:
+            for line in f:
+                obj = json.loads(line)
+                if obj.get("custom_id") in failed_id_set:
+                    retry_lines.append(line.rstrip("\n"))
 
-    if retry_df.empty:
-        logger.warning("Could not match any failed custom_ids to the dataset.")
+    if not retry_lines:
+        logger.warning("Could not extract any matching requests from original JSONL files.")
         return
 
-    from src.builder import OUTPUT_DIR, _openai_strict_schema, build_request_body, load_system_prompt
-    import json
+    logger.info("Extracted %d request lines for retry.", len(retry_lines))
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    retry_path = OUTPUT_DIR / "retry_batch.jsonl"
-    system_prompt = load_system_prompt()
-    schema = _openai_strict_schema()
-
-    with open(retry_path, "w", encoding="utf-8") as f:
-        for row in retry_df.itertuples(index=False):
-            row_dict = row._asdict()
-            user_msg = format_user_message(row_dict)
-            cid = build_custom_id(str(row_dict.get("org_uuid", "")))
-            body = build_request_body(user_msg, cid, system_prompt, schema, args.model)
-            f.write(json.dumps(body, ensure_ascii=False) + "\n")
-
+    batch_size = args.batch_size
     next_num = max((b.batch_number for b in state.batches.values()), default=0) + 1
-    state.batches[retry_path.stem] = BatchRecord(
-        batch_number=next_num,
-        file_path=str(retry_path),
-        row_range=f"retry-{len(retry_df)}",
-        estimated_tokens=len(retry_df) * ESTIMATED_TOKENS_PER_REQUEST,
-    )
-    state.save()
+    written_files: list[Path] = []
 
-    logger.info("Retry batch created with %d requests. Run 'classify.py submit'.", len(retry_df))
+    for chunk_start in range(0, len(retry_lines), batch_size):
+        chunk = retry_lines[chunk_start : chunk_start + batch_size]
+        chunk_idx = chunk_start // batch_size + 1
+        file_path = OUTPUT_DIR / f"retry_batch_{chunk_idx:04d}.jsonl"
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(chunk) + "\n")
+
+        batch_num = next_num + chunk_idx - 1
+        state.batches[file_path.stem] = BatchRecord(
+            batch_number=batch_num,
+            file_path=str(file_path),
+            row_range=f"retry-{len(chunk)}",
+            estimated_tokens=len(chunk) * ESTIMATED_TOKENS_PER_REQUEST,
+        )
+        written_files.append(file_path)
+        logger.info("Wrote %s  (%d requests)", file_path.name, len(chunk))
+
+    state.save()
+    logger.info(
+        "Created %d retry batch file(s) with %d total requests. Run 'classify.py submit'.",
+        len(written_files), len(retry_lines),
+    )
 
 
 def _cmd_merge(args: argparse.Namespace) -> None:
