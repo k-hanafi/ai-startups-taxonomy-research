@@ -1,10 +1,10 @@
 """Build JSONL batch files with structured output schema injection.
 
-Each JSONL line is a complete OpenAI chat completion request containing an
-identical static prefix (system prompt + Pydantic-generated JSON schema +
-prompt_cache_key) followed by one variable user message. The identical
-prefix is the structural prerequisite for prompt caching. It is guaranteed
-by construction, not by developer discipline.
+Each JSONL line is a complete OpenAI Responses API request (`POST /v1/responses`)
+with an identical static prefix (instructions + Pydantic-generated JSON schema in
+`text.format` + prompt_cache_key) followed by one variable user string. The
+identical prefix is the structural prerequisite for prompt caching. It is
+guaranteed by construction, not by developer discipline.
 """
 
 from __future__ import annotations
@@ -61,6 +61,18 @@ def _add_additional_properties_false(node: dict) -> None:
                     _add_additional_properties_false(item)
 
 
+def responses_text_format_json_schema(schema: dict) -> dict:
+    """Responses API structured-output config (`text` parameter body fragment)."""
+    return {
+        "format": {
+            "type": "json_schema",
+            "name": "ClassificationResult",
+            "strict": True,
+            "schema": schema,
+        }
+    }
+
+
 def build_request_body(
     user_message: str,
     custom_id: str,
@@ -68,31 +80,23 @@ def build_request_body(
     schema: dict,
     model: str = DEFAULT_MODEL,
 ) -> dict:
-    """Build one JSONL line for the Batch API.
+    """Build one JSONL line for the Batch API (Responses endpoint).
 
-    The body includes the Pydantic-generated JSON schema in response_format
-    and a prompt_cache_key so all requests share cache routing.
+    The body includes the Pydantic-generated JSON schema under text.format,
+    plus prompt_cache_key so all requests share cache routing.
     """
     return {
         "custom_id": custom_id,
         "method": "POST",
-        "url": "/v1/chat/completions",
+        "url": "/v1/responses",
         "body": {
             "model": model,
+            "instructions": system_prompt,
+            "input": user_message,
             "prompt_cache_key": PROMPT_CACHE_KEY,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "ClassificationResult",
-                    "strict": True,
-                    "schema": schema,
-                },
-            },
-            "max_completion_tokens": MAX_OUTPUT_TOKENS,
+            "max_output_tokens": MAX_OUTPUT_TOKENS,
+            "store": False,
+            "text": responses_text_format_json_schema(schema),
         },
     }
 

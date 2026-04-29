@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """CLI entry point for the v2 startup classification pipeline.
 
+Uses the OpenAI Responses API (`POST /v1/responses`) for batch jobs and for
+`classify.py test` (structured JSON via `text.format`).
+
 Each subcommand does exactly one thing and reads state.json to know where
 to start. --dry-run on prepare and run prints the full cost plan without
 touching the API.
@@ -260,7 +263,8 @@ def _cmd_test(args: argparse.Namespace) -> None:
     row_dict = row.to_dict()
     user_msg = format_user_message(row_dict)
 
-    from src.builder import _openai_strict_schema, load_system_prompt
+    from src.builder import _openai_strict_schema, load_system_prompt, responses_text_format_json_schema
+    from src.config import MAX_OUTPUT_TOKENS, PROMPT_CACHE_KEY
     from src.submitter import get_client
 
     client = get_client()
@@ -276,24 +280,17 @@ def _cmd_test(args: argparse.Namespace) -> None:
 
     @retry(stop=stop_after_attempt(2), wait=wait_fixed(2), reraise=True)
     def _call(tier: str) -> dict:
-        response = client.chat.completions.create(
+        response = client.responses.create(
             model=args.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_msg},
-            ],
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "ClassificationResult",
-                    "strict": True,
-                    "schema": schema,
-                },
-            },
-            max_completion_tokens=450,
+            instructions=system_prompt,
+            input=user_msg,
+            prompt_cache_key=PROMPT_CACHE_KEY,
+            max_output_tokens=MAX_OUTPUT_TOKENS,
+            store=False,
+            text=responses_text_format_json_schema(schema),
             service_tier=tier,
         )
-        return json.loads(response.choices[0].message.content)
+        return json.loads(response.output_text)
 
     try:
         result = _call("flex")

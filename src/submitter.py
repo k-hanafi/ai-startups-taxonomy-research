@@ -100,7 +100,7 @@ def create_batch(
     try:
         batch = client.batches.create(
             input_file_id=file_id,
-            endpoint="/v1/chat/completions",
+            endpoint="/v1/responses",
             completion_window="24h",
             metadata={
                 "run_id": run_id,
