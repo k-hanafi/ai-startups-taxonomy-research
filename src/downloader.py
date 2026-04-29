@@ -37,6 +37,53 @@ def _download_file(client, file_id: str, dest: Path) -> Path:
     return dest
 
 
+def _assistant_json_from_batch_body(body: dict) -> str | None:
+    """Extract assistant JSON text from a batch line's `response.body`.
+
+    Supports **Responses API** (`output` with `output_text` blocks) and legacy
+    **Chat Completions** (`choices[0].message.content`) for older batch files.
+    """
+    out_items = body.get("output")
+    if out_items is not None:
+        parts: list[str] = []
+        for item in out_items:
+            if item.get("type") != "message":
+                continue
+            for block in item.get("content") or []:
+                if block.get("type") == "output_text":
+                    parts.append(block.get("text") or "")
+        text = "".join(parts).strip()
+        if text:
+            return text
+
+    choices = body.get("choices") or []
+    if choices:
+        msg = choices[0].get("message") or {}
+        content = msg.get("content")
+        if isinstance(content, str) and content.strip():
+            return content
+
+    return None
+
+
+def _usage_from_batch_body(body: dict) -> dict[str, int]:
+    """Normalize per-response usage for cost aggregation (batch discount math)."""
+    usage = body.get("usage") or {}
+    if "input_tokens" in usage:
+        inp_details = usage.get("input_tokens_details") or {}
+        return {
+            "prompt_tokens": int(usage.get("input_tokens") or 0),
+            "completion_tokens": int(usage.get("output_tokens") or 0),
+            "cached_tokens": int(inp_details.get("cached_tokens") or 0),
+        }
+    prompt_details = usage.get("prompt_tokens_details") or {}
+    return {
+        "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+        "completion_tokens": int(usage.get("completion_tokens") or 0),
+        "cached_tokens": int(prompt_details.get("cached_tokens") or 0),
+    }
+
+
 def _parse_result_line(line: dict) -> dict | None:
     """Extract classification fields and usage stats from one JSONL result line.
 
@@ -54,13 +101,10 @@ def _parse_result_line(line: dict) -> dict | None:
         )
         return None
 
-    choices = body.get("choices", [])
-    if not choices:
-        logger.warning("No choices in response for %s", custom_id)
+    content_str = _assistant_json_from_batch_body(body)
+    if not content_str:
+        logger.warning("No assistant output in response for %s", custom_id)
         return None
-
-    message = choices[0].get("message", {})
-    content_str = message.get("content", "")
 
     try:
         parsed = json.loads(content_str)
@@ -69,16 +113,15 @@ def _parse_result_line(line: dict) -> dict | None:
         logger.warning("Validation failed for %s", custom_id, exc_info=True)
         return None
 
-    usage = body.get("usage", {})
-    prompt_details = usage.get("prompt_tokens_details", {})
+    u = _usage_from_batch_body(body)
 
     return {
         "custom_id": custom_id,
         "classification": parsed,
         "usage": {
-            "prompt_tokens": usage.get("prompt_tokens", 0),
-            "completion_tokens": usage.get("completion_tokens", 0),
-            "cached_tokens": prompt_details.get("cached_tokens", 0),
+            "prompt_tokens": u["prompt_tokens"],
+            "completion_tokens": u["completion_tokens"],
+            "cached_tokens": u["cached_tokens"],
         },
     }
 
