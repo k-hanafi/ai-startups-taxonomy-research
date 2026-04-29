@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ai-native-startup-classification"
+name = "ai-startups-taxonomy-research"
 version = "2.0.0"
 description = "Two-axis classifier for AI-native startups: 11 subclasses + RAD score via OpenAI Batch API"
 requires-python = ">=3.11"
