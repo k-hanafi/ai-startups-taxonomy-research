@@ -21,14 +21,17 @@ class ClassificationResult(BaseModel):
         description="1 if the startup is AI-native, 0 if not."
     )
     subclass: Literal[
-        "1A", "1B", "1C", "1D", "1E",
-        "0A", "0B", "0C-THIN", "0C-THICK", "0D", "0E",
+        "1A", "1B", "1C", "1D", "1E", "1F", "1G",
+        "0A", "0B", "0E",
     ] = Field(description="Sub-genre within the ai_native dimension.")
     rad_score: Literal["RAD-H", "RAD-M", "RAD-L", "RAD-NA"] = Field(
-        description="Resource-Adjusted AI Dependency score."
+        description=(
+            "Resource-Adjusted AI Dependency score. "
+            "RAD-H/M/L for ai_native=1; RAD-NA for ai_native=0."
+        )
     )
     cohort: Literal["PRE-GENAI", "GENAI-ERA"] = Field(
-        description="PRE-GENAI if founded before 2022, GENAI-ERA if 2022 or later."
+        description="PRE-GENAI if founded before 2023, GENAI-ERA if 2023 or later."
     )
 
     conf_classification: int = Field(

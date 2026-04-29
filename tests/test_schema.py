@@ -23,7 +23,7 @@ _VALID = {
     "conf_rad": 3,
     "reasons_3_points": "Point A | Point B | Point C",
     "sources_used": "short_description, long_description",
-    "verification_critique": "Borderline 1B vs 0C-THICK.",
+    "verification_critique": "Borderline 1B vs 1D.",
 }
 
 
@@ -41,10 +41,16 @@ class TestValidInput:
         assert result.subclass == "1B"
 
     def test_accepts_all_subclasses(self):
-        for sc in ["1A", "1B", "1C", "1D", "1E",
-                    "0A", "0B", "0C-THIN", "0C-THICK", "0D", "0E"]:
+        for sc in ["1A", "1B", "1C", "1D", "1E", "1F", "1G",
+                    "0A", "0B", "0E"]:
             result = ClassificationResult.model_validate(_make(subclass=sc))
             assert result.subclass == sc
+
+    def test_rejects_retired_subclasses(self):
+        """v2 codes 0C-THIN, 0C-THICK, 0D were removed in v2.1."""
+        for sc in ["0C-THIN", "0C-THICK", "0D"]:
+            with pytest.raises(ValidationError):
+                ClassificationResult.model_validate(_make(subclass=sc))
 
     def test_accepts_all_rad_scores(self):
         for rad in ["RAD-H", "RAD-M", "RAD-L", "RAD-NA"]:

@@ -26,6 +26,12 @@ without AI/ML as the primary mechanism, not as a feature, not as an enhancement,
 but as the engine. Apply this test strictly: if the product could exist in a 
 meaningfully similar form without AI, it is not AI-native.
 
+Note: companies that are LLM API wrappers — whether thin or thick — are AI-native 
+under this definition. Even if the underlying business problem predates GenAI, 
+removing the LLM API call breaks the product. The wrapper IS the product mechanism. 
+Wrapper depth governs which AI-native subclass applies (1C vs 1D), not whether the 
+company is AI-native.
+
 ──────────────────────────────────────────
 AI-NATIVE SUBCLASSES (ai_native = 1)
 ──────────────────────────────────────────
@@ -39,18 +45,7 @@ AI-NATIVE SUBCLASSES (ai_native = 1)
      Real examples: Anthropic, Mistral, Cohere, Pinecone, Modal, Together AI.
      Key signal: They are building FOR other AI builders, not for end users.
 
-1B | Applied Vertical AI
-     AI purpose-built for a specific domain where AI IS the product, not a feature. 
-     The entire workflow is reimagined around AI capability, and domain expertise is 
-     deeply embedded in the model or pipeline. The product could not exist in a 
-     meaningfully similar form without AI, not just a worse version, but a 
-     categorically different and inferior one.
-     Real examples: Abridge (clinical documentation), Harvey (legal AI), 
-     Glean (enterprise search), DeepScribe (medical scribe), POCUS Systems (diagnostics).
-     Key signal: Vertical-specific AI that replaces or fundamentally transforms a 
-     domain workflow, not just augments it.
-
-1C | AI-Native Infrastructure & Tooling
+1B | AI-Native Infrastructure & Tooling
      Companies building for the AI development lifecycle itself. Their reason for 
      existence is the AI ecosystem. They would have no product without AI being a 
      widespread development target. Includes evaluation frameworks, fine-tuning 
@@ -60,16 +55,57 @@ AI-NATIVE SUBCLASSES (ai_native = 1)
      Key signal: Their customer is an AI developer or AI team, not an end user 
      in a vertical domain.
 
-1D | Autonomous Agent Systems
+1C | Thin LLM Wrapper
+     Company has built atop LLM APIs with minimal proprietary layer. The underlying 
+     business problem existed before GenAI and could be addressed with other means, 
+     but the company's specific implementation depends entirely on the LLM API call. 
+     Thin wrappers have little proprietary data, minimal fine-tuning, and are easily 
+     replicable by a small team in weeks. High substitution risk: if the API provider 
+     changes pricing or terms, the business model collapses with no fallback. 
+     AI-native because the product mechanism IS the LLM call, but with the weakest 
+     defensibility profile in the AI-native taxonomy.
+     Real examples: Simple ChatGPT-based writing assistants, basic AI customer service 
+     bots with no proprietary training, commodity AI summarization tools.
+     Key signal: A developer could replicate the core product in a weekend using the 
+     same APIs. No proprietary data flywheel, no fine-tuning, no unique workflow moat.
+
+1D | Thick LLM Integrator
+     Company has built meaningfully atop LLM APIs with significant proprietary 
+     investment: fine-tuned or domain-adapted models, unique datasets, deep workflow 
+     integration, strong UX moat, or network effects that create real defensibility. 
+     The underlying problem may predate GenAI but they have built genuine competitive 
+     advantages on top of the GenAI layer. AI-native because the LLM is structurally 
+     embedded in the product, but distinct from 1E (vertical AI with proprietary 
+     models) because the core intelligence still flows from third-party APIs.
+     Real examples: Perplexity AI (proprietary search index + UX), 
+     Jasper (brand voice + templates + enterprise workflows), 
+     Cursor (deep IDE integration + codebase-aware context).
+     Key signal: Replacing the LLM API would be painful and expensive, but the company 
+     has built proprietary value on top of the API call.
+
+1E | Applied Vertical AI
+     AI purpose-built for a specific domain where AI IS the product, not a feature. 
+     The entire workflow is reimagined around AI capability, and domain expertise is 
+     deeply embedded in the model or pipeline — typically via proprietary training 
+     data, fine-tuned domain models, or classical ML stacks predating GenAI. The 
+     product could not exist in a meaningfully similar form without AI, not just a 
+     worse version, but a categorically different and inferior one.
+     Real examples: Abridge (clinical documentation), Harvey (legal AI), 
+     Glean (enterprise search), DeepScribe (medical scribe), POCUS Systems (diagnostics).
+     Key signal: Vertical-specific AI that replaces or fundamentally transforms a 
+     domain workflow, not just augments it. Distinguished from 1D by depth of 
+     proprietary AI investment beyond LLM API consumption.
+
+1F | Autonomous Agent Systems
      Core product is AI acting autonomously in the world, executing multi-step tasks, 
      operating software, managing complex workflows with minimal human-in-the-loop. 
      Categorically distinct from chatbots (which respond) and from AI-augmented tools 
      (which assist). These systems plan, decide, and act.
-     Real examples: Cognition (Devin), Adept, Dust, Browser Use, MultiOn.
+     Real examples: OpenClaw, Cognition (Devin), Adept, Dust, Browser Use, MultiOn.
      Key signal: The AI takes actions in the world, not just generates text or 
      recommendations for a human to act on.
 
-1E | Generative Content Platforms
+1G | Generative Content Platforms
      Products where GenAI is the creative engine, not an enhancement but the actual 
      output mechanism. The product IS the generation capability applied to a creative 
      domain. Without GenAI, the product does not produce its core output.
@@ -89,46 +125,26 @@ NOT AI-NATIVE SUBCLASSES (ai_native = 0)
      Key signal: Remove all AI references. The product description still makes 
      complete sense and the value proposition is unchanged.
 
-0B | AI-Augmented
-     Traditional product category where AI genuinely improves the product but is not 
-     what the company sells. The core value proposition predates and survives without 
-     AI. AI is a meaningful feature, not the mechanism.
-     Real examples: Notion (with AI writing assist), Salesforce (with Einstein), 
-     Grammarly (pre-LLM version), HubSpot (with AI recommendations).
-     Key signal: The company could publish a press release tomorrow announcing they 
-     removed their AI features, and the product would still be competitive.
+0B | AI-Augmented / AI-Adjacent
+     A merged class covering two related cases where AI is not the product mechanism:
 
-0C-THIN | Thin LLM Wrapper
-     Company has built atop LLM APIs with minimal proprietary layer. The underlying 
-     business problem existed before GenAI and could be addressed with other means. 
-     Thin wrappers have little proprietary data, minimal fine-tuning, and are easily 
-     replicable by a small team in weeks. High substitution risk if the API provider 
-     changes pricing or terms, the business model collapses with no fallback.
-     Real examples: Simple ChatGPT-based writing assistants, basic AI customer service 
-     bots with no proprietary training, commodity AI summarization tools.
-     Key signal: A developer could replicate the core product in a weekend using the 
-     same APIs. No proprietary data flywheel, no fine-tuning, no unique workflow moat.
+     (a) AI-Augmented: Traditional product category where AI genuinely improves the 
+         product but is not what the company sells. The core value proposition predates 
+         and survives without AI. AI is a meaningful feature, not the engine.
+         Examples: Notion (with AI writing assist), Salesforce (with Einstein), 
+         Grammarly (pre-LLM version), HubSpot (with AI recommendations).
 
-0C-THICK | Thick LLM Integrator
-     Company has built meaningfully atop LLM APIs but with significant proprietary 
-     investment: fine-tuned or domain-adapted models, unique datasets, deep workflow 
-     integration, strong UX moat, or network effects that create real defensibility. 
-     The underlying problem predates GenAI but they have built genuine competitive 
-     advantages on top of the GenAI layer.
-     Real examples: Perplexity AI (proprietary search index + UX), 
-     Jasper (brand voice + templates + enterprise workflows), 
-     Cursor (deep IDE integration + codebase-aware context).
-     Key signal: Replacing the LLM API would be painful and expensive, but the company 
-     has built proprietary value that survives beyond just the API call.
+     (b) AI-Adjacent / Ecosystem: Companies that benefit from the AI wave but are not 
+         themselves AI-powered. They exist in the AI ecosystem as enablers, 
+         beneficiaries, or service providers, but their own product or service does 
+         not use AI as a mechanism.
+         Examples: CoreWeave (GPU cloud), Labelbox (human-in-the-loop labeling), 
+         AI recruiting firms, AI compliance consultancies, AI hardware resellers.
 
-0D | AI-Adjacent / Ecosystem
-     Companies that benefit from the AI wave but are not themselves AI-powered. They 
-     exist in the AI ecosystem as enablers, beneficiaries, or service providers, but 
-     their own product or service does not use AI as a mechanism.
-     Real examples: CoreWeave (GPU cloud), Labelbox (human-in-the-loop labeling), 
-     AI recruiting firms, AI compliance consultancies, AI hardware resellers.
-     Key signal: Their revenue grows because AI is growing, but their own product 
-     would not change technically if AI stopped advancing.
+     Key shared signal: The company could publish a press release tomorrow announcing 
+     they removed all AI features (or that the AI wave reversed), and their core product 
+     and revenue model would still function. AI is a feature, a backend optimization, 
+     or a tailwind — never the engine.
 
 0E | Non-Tech
      Physical products, retail, traditional services, manufacturing with no meaningful 
@@ -149,9 +165,8 @@ adjusted for the company's apparent resources and scale.
 Core counterfactual: "If this company had $500M in funding and 5 years, could they 
 build a competitive product without relying on third-party GenAI APIs?"
 
-This dimension is independent from ai_native. A 1B company can be RAD-H (built on 
-OpenAI APIs) or RAD-L (training their own domain-specific models). This distinction 
-is one of the most important signals for evaluating startup defensibility.
+This dimension is independent from ai_native subclass but is fully determined by the 
+ai_native flag itself. RAD is a meaningful question only for AI-native companies.
 
 ──────────────────────────────────────────
 RAD SCORE VALUES
@@ -185,22 +200,35 @@ RAD-L | Low Structural Dependency
      described, AI is a backend optimization not a customer-facing mechanism.
 
 RAD-NA | Not Applicable
-     Assigned to 0A, 0D, and 0E companies where AI plays no structural role. The 
-     RAD question is meaningless for these companies. Do not assign RAD-H, RAD-M, 
-     or RAD-L to companies in these classes. It would misrepresent the data.
+     Assigned to all ai_native = 0 companies (0A, 0B, 0E). The RAD question — 
+     "how dependent on third-party GenAI?" — is meaningless for companies where 
+     AI is not the product mechanism. Do not assign RAD-H, RAD-M, or RAD-L to any 
+     ai_native = 0 company. It would misrepresent the data.
 
 ──────────────────────────────────────────
 RAD ASSIGNMENT RULES
 ──────────────────────────────────────────
 
-- ALL ai_native = 1 companies (1A–1E): always receive RAD-H, RAD-M, or RAD-L.
-  Never assign RAD-NA to an AI-native company.
-- 0B companies: assign RAD-H, RAD-M, or RAD-L based on depth of AI integration.
-- 0C-THIN and 0C-THICK companies: always RAD-H or RAD-M. Never RAD-L or RAD-NA.
-  (By definition these companies are dependent on external AI APIs.)
-- 0A, 0D, 0E companies: always RAD-NA.
-- When RAD evidence is ambiguous for a post-2023 company: default to RAD-H.
-- When RAD evidence is ambiguous for a pre-2023 company with AI keywords: default RAD-M.
+The RAD dimension is fully determined by the ai_native flag:
+
+- ai_native = 1 companies (1A, 1B, 1C, 1D, 1E, 1F, 1G):
+  always receive RAD-H, RAD-M, or RAD-L. Never RAD-NA.
+
+- ai_native = 0 companies (0A, 0B, 0E):
+  always receive RAD-NA. conf_rad must be null.
+
+Within ai_native = 1, choose the RAD level based on evidence:
+- 1C (thin wrappers): always RAD-H or RAD-M. Never RAD-L. By definition 
+  these companies are dependent on external AI APIs.
+- 1D (thick integrators): always RAD-H or RAD-M. Never RAD-L. Even with 
+  significant proprietary investment on top, the core intelligence flows 
+  from third-party APIs.
+- 1A, 1B, 1E, 1F, 1G: RAD-H, RAD-M, or RAD-L depending on evidence of 
+  proprietary model development versus API consumption.
+- When RAD evidence is ambiguous for a post-2023 ai_native = 1 company: 
+  default to RAD-H.
+- When RAD evidence is ambiguous for a pre-2023 ai_native = 1 company with 
+  AI keywords: default to RAD-M.
 
 ════════════════════════════════════════════════════════════════
 TEMPORAL COHORT
@@ -212,7 +240,7 @@ cohort boundary.
 
 PRE-GENAI  | Founded before 2023. AI claims predate the GenAI wave. Scrutinize whether 
              AI-native claims refer to genuine classical ML/NLP (valid and may be RAD-M 
-             or RAD-L) or retroactive GenAI rebranding (skeptical, likely 0B or 0C).
+             or RAD-L) or retroactive GenAI rebranding (skeptical, likely 1C or 1D).
 
 GENAI-ERA  | Founded 2023 or later. GenAI was available from inception. AI-native 
              claims are more plausible. Default RAD assumption is RAD-H unless 
@@ -232,13 +260,14 @@ conf_classification: confidence in ai_native + subclass:
 - Cap at 4 if PRE-GENAI company with ambiguous AI claims
 
 conf_rad: confidence in RAD score specifically:
-- null: always null when rad_score is RAD-NA (0A, 0D, 0E). The RAD dimension does not apply; there is no confidence value to report.
+- null: always null when rad_score is RAD-NA (all ai_native = 0 companies). 
+  The RAD dimension does not apply; there is no confidence value to report.
 - 5: explicit statement of proprietary model / API dependency in description
 - 4: strong indirect signals (research team, fine-tuning mentioned, pre-2023 AI tech)
 - 3: cohort + scale used as proxy. No direct model architecture signals
 - 2: minimal information. Defaulting to cohort heuristic only
 - 1: cannot determine. RAD assigned by rule not by evidence
-- Cap at 3 for 0C-THIN/0C-THICK if no explicit API or model architecture described
+- Cap at 3 for 1C/1D if no explicit API or model architecture described
 
 reasons_3_points: write exactly 3 concise analytical points, separated by ' | '. At least one must 
 explicitly address the RAD assignment. Each point should stand alone as a complete 
@@ -258,14 +287,15 @@ EDGE CASES & TIE-BREAKING
 ════════════════════════════════════════════════════════════════
 
 - ai_native = 1 vs 0 equally plausible → classify 0, lower conf_classification, note in critique
-- LLM API wrappers → always 0C-THIN or 0C-THICK, never 1B, regardless of domain sophistication
-- "AI-powered" in marketing copy alone, absent from product mechanism → 0B not 0C
-- Vertical AI with own proprietary models → 1B with RAD-L or RAD-M
-- Vertical AI built on third-party LLMs → 1B or 0C-THICK depending on replaceability test
-- Pre-2023 computer vision / NLP companies → may be 1B with RAD-M or RAD-L
-- MLOps tool that requires AI to exist as a field, but is itself software → 1C
-- Human-in-the-loop data labeling → 0D not 1C (humans are the mechanism, not AI)
-- Chatbot ≠ autonomous agent → chatbots are 0C or 1B. Agents are 1D
+- LLM API wrappers → always 1C (thin) or 1D (thick), never 1E, regardless of domain sophistication
+- "AI-powered" in marketing copy alone, absent from product mechanism → 0B not 1C
+- Vertical AI with own proprietary models → 1E with RAD-L or RAD-M
+- Vertical AI built on third-party LLMs → 1E or 1D depending on depth of proprietary investment
+- Pre-2023 computer vision / NLP companies → may be 1E with RAD-M or RAD-L
+- MLOps tool that requires AI to exist as a field, but is itself software → 1B
+- Human-in-the-loop data labeling → 0B not 1B (humans are the mechanism, not AI)
+- Chatbot ≠ autonomous agent → chatbots are 1C, 1D, or 1E. Agents are 1F
+- GPU cloud / AI infrastructure resellers / AI consultancies → 0B (ecosystem beneficiary, not AI mechanism)
 - Insufficient information → ai_native=0, subclass=0A, rad_score=RAD-NA, cohort from year field,
   conf_classification=1, conf_rad=null, reasons_3_points="Insufficient information", sources_used="", 
   verification_critique="Insufficient information. Fallback classification applied."
@@ -304,7 +334,7 @@ sources_used: short_description, long_description, keywords, year
 verification_critique: Clear 1A. RAD-L: they ARE the infrastructure, not consumers of it. conf_rad=4: architecture independence inferred, not explicitly stated.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EXAMPLE 2 | 1B: Applied Vertical AI, PRE-GENAI, RAD-M
+EXAMPLE 2 | 1E: Applied Vertical AI, PRE-GENAI, RAD-M
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 INPUT:
 CompanyID: ex-002
@@ -322,17 +352,17 @@ OUTPUT:
 CompanyID: ex-002
 CompanyName: DeepScribe
 ai_native: 1
-subclass: 1B
+subclass: 1E
 rad_score: RAD-M
 cohort: PRE-GENAI
 conf_classification: 5
 conf_rad: 4
 reasons_3_points: AI/ML/NLP is the core product mechanism. Clinical documentation impossible without it | Founded 2017: pre-GenAI, uses classical NLP + speech recognition suggesting proprietary stack | Domain-specific pipeline deeply embedded. Not a generic LLM wrapper
 sources_used: short_description, long_description, keywords, year
-verification_critique: Clear 1B. RAD-M: pre-2023 founding with proprietary NLP pipeline signals. May have adopted GenAI later but core is classical ML. conf_rad=4: inferred from tech stack.
+verification_critique: Clear 1E. RAD-M: pre-2023 founding with proprietary NLP pipeline signals. May have adopted GenAI later but core is classical ML. conf_rad=4: inferred from tech stack.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EXAMPLE 3 | 1C: AI Tooling, GENAI-ERA, RAD-H
+EXAMPLE 3 | 1B: AI-Native Tooling, GENAI-ERA, RAD-H
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 INPUT:
 CompanyID: ex-003
@@ -351,17 +381,17 @@ OUTPUT:
 CompanyID: ex-003
 CompanyName: Braintrust
 ai_native: 1
-subclass: 1C
+subclass: 1B
 rad_score: RAD-H
 cohort: GENAI-ERA
 conf_classification: 5
 conf_rad: 4
 reasons_3_points: Product exists solely to serve the AI development lifecycle. No AI ecosystem, no product | Evaluation platform structurally dependent on LLM proliferation that began with GPT-4 | No product-level dependency on one specific LLM API, but existential dependency on AI as a field
 sources_used: short_description, long_description, keywords, year
-verification_critique: Clear 1C. RAD-H nuance: not dependent on one API provider, but product is existentially tied to GenAI ecosystem growth. conf_rad=4: dependency is systemic not architectural.
+verification_critique: Clear 1B. RAD-H nuance: not dependent on one API provider, but product is existentially tied to GenAI ecosystem growth. conf_rad=4: dependency is systemic not architectural.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EXAMPLE 4 | 1D: Autonomous Agent, GENAI-ERA, RAD-H
+EXAMPLE 4 | 1F: Autonomous Agent, GENAI-ERA, RAD-H
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 INPUT:
 CompanyID: ex-004
@@ -379,17 +409,17 @@ OUTPUT:
 CompanyID: ex-004
 CompanyName: Cognition Labs
 ai_native: 1
-subclass: 1D
+subclass: 1F
 rad_score: RAD-H
 cohort: GENAI-ERA
 conf_classification: 5
 conf_rad: 5
 reasons_3_points: Core product is autonomous agentic system requiring frontier LLM reasoning to plan and act | Founded 2023. Product architecture structurally dependent on GPT-4-tier reasoning capabilities | Categorically distinct from chatbots: Devin acts, not just responds
 sources_used: short_description, long_description, keywords, year
-verification_critique: Clear 1D. RAD-H: long description explicitly states frontier LLM dependency. conf_rad=5: directly stated, not inferred.
+verification_critique: Clear 1F. RAD-H: long description explicitly states frontier LLM dependency. conf_rad=5: directly stated, not inferred.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EXAMPLE 5 | 1E: Generative Content Platform, PRE-GENAI, RAD-M
+EXAMPLE 5 | 1G: Generative Content Platform, PRE-GENAI, RAD-M
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 INPUT:
 CompanyID: ex-005
@@ -408,17 +438,17 @@ OUTPUT:
 CompanyID: ex-005
 CompanyName: ElevenLabs
 ai_native: 1
-subclass: 1E
+subclass: 1G
 rad_score: RAD-M
 cohort: PRE-GENAI
 conf_classification: 5
 conf_rad: 4
 reasons_3_points: Core deliverable is AI-generated voice. Product IS the generation capability | Voice cloning and synthesis are structurally impossible without deep generative models | Founded 2022: pre-GPT-4 era, proprietary speech models suggested by founding year and domain specificity
 sources_used: short_description, long_description, keywords, year
-verification_critique: Clear 1E. RAD-M not RAD-H: founded pre-GPT-4, descriptions suggest proprietary trained models rather than API dependency. conf_rad=4: inferred from founding year, not explicitly stated.
+verification_critique: Clear 1G. RAD-M not RAD-H: founded pre-GPT-4, descriptions suggest proprietary trained models rather than API dependency. conf_rad=4: inferred from founding year, not explicitly stated.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EXAMPLE 6 | 0C-THICK: Thick LLM Integrator, PRE-GENAI, RAD-M
+EXAMPLE 6 | 1D: Thick LLM Integrator, PRE-GENAI, RAD-M
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 INPUT:
 CompanyID: ex-006
@@ -436,18 +466,18 @@ YearFounded: 2022
 OUTPUT:
 CompanyID: ex-006
 CompanyName: Perplexity AI
-ai_native: 0
-subclass: 0C-THICK
+ai_native: 1
+subclass: 1D
 rad_score: RAD-M
 cohort: PRE-GENAI
 conf_classification: 4
 conf_rad: 4
-reasons_3_points: Business problem (search/Q&A) predates GenAI. Classifies as integrator not AI-native | Thick wrapper: proprietary search index, data flywheel, and scale create real moat | RAD-M: company large enough and technically sophisticated enough to build toward model independence if motivated
+reasons_3_points: AI-native: removing the LLM API call breaks the product. Wrapper IS the mechanism | Thick integrator: proprietary search index, data flywheel, and UX moat distinguish from thin wrappers | RAD-M: company large enough and technically sophisticated enough to build toward model independence if motivated
 sources_used: short_description, long_description, keywords, year
-verification_critique: 0C-THICK not 1B: core problem predates GenAI. AI changed the interface not the category. RAD-M justified by scale. conf_classification=4: 1B boundary is the key risk.
+verification_critique: 1D not 1E: core intelligence flows from third-party LLM, not proprietary domain models. RAD-M justified by scale. conf_classification=4: 1E boundary is the key risk.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EXAMPLE 7 | 0C-THIN: Thin LLM Wrapper, GENAI-ERA, RAD-H
+EXAMPLE 7 | 1C: Thin LLM Wrapper, GENAI-ERA, RAD-H
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 INPUT:
 CompanyID: ex-007
@@ -463,18 +493,18 @@ YearFounded: 2023
 OUTPUT:
 CompanyID: ex-007
 CompanyName: SummarizeIt
-ai_native: 0
-subclass: 0C-THIN
+ai_native: 1
+subclass: 1C
 rad_score: RAD-H
 cohort: GENAI-ERA
 conf_classification: 5
 conf_rad: 5
-reasons_3_points: Thin LLM wrapper: minimal proprietary layer over commodity summarization API call | Explicitly states no proprietary models or training. Maximum substitution risk | Summarization as a task predates GenAI. This implementation replicable by a solo developer in days
+reasons_3_points: AI-native thin wrapper: removing the LLM API kills the product entirely | Explicitly states no proprietary models or training. Maximum substitution risk | Replicable by a solo developer in days. Defensibility profile is the weakest in the AI-native taxonomy
 sources_used: short_description, long_description, keywords, year
-verification_critique: Clear 0C-THIN. RAD-H confirmed by explicit statement of no proprietary models. Both confidence scores are certain. Description leaves no ambiguity on either dimension.
+verification_critique: Clear 1C. RAD-H confirmed by explicit statement of no proprietary models. Both confidence scores are certain. Description leaves no ambiguity on either dimension.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EXAMPLE 8 | 0B: AI-Augmented, PRE-GENAI, RAD-NA
+EXAMPLE 8 | 0B: AI-Augmented (backend ML), PRE-GENAI, RAD-NA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 INPUT:
 CompanyID: ex-008
@@ -495,13 +525,13 @@ subclass: 0B
 rad_score: RAD-NA
 cohort: PRE-GENAI
 conf_classification: 3
-conf_rad: 5
-reasons_3_points: Core product is a logistics coordination platform. Delivery service predates and survives without ML | ML appears in keywords but is absent from product descriptions. Likely backend route optimization, not customer-facing AI | Traditional marketplace/logistics model. AI not part of value proposition to customers
+conf_rad: null
+reasons_3_points: Core product is a logistics coordination platform. Delivery service predates and survives without ML | ML appears in keywords but is absent from product descriptions. Likely backend route optimization, not customer-facing AI | RAD-NA by rule: ai_native = 0 means RAD does not apply
 sources_used: short_description, long_description, keywords, year
-verification_critique: 0B not 0A: ML keywords suggest meaningful but non-core AI use. RAD-NA: AI is backend optimization only. conf_classification=3: 0A vs 0B is a borderline call.
+verification_critique: 0B not 0A: ML keywords suggest meaningful but non-core AI use. RAD-NA: ai_native = 0 by rule. conf_classification=3: 0A vs 0B is a borderline call.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EXAMPLE 9 | 0D: AI-Adjacent, PRE-GENAI, RAD-NA
+EXAMPLE 9 | 0B: AI-Adjacent / Ecosystem, PRE-GENAI, RAD-NA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 INPUT:
 CompanyID: ex-009
@@ -519,17 +549,17 @@ OUTPUT:
 CompanyID: ex-009
 CompanyName: CoreWeave
 ai_native: 0
-subclass: 0D
+subclass: 0B
 rad_score: RAD-NA
 cohort: PRE-GENAI
 conf_classification: 5
-conf_rad: 5
-reasons_3_points: Company benefits from AI wave but is not itself an AI product. Compute provider only | Core product (GPU cloud) would exist and be valuable regardless of AI advancement | 0D not 1A: 1A requires building the AI stack, not the physical infrastructure beneath it
+conf_rad: null
+reasons_3_points: Ecosystem beneficiary: revenue scales with AI adoption but product is not AI-powered | Core product (GPU cloud) would exist and be valuable regardless of AI advancement | 0B not 1A: 1A requires building the AI stack, not the physical infrastructure beneath it
 sources_used: short_description, long_description, keywords, year
-verification_critique: Clear 0D. RAD-NA: company sells compute, not AI. Important 1A distinction: they are beneath the AI stack, not part of it. Both confidence scores certain.
+verification_critique: Clear 0B (AI-Adjacent variant). RAD-NA by rule: ai_native = 0. Important 1A distinction: they are beneath the AI stack, not part of it. Both confidence levels strong.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EXAMPLE 10 | Ambiguous: PRE-GENAI 1B vs 0C-THICK boundary
+EXAMPLE 10 | Ambiguous: PRE-GENAI 1E vs 1D boundary
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 INPUT:
 CompanyID: ex-010
@@ -548,11 +578,11 @@ OUTPUT:
 CompanyID: ex-010
 CompanyName: Harvey AI
 ai_native: 1
-subclass: 1B
+subclass: 1E
 rad_score: RAD-M
 cohort: PRE-GENAI
 conf_classification: 4
 conf_rad: 4
-reasons_3_points: Fine-tuned legal models and proprietary legal corpora are core. Not a generic LLM wrapper | Legal workflow reimagined around AI capability. Product inferior in kind without it | RAD-M: significant fine-tuning and proprietary data suggest partial independence from base model providers
+reasons_3_points: Fine-tuned legal models and proprietary legal corpora are core. Beyond a thick wrapper | Legal workflow reimagined around AI capability. Product inferior in kind without it | RAD-M: significant fine-tuning and proprietary data suggest partial independence from base model providers
 sources_used: short_description, long_description, keywords, year
-verification_critique: 1B not 0C-THICK: proprietary fine-tuning on legal data pushes this into AI-native territory. The legal corpus IS the moat. conf_classification=4: 0C-THICK boundary is the key risk.
+verification_critique: 1E not 1D: proprietary fine-tuning on legal data pushes this beyond pure LLM integration. The legal corpus IS the moat. conf_classification=4: 1D boundary is the key risk.
