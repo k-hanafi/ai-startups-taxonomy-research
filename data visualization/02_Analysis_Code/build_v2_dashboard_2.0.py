@@ -4,7 +4,7 @@
 Same chart design as build_v2_dashboard.py but driven by the new 10-class
 taxonomy (1A-1G + 0A, 0B, 0C) and the migrated dataset.
 
-Reads outputs/classified_startups_v21_migrated.csv, computes all metrics and
+Reads outputs/production_csvs/classified_startups_v21_migrated.csv, computes all metrics and
 chart data, and writes:
     data visualization/01_Presentation_Materials/v2_dashboard2.0.html
 """
@@ -17,7 +17,7 @@ from pathlib import Path
 import pandas as pd
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CSV_PATH = _PROJECT_ROOT / "outputs" / "classified_startups_v21_migrated.csv"
+CSV_PATH = _PROJECT_ROOT / "outputs" / "production_csvs" / "classified_startups_v21_migrated.csv"
 OUTPUT_PATH = (
     _PROJECT_ROOT / "data visualization" / "01_Presentation_Materials" / "v2_dashboard2.0.html"
 )

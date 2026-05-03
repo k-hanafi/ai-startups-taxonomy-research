@@ -5,18 +5,19 @@ logger = logging.getLogger(__name__).  This module configures the root
 logger once so all output is routed through two handlers:
 
   - Console: rich markup, colored by level, human-readable.
-  - File:    outputs/run.log, machine-readable, survives terminal close.
+  - File:    outputs/logs/run.log, machine-readable, survives terminal close.
 """
 
 from __future__ import annotations
 
 import logging
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
 from rich.logging import RichHandler
 
-_LOG_DIR = Path(__file__).resolve().parents[1] / "outputs"
+from src.paths import LOGS_DIR
+
+_LOG_DIR = LOGS_DIR
 _LOG_FILE = _LOG_DIR / "run.log"
 
 _CONFIGURED = False

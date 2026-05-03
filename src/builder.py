@@ -23,12 +23,13 @@ from src.config import (
     PROMPT_CACHE_KEY,
 )
 from src.formatter import build_custom_id, format_user_message
+from src.paths import BATCH_REQUESTS_DIR
 from src.schema import ClassificationResult
 
 logger = logging.getLogger(__name__)
 
 PROMPT_FILE = Path(__file__).resolve().parents[1] / "prompts" / "system_classifier_prompt.txt"
-OUTPUT_DIR = Path(__file__).resolve().parents[1] / "outputs" / "batch_requests"
+OUTPUT_DIR = BATCH_REQUESTS_DIR
 
 
 def load_system_prompt() -> str:
@@ -107,7 +108,7 @@ def build_batch_files(
     batch_size: int = DEFAULT_BATCH_SIZE,
     row_slice: slice | None = None,
 ) -> list[Path]:
-    """Read the dataset CSV and write JSONL batch files to outputs/batch_requests/.
+    """Read the dataset CSV and write JSONL batch files to outputs/batch_data/requests/.
 
     Args:
         csv_path: Path to the input CSV.

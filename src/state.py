@@ -21,10 +21,12 @@ from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Literal
 
+from src.paths import BATCH_DATA_DIR, BATCH_STATE_FILE
+
 logger = logging.getLogger(__name__)
 
-_STATE_DIR = Path(__file__).resolve().parents[1] / "outputs"
-STATE_FILE = _STATE_DIR / "state.json"
+_STATE_DIR = BATCH_DATA_DIR
+STATE_FILE = BATCH_STATE_FILE
 
 BatchStatus = Literal[
     "prepared",
@@ -62,7 +64,7 @@ _BATCH_RECORD_FIELDS.update(f.name for f in fields(BatchRecord))
 
 @dataclass
 class PipelineState:
-    """Full pipeline state, serialised to outputs/state.json."""
+    """Full pipeline state, serialised to outputs/batch_data/state.json."""
 
     run_id: str = ""
     model: str = ""

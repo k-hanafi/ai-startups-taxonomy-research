@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the v2 classification results dashboard as a standalone HTML file.
 
-Reads outputs/classified_startups_v2.csv, computes all metrics and chart
+Reads outputs/production_csvs/classified_startups_v2.csv, computes all metrics and chart
 data, and writes data visualization/01_Presentation_Materials/v2_dashboard.html.
 """
 
@@ -14,7 +14,7 @@ from pathlib import Path
 import pandas as pd
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CSV_PATH = _PROJECT_ROOT / "outputs" / "classified_startups_v2.csv"
+CSV_PATH = _PROJECT_ROOT / "outputs" / "production_csvs" / "classified_startups_v2.csv"
 OUTPUT_PATH = (
     _PROJECT_ROOT / "data visualization" / "01_Presentation_Materials" / "v2_dashboard.html"
 )

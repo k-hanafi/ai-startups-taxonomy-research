@@ -16,15 +16,14 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
+from src.paths import BATCH_OUTPUTS_DIR, DEFAULT_CLASSIFICATION_OUTPUT_CSV
 from src.schema import ClassificationResult
 from src.state import PipelineState
 from src.tokens import BATCH_DISCOUNT, CACHE_DISCOUNT, MODEL_PRICING
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-BATCH_OUTPUTS_DIR = _PROJECT_ROOT / "outputs" / "batch_outputs"
-DEFAULT_OUTPUT_PATH = _PROJECT_ROOT / "outputs" / "classified_startups_v2.csv"
+DEFAULT_OUTPUT_PATH = DEFAULT_CLASSIFICATION_OUTPUT_CSV
 
 
 def merge_batch_csvs(

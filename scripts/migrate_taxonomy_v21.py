@@ -20,8 +20,8 @@ The migration normalizes any v2 row that violates the new RAD invariant:
 
 Usage:
     python scripts/migrate_taxonomy_v21.py
-    python scripts/migrate_taxonomy_v21.py --input outputs/classified_startups_v2.csv \
-                                           --output outputs/classified_startups_v21_migrated.csv
+    python scripts/migrate_taxonomy_v21.py --input outputs/production_csvs/classified_startups_v2.csv \
+                                           --output outputs/production_csvs/classified_startups_v21_migrated.csv
 """
 
 from __future__ import annotations
@@ -32,8 +32,9 @@ from collections import Counter
 from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_INPUT = _PROJECT_ROOT / "outputs" / "classified_startups_v2.csv"
-DEFAULT_OUTPUT = _PROJECT_ROOT / "outputs" / "classified_startups_v21_migrated.csv"
+_PRODUCTION_CSVS_DIR = _PROJECT_ROOT / "outputs" / "production_csvs"
+DEFAULT_INPUT = _PRODUCTION_CSVS_DIR / "classified_startups_v2.csv"
+DEFAULT_OUTPUT = _PRODUCTION_CSVS_DIR / "classified_startups_v21_migrated.csv"
 
 SUBCLASS_REMAP: dict[str, str] = {
     "1A": "1A",
