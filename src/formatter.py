@@ -7,11 +7,12 @@ prompt's expected field names and handles missing fields gracefully.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
-# Truncation guard: 10K chars ~ 2,500 tokens. Well within context limits
-# even with the ~2,400-token system prompt + schema prefix.
-MAX_USER_MESSAGE_CHARS: int = 10_000
+# Truncation guard for website-enriched inputs. The Tavily evidence builder
+# already compacts page content, and this final cap protects batch file size.
+MAX_USER_MESSAGE_CHARS: int = 16_000
 
 
 def _extract_year(date_str: str) -> str:
@@ -24,6 +25,25 @@ def _extract_year(date_str: str) -> str:
         if chunk.isdigit() and 1900 <= int(chunk) <= 2100:
             return chunk
     return cleaned
+
+
+def _normalize_founded_date(date_str: Any) -> str:
+    """Normalize Crunchbase founded dates to one prompt field.
+
+    Returns YYYY-MM-DD when month/day are available, YYYY when only a year can
+    be recovered, and Unknown when no usable date exists.
+    """
+    cleaned = _clean(date_str)
+    if not cleaned:
+        return "Unknown"
+
+    for fmt in ("%d%b%Y", "%d-%b-%y", "%d-%b-%Y", "%Y-%m-%d", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(cleaned, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
+    return _extract_year(cleaned)
 
 
 def _clean(value: Any) -> str:
@@ -47,13 +67,27 @@ def _merge_keywords(row: dict[str, Any]) -> str:
     return cats or groups
 
 
+def _resource_context(row: dict[str, Any]) -> str:
+    """Format scale/resource fields that help RAD confidence without dominating."""
+    fields = [
+        ("EmployeeCount", row.get("employee_count", "")),
+        ("FundingRounds", row.get("num_funding_rounds", "")),
+        ("TotalFundingUSD", row.get("total_funding_usd", "")),
+        ("LastFundingDate", row.get("last_funding_date", "")),
+        ("Status", row.get("status", "")),
+    ]
+    parts = [f"{label}: {_clean(value)}" for label, value in fields if _clean(value)]
+    return "; ".join(parts)
+
+
 def format_user_message(row: dict[str, Any]) -> str:
     """Convert one CSV row into the user message string.
 
     Args:
         row: Dictionary whose keys are raw CSV column names
              (org_uuid, name, short_description, Long description,
-              category_list, category_groups_list, founded_date).
+              category_list, category_groups_list, founded_date), plus optional
+              website_evidence and resource-context fields.
 
     Returns:
         Formatted text block matching the prompt's INPUT FORMAT section.
@@ -63,7 +97,10 @@ def format_user_message(row: dict[str, Any]) -> str:
     short = _clean(row.get("short_description", ""))
     long = _clean(row.get("Long description", ""))
     keywords = _merge_keywords(row)
-    year = _extract_year(row.get("founded_date", ""))
+    founded_date = _normalize_founded_date(row.get("founded_date", ""))
+    resource_context = _resource_context(row)
+    website_pages = _clean(row.get("website_pages_used", ""))
+    website_evidence = _clean(row.get("website_evidence", ""))
 
     parts = [
         f"CompanyID: {cid}",
@@ -77,7 +114,15 @@ def format_user_message(row: dict[str, Any]) -> str:
         parts.append(f"Long Description: {long}")
 
     parts.append(f"Keywords: {keywords}")
-    parts.append(f"YearFounded: {year}")
+    parts.append(f"FoundedDate: {founded_date}")
+
+    if resource_context:
+        parts.append(f"Resource Context: {resource_context}")
+
+    if website_evidence:
+        if website_pages:
+            parts.append(f"Website Pages Used: {website_pages}")
+        parts.append(f"Website Evidence:\n{website_evidence}")
 
     message = "\n".join(parts)
 
