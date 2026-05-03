@@ -2,7 +2,7 @@
 """Build the v2.0 dashboard from the v2.1-migrated CSV.
 
 Same chart design as build_v2_dashboard.py but driven by the new 10-class
-taxonomy (1A-1G + 0A, 0B, 0E) and the migrated dataset.
+taxonomy (1A-1G + 0A, 0B, 0C) and the migrated dataset.
 
 Reads outputs/classified_startups_v21_migrated.csv, computes all metrics and
 chart data, and writes:
@@ -22,7 +22,7 @@ OUTPUT_PATH = (
     _PROJECT_ROOT / "data visualization" / "01_Presentation_Materials" / "v2_dashboard2.0.html"
 )
 
-SUBCLASS_ORDER = ["1A", "1B", "1C", "1D", "1E", "1F", "1G", "0A", "0B", "0E"]
+SUBCLASS_ORDER = ["1A", "1B", "1C", "1D", "1E", "1F", "1G", "0A", "0B", "0C"]
 SUBCLASS_LABELS = {
     "1A": "1A  Foundation Layer",
     "1B": "1B  AI-Native Tooling",
@@ -32,8 +32,8 @@ SUBCLASS_LABELS = {
     "1F": "1F  Autonomous Agents",
     "1G": "1G  Generative Content",
     "0A": "0A  Traditional Tech",
-    "0B": "0B  AI-Augmented / Adjacent",
-    "0E": "0E  Non-Tech",
+    "0B": "0B  AI-Augmented",
+    "0C": "0C  Non-Tech",
 }
 # Colors follow semantic meaning across the v2 -> v2.1 remap so that visual
 # identity is preserved class-by-class:
@@ -54,15 +54,15 @@ SUBCLASS_COLORS = {
     "1G": "#d97706",
     "0A": "#94a3b8",
     "0B": "#64748b",
-    "0E": "#cbd5e1",
+    "0C": "#cbd5e1",
 }
 RAD_ORDER = ["RAD-H", "RAD-M", "RAD-L", "RAD-NA"]
 RAD_COLORS = {"RAD-H": "#e11d48", "RAD-M": "#d97706", "RAD-L": "#059669", "RAD-NA": "#94a3b8"}
 COHORT_COLORS = {"PRE-GENAI": "#64748b", "GENAI-ERA": "#4f46e5"}
 
-# Under v2.1, RAD is a function of ai_native: ai_native=0 (0A, 0B, 0E) always
+# Under v2.1, RAD is a function of ai_native: ai_native=0 (0A, 0B, 0C) always
 # gets RAD-NA. Used by the heatmap to suppress row totals for those rows.
-RAD_NA_CLASSES = ["0A", "0B", "0E"]
+RAD_NA_CLASSES = ["0A", "0B", "0C"]
 
 
 def compute_metrics(df: pd.DataFrame) -> dict:
@@ -326,7 +326,7 @@ footer strong {{ color: var(--text2); }}
     Same dataset as V2, refreshed under the v2.1 taxonomy.
     The 11-class system was collapsed to <strong>10 classes</strong>:
     LLM wrappers (thin and thick) were promoted to AI-native as new classes 1C and 1D,
-    AI-augmented and AI-adjacent companies merged into a single 0B bucket,
+    AI-augmented companies remain in the 0B bucket,
     and the AI-native side was reordered to flow from foundation outward.
   </p>
   <p>
@@ -375,8 +375,8 @@ footer strong {{ color: var(--text2); }}
   <p>
     Under v2.1, <strong>{m["ai_native_pct"]}%</strong> ({m["ai_native_count"]:,}) of {m["total"]:,} startups are AI-native &mdash;
     a higher rate than v2 because thin and thick LLM wrappers (now 1C and 1D) moved to the AI-native side.
-    Most non-AI-native companies fall into traditional tech (0A) or non-tech (0E),
-    with the merged 0B bucket capturing AI-augmented and AI-adjacent businesses.
+    Most non-AI-native companies fall into traditional tech (0A) or non-tech (0C),
+    with the 0B bucket capturing AI-augmented businesses.
   </p>
 
   <div class="filter-bar">
@@ -430,7 +430,7 @@ footer strong {{ color: var(--text2); }}
   </p>
   <p style="font-size:0.82rem;color:var(--muted);">
     Under v2.1, RAD is a strict function of <code>ai_native</code>: the seven AI-native classes (1A&ndash;1G) always receive RAD-H, RAD-M, or RAD-L,
-    and the three non-AI-native classes (0A, 0B, 0E) always receive RAD-NA.
+    and the three non-AI-native classes (0A, 0B, 0C) always receive RAD-NA.
     The question &ldquo;how dependent on external GenAI?&rdquo; has no meaning for a company that does not use AI as its product mechanism.
   </p>
 

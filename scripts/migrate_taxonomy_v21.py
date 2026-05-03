@@ -3,12 +3,12 @@
 
 The v2.1 taxonomy collapses the 11-class system to 10 classes:
 - 0C-THIN, 0C-THICK promote to AI-native and renumber to 1C, 1D
-- 0D merges into 0B (the AI-Augmented / AI-Adjacent bucket)
+- 0D maps to 0A because AI-adjacent is no longer part of 0B
 - The AI-native side reorders: foundation -> tooling -> wrappers -> applied -> autonomous -> generative
 
 RAD becomes a perfect function of ai_native:
 - ai_native = 1 (1A-1G): always RAD-H/M/L
-- ai_native = 0 (0A, 0B, 0E): always RAD-NA, conf_rad = null
+- ai_native = 0 (0A, 0B, 0C): always RAD-NA, conf_rad = null
 
 The migration normalizes any v2 row that violates the new RAD invariant:
 - ai_native=0 rows with non-NA RAD are forced to RAD-NA with conf_rad=null
@@ -45,8 +45,8 @@ SUBCLASS_REMAP: dict[str, str] = {
     "0B": "0B",
     "0C-THIN": "1C",
     "0C-THICK": "1D",
-    "0D": "0B",
-    "0E": "0E",
+    "0D": "0A",
+    "0E": "0C",
 }
 
 PROMOTED_TO_NATIVE: set[str] = {"0C-THIN", "0C-THICK"}
