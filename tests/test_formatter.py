@@ -14,6 +14,7 @@ from src.formatter import (
     _clean,
     _extract_year,
     _merge_keywords,
+    _normalize_founded_date,
     build_custom_id,
     format_user_message,
 )
@@ -57,6 +58,26 @@ class TestExtractYear:
         assert _extract_year("") == "Unknown"
 
 
+# -- _normalize_founded_date ----------------------------------------------------
+
+
+class TestNormalizeFoundedDate:
+    def test_crunchbase_compact_format(self):
+        assert _normalize_founded_date("01jan2020") == "2020-01-01"
+
+    def test_master_hyphen_format(self):
+        assert _normalize_founded_date("01-Jan-24") == "2024-01-01"
+
+    def test_iso_format(self):
+        assert _normalize_founded_date("2023-03-14") == "2023-03-14"
+
+    def test_year_only_fallback(self):
+        assert _normalize_founded_date("founded in 2022") == "2022"
+
+    def test_missing_returns_unknown(self):
+        assert _normalize_founded_date("") == "Unknown"
+
+
 # -- _merge_keywords -----------------------------------------------------------
 
 
@@ -96,7 +117,8 @@ class TestFormatUserMessage:
         assert "Short Description: A test company" in msg
         assert "Long Description: Longer description" in msg
         assert "Keywords: AI,Software, Technology" in msg
-        assert "YearFounded: 2020" in msg
+        assert "FoundedDate: 2020-01-01" in msg
+        assert "YearFounded:" not in msg
 
     def test_missing_long_description(self):
         row = {**_SAMPLE_ROW, "Long description": float("nan")}
@@ -117,7 +139,32 @@ class TestFormatUserMessage:
         assert lines[2].startswith("Short Description:")
         assert lines[3].startswith("Long Description:")
         assert lines[4].startswith("Keywords:")
-        assert lines[5].startswith("YearFounded:")
+        assert lines[5].startswith("FoundedDate:")
+
+    def test_optional_resource_context(self):
+        row = {
+            **_SAMPLE_ROW,
+            "employee_count": "11-50",
+            "num_funding_rounds": "2",
+            "total_funding_usd": "5000000",
+            "last_funding_date": "01-Jan-24",
+            "status": "operating",
+        }
+        msg = format_user_message(row)
+        assert "Resource Context:" in msg
+        assert "EmployeeCount: 11-50" in msg
+        assert "TotalFundingUSD: 5000000" in msg
+
+    def test_optional_website_evidence(self):
+        row = {
+            **_SAMPLE_ROW,
+            "website_pages_used": "https://example.com/product",
+            "website_evidence": "[Page 1: product]\nURL: https://example.com/product\nAI product evidence",
+        }
+        msg = format_user_message(row)
+        assert "Website Pages Used: https://example.com/product" in msg
+        assert "Website Evidence:" in msg
+        assert "AI product evidence" in msg
 
 
 # -- build_custom_id ----------------------------------------------------------
