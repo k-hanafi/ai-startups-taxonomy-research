@@ -22,7 +22,7 @@ class ClassificationResult(BaseModel):
     )
     subclass: Literal[
         "1A", "1B", "1C", "1D", "1E", "1F", "1G",
-        "0A", "0B", "0E",
+        "0A", "0B", "0C",
     ] = Field(description="Sub-genre within the ai_native dimension.")
     rad_score: Literal["RAD-H", "RAD-M", "RAD-L", "RAD-NA"] = Field(
         description=(
@@ -31,7 +31,10 @@ class ClassificationResult(BaseModel):
         )
     )
     cohort: Literal["PRE-GENAI", "GENAI-ERA"] = Field(
-        description="PRE-GENAI if founded before 2023, GENAI-ERA if 2023 or later."
+        description=(
+            "PRE-GENAI if founded before March 2023; GENAI-ERA if founded "
+            "in March 2023 or later, using GPT-4's release as the inflection point."
+        )
     )
 
     conf_classification: int = Field(
