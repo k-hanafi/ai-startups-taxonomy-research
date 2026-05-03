@@ -16,16 +16,16 @@ import json
 import logging
 from pathlib import Path
 
+from src.paths import BATCH_ERRORS_DIR, BATCH_OUTPUTS_DIR, BATCH_RESULTS_DIR
 from src.schema import ClassificationResult
 from src.state import PipelineState
 from src.submitter import get_client
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RESULTS_DIR = _PROJECT_ROOT / "outputs" / "batch_results"
-ERRORS_DIR = _PROJECT_ROOT / "outputs" / "batch_errors"
-OUTPUTS_DIR = _PROJECT_ROOT / "outputs" / "batch_outputs"
+RESULTS_DIR = BATCH_RESULTS_DIR
+ERRORS_DIR = BATCH_ERRORS_DIR
+OUTPUTS_DIR = BATCH_OUTPUTS_DIR
 
 
 def _download_file(client, file_id: str, dest: Path) -> Path:

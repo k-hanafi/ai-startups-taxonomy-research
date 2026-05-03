@@ -14,3 +14,24 @@
 - **CSV Results**: 
   - `GPT-5-mini batch API processing/output/concatenated_batches_gpt5_mini.csv`
   - `GPT-5-nano batch API processing/output/classified_startups_gpt5_nano.csv`
+
+### Tavily-Enriched Classification Workflow
+
+Generated artifacts are organized under `outputs/`:
+
+- `outputs/tavilycrawl/`: enriched 44k input CSV, Tavily crawl queue, raw crawl JSONL, crawl state, and classifier input with website evidence.
+- `outputs/batch_data/`: OpenAI batch request JSONL, downloaded raw results, per-batch CSVs, errors, and batch state.
+- `outputs/production_csvs/`: final research CSVs such as `classified_startups_v2.csv`, `classified_startups_v21_migrated.csv`, and new Tavily-enriched classifier outputs.
+- `outputs/logs/`: runtime logs.
+
+Run order:
+
+```bash
+python scripts/prepare_tavily_enrichment.py
+python scripts/run_tavily_crawl.py --budget-credits 100000
+python scripts/build_website_evidence.py
+python classify.py prepare
+python classify.py submit
+python classify.py download
+python classify.py merge
+```
