@@ -37,11 +37,12 @@ from src.monitor import print_status, submit_and_monitor
 from src.submitter import BillingLimitError
 from src.state import BatchRecord, PipelineState
 from src.tokens import estimate_cost
+from src.website_evidence import DEFAULT_CLASSIFIER_INPUT_CSV
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent
-DEFAULT_DATA_CSV = _PROJECT_ROOT / "data" / "company_us_short_long_desc_.csv"
+DEFAULT_DATA_CSV = DEFAULT_CLASSIFIER_INPUT_CSV
 
 
 def _resolve_data(args: argparse.Namespace) -> Path:
@@ -353,7 +354,7 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--data", default=None,
-        help="Path to input CSV (default: data/company_us_short_long_desc_.csv)",
+        help="Path to input CSV (default: outputs/tavilycrawl/classifier_input.csv)",
     )
 
 
@@ -409,7 +410,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Merge batch outputs into final CSV and print distribution report",
     )
     p.add_argument("--output", default=None,
-                   help="Output CSV path (default: outputs/classified_startups_v2.csv)")
+                   help="Output CSV path (default: outputs/production_csvs/classified_startups_tavily.csv)")
     p.set_defaults(func=_cmd_merge)
 
     # test
