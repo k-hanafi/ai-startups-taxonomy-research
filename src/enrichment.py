@@ -1,26 +1,26 @@
-"""Prepare the 44k Tavily enrichment dataset and crawl queue.
-
-The enrichment stage keeps the GPT classifier input narrow: product
-descriptions and tags remain primary evidence, while scale/resource fields are
-available for RAD confidence without adding contact/geographic noise.
-"""
+"""Build the single lean classifier input CSV used by GPT + Tavily."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import urlparse
 
 import pandas as pd
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = PROJECT_ROOT / "data"
-OUTPUT_DIR = PROJECT_ROOT / "outputs" / "tavily_enrichment"
+from src.paths import DATA_DIR, TAVILY_DIR
 
 DEFAULT_SUBSET_CSV = DATA_DIR / "44k_crunchbase_startups.csv"
 DEFAULT_MASTER_CSV = DATA_DIR / "company_us_all_var_Khaled.csv"
-DEFAULT_ENRICHED_CSV = OUTPUT_DIR / "company_44k_enriched_for_classifier.csv"
-DEFAULT_CRAWL_QUEUE_CSV = OUTPUT_DIR / "tavily_crawl_queue.csv"
+
+OUTPUT_DIR = TAVILY_DIR
+
+# One file: columns the formatter reads for GPT, plus homepage + Tavily evidence + gating flag.
+DEFAULT_CLASSIFIER_INPUT_CSV = TAVILY_DIR / "classifier_input.csv"
+
+# Back-compat aliases (same path).
+DEFAULT_ENRICHED_CSV = DEFAULT_CLASSIFIER_INPUT_CSV
+DEFAULT_CRAWL_QUEUE_CSV = DEFAULT_CLASSIFIER_INPUT_CSV
 
 IDENTITY_COLUMNS = [
     "org_uuid",
@@ -35,34 +35,30 @@ IDENTITY_COLUMNS = [
 
 RESOURCE_CONTEXT_COLUMNS = [
     "employee_count",
-    "num_funding_rounds",
     "total_funding_usd",
-    "last_funding_date",
-    "status",
 ]
 
-AUDIT_ONLY_COLUMNS = [
-    "rcid",
-    "cb_url",
-    "rank",
-    "state_code",
-    "region",
-    "city",
-    "linkedin_url",
-    "twitter_url",
-    "facebook_url",
-    "created_date",
-    "updated_date",
-    "year_created",
-    "closed_date",
-]
+CLASSIFIER_INPUT_COLUMNS = (
+    IDENTITY_COLUMNS
+    + RESOURCE_CONTEXT_COLUMNS
+    + [
+        "website_alive",
+        "website_pages_used",
+        "website_evidence",
+    ]
+)
 
-DEFAULT_OUTPUT_COLUMNS = IDENTITY_COLUMNS + RESOURCE_CONTEXT_COLUMNS + AUDIT_ONLY_COLUMNS
+# Internal join pulls master fields needed for RESOURCE_CONTEXT only.
+_JOIN_MASTER_COLUMNS = [
+    "org_uuid",
+    "total_funding_usd",
+    "employee_count",
+]
 
 
 @dataclass(frozen=True)
 class EnrichmentReport:
-    """Summary statistics for the prepared 44k enrichment dataset."""
+    """Summary statistics for classifier input preparation."""
 
     subset_rows: int
     master_rows: int
@@ -73,12 +69,12 @@ class EnrichmentReport:
     duplicate_master_orgs: int
     valid_homepage_urls: int
     invalid_homepage_urls: int
-    crawl_queue_rows: int
+    tavily_eligible_rows: int
 
     def format_report(self) -> str:
         """Return a concise, CLI-friendly preparation report."""
         return "\n".join([
-            "TAVILY ENRICHMENT PREP REPORT",
+            "CLASSIFIER INPUT PREP REPORT",
             f"  Subset rows:              {self.subset_rows:,}",
             f"  Master rows:              {self.master_rows:,}",
             f"  Output rows:              {self.output_rows:,}",
@@ -88,7 +84,7 @@ class EnrichmentReport:
             f"  Duplicate master orgs:    {self.duplicate_master_orgs:,}",
             f"  Valid homepage URLs:      {self.valid_homepage_urls:,}",
             f"  Invalid homepage URLs:    {self.invalid_homepage_urls:,}",
-            f"  Crawl queue rows:         {self.crawl_queue_rows:,}",
+            f"  Tavily-eligible rows:     {self.tavily_eligible_rows:,}",
         ])
 
 
@@ -119,34 +115,56 @@ def is_valid_homepage_url(value: object) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
+def _merge_prior_classifier_columns(enriched: pd.DataFrame, path: Path) -> pd.DataFrame:
+    """Preserve ``website_alive`` and Tavily evidence from an existing CSV when re-preparing."""
+    if not path.is_file():
+        return enriched
+    prev = _read_csv(path)
+    if "org_uuid" not in prev.columns:
+        return enriched
+    out = enriched.copy()
+    orgs = out["org_uuid"].astype(str)
+
+    if "website_alive" in prev.columns:
+        m = dict(zip(prev["org_uuid"].astype(str), prev["website_alive"].astype(str).str.strip()))
+        out["website_alive"] = orgs.map(m).fillna(out["website_alive"])
+    elif "website_live" in prev.columns:
+        m = dict(zip(prev["org_uuid"].astype(str), prev["website_live"].astype(str).str.strip()))
+        out["website_alive"] = orgs.map(m).fillna(out["website_alive"])
+
+    for col in ("website_pages_used", "website_evidence"):
+        if col in prev.columns:
+            m = dict(zip(prev["org_uuid"].astype(str), prev[col].astype(str)))
+            out[col] = orgs.map(m).fillna(out[col])
+
+    out["website_alive"] = out["website_alive"].fillna("").astype(str)
+    for col in ("website_pages_used", "website_evidence"):
+        out[col] = out[col].fillna("").astype(str)
+    return out
+
+
+def tavily_eligible_mask(df: pd.DataFrame) -> pd.Series:
+    """Rows Tavily should crawl: valid URL and confirmed live when the flag exists."""
+    valid = df["homepage_url"].map(is_valid_homepage_url)
+    if "website_alive" in df.columns:
+        col = "website_alive"
+    elif "website_live" in df.columns:
+        col = "website_live"
+    else:
+        return valid
+    live = df[col].astype(str).str.strip().str.lower().eq("true")
+    return valid & live
+
+
 def _selected_master(master: pd.DataFrame) -> pd.DataFrame:
-    """Keep only master fields with classifier or audit value."""
-    keep = [
-        "org_uuid",
-        "rank",
-        "state_code",
-        "region",
-        "city",
-        "status",
-        "num_funding_rounds",
-        "total_funding_usd",
-        "employee_count",
-        "linkedin_url",
-        "twitter_url",
-        "facebook_url",
-        "year_created",
-        "updated_date",
-        "last_funding_date",
-        "closed_date",
-    ]
-    return master[[c for c in keep if c in master.columns]].copy()
+    return master[[c for c in _JOIN_MASTER_COLUMNS if c in master.columns]].copy()
 
 
 def build_enriched_dataset(
     subset_csv: str | Path = DEFAULT_SUBSET_CSV,
     master_csv: str | Path = DEFAULT_MASTER_CSV,
 ) -> tuple[pd.DataFrame, EnrichmentReport]:
-    """Join the 44k subset to selected master fields and validate crawlability."""
+    """Join subset to master resource fields and return the lean classifier schema."""
     subset = _normalize_long_description(_read_csv(subset_csv))
     master = _read_csv(master_csv)
     master_selected = _selected_master(master)
@@ -169,12 +187,20 @@ def build_enriched_dataset(
     unmatched_rows = int(joined["_merge"].eq("left_only").sum())
     joined = joined.drop(columns=["_merge"])
 
-    for col in DEFAULT_OUTPUT_COLUMNS:
+    body_cols = IDENTITY_COLUMNS + RESOURCE_CONTEXT_COLUMNS
+    for col in body_cols:
         if col not in joined.columns:
             joined[col] = ""
-    output = joined[DEFAULT_OUTPUT_COLUMNS].copy()
+    output = joined[body_cols].copy()
+
+    output["website_alive"] = ""
+    output["website_pages_used"] = ""
+    output["website_evidence"] = ""
+
+    output = output[CLASSIFIER_INPUT_COLUMNS].copy()
+
     url_valid = output["homepage_url"].map(is_valid_homepage_url)
-    output["homepage_url_valid"] = url_valid
+    eligible = tavily_eligible_mask(output)
 
     report = EnrichmentReport(
         subset_rows=len(subset),
@@ -186,37 +212,34 @@ def build_enriched_dataset(
         duplicate_master_orgs=duplicate_master_orgs,
         valid_homepage_urls=int(url_valid.sum()),
         invalid_homepage_urls=int((~url_valid).sum()),
-        crawl_queue_rows=int(url_valid.sum()),
+        tavily_eligible_rows=int(eligible.sum()),
     )
     return output, report
 
 
 def build_crawl_queue(enriched: pd.DataFrame) -> pd.DataFrame:
-    """Build the Tavily queue from enriched rows with valid homepage URLs."""
-    required = ["org_uuid", "name", "homepage_url", "status", "short_description"]
+    """In-memory slice of rows Tavily would crawl (for tests / inspection)."""
+    required = ["org_uuid", "name", "homepage_url", "short_description"]
     for col in required:
         if col not in enriched.columns:
-            raise ValueError(f"Missing required crawl queue column: {col}")
-
-    queue = enriched[enriched["homepage_url"].map(is_valid_homepage_url)].copy()
-    return queue[required].reset_index(drop=True)
+            raise ValueError(f"Missing required column: {col}")
+    q = enriched[tavily_eligible_mask(enriched)].copy()
+    return q[required].reset_index(drop=True)
 
 
 def write_enrichment_outputs(
     subset_csv: str | Path = DEFAULT_SUBSET_CSV,
     master_csv: str | Path = DEFAULT_MASTER_CSV,
-    enriched_csv: str | Path = DEFAULT_ENRICHED_CSV,
-    crawl_queue_csv: str | Path = DEFAULT_CRAWL_QUEUE_CSV,
+    enriched_csv: str | Path = DEFAULT_CLASSIFIER_INPUT_CSV,
+    crawl_queue_csv: str | Path | None = None,
 ) -> EnrichmentReport:
-    """Write the enriched classifier CSV and Tavily crawl queue."""
+    """Write the single lean ``classifier_input.csv`` (``crawl_queue_csv`` is ignored)."""
+    _ = crawl_queue_csv  # deprecated; kept for API compatibility
+    out_path = Path(enriched_csv)
     enriched, report = build_enriched_dataset(subset_csv, master_csv)
-    queue = build_crawl_queue(enriched)
+    enriched = _merge_prior_classifier_columns(enriched, out_path)
+    report = replace(report, tavily_eligible_rows=int(tavily_eligible_mask(enriched).sum()))
 
-    enriched_path = Path(enriched_csv)
-    queue_path = Path(crawl_queue_csv)
-    enriched_path.parent.mkdir(parents=True, exist_ok=True)
-    queue_path.parent.mkdir(parents=True, exist_ok=True)
-
-    enriched.to_csv(enriched_path, index=False)
-    queue.to_csv(queue_path, index=False)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    enriched.to_csv(out_path, index=False)
     return report
