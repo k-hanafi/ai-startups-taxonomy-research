@@ -27,7 +27,7 @@ from src.schema import ClassificationResult
 
 logger = logging.getLogger(__name__)
 
-PROMPT_FILE = Path(__file__).resolve().parents[1] / "prompts" / "Multiclassification_prompt.txt"
+PROMPT_FILE = Path(__file__).resolve().parents[1] / "prompts" / "system_classifier_prompt.txt"
 OUTPUT_DIR = Path(__file__).resolve().parents[1] / "outputs" / "batch_requests"
 
 
