@@ -42,13 +42,13 @@ class TestValidInput:
 
     def test_accepts_all_subclasses(self):
         for sc in ["1A", "1B", "1C", "1D", "1E", "1F", "1G",
-                    "0A", "0B", "0E"]:
+                    "0A", "0B", "0C"]:
             result = ClassificationResult.model_validate(_make(subclass=sc))
             assert result.subclass == sc
 
     def test_rejects_retired_subclasses(self):
-        """v2 codes 0C-THIN, 0C-THICK, 0D were removed in v2.1."""
-        for sc in ["0C-THIN", "0C-THICK", "0D"]:
+        """v2 codes 0C-THIN, 0C-THICK, 0D, and 0E were removed in v2.1."""
+        for sc in ["0C-THIN", "0C-THICK", "0D", "0E"]:
             with pytest.raises(ValidationError):
                 ClassificationResult.model_validate(_make(subclass=sc))
 
