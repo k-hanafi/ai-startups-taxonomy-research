@@ -83,7 +83,7 @@ def _build_distribution_table(rows: list[dict]) -> Table:
 
     subclass_order = [
         "1A", "1B", "1C", "1D", "1E", "1F", "1G",
-        "0A", "0B", "0E",
+        "0A", "0B", "0C",
     ]
     rad_order = ["RAD-H", "RAD-M", "RAD-L", "RAD-NA"]
 
