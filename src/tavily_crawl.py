@@ -7,7 +7,7 @@ import os
 import time
 import urllib.error
 import urllib.request
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -15,20 +15,24 @@ from typing import Any
 import pandas as pd
 from dotenv import load_dotenv
 
-from src.enrichment import DEFAULT_CRAWL_QUEUE_CSV, OUTPUT_DIR, PROJECT_ROOT, is_valid_homepage_url
+from src.enrichment import DEFAULT_CLASSIFIER_INPUT_CSV, is_valid_homepage_url, tavily_eligible_mask
+from src.paths import PROJECT_ROOT, TAVILY_DIR
 
 TAVILY_CRAWL_ENDPOINT = "https://api.tavily.com/crawl"
-DEFAULT_RAW_RESULTS_JSONL = OUTPUT_DIR / "tavily_crawl_raw.jsonl"
-DEFAULT_CRAWL_STATE_JSON = OUTPUT_DIR / "tavily_crawl_state.json"
+DEFAULT_RAW_RESULTS_JSONL = TAVILY_DIR / "raw_results.jsonl"
+CANONICALIZE_USER_AGENT = "ai-native-startup-classification/canonicalize"
+
+# Deprecated name — Tavily reads the same lean classifier CSV and filters rows in memory.
+DEFAULT_CRAWL_QUEUE_CSV = DEFAULT_CLASSIFIER_INPUT_CSV
+DEFAULT_CRAWL_STATE_JSON = TAVILY_DIR / "crawl_state.json"
 
 DEFAULT_INSTRUCTIONS = (
-    "Select up to 5 pages that best explain what this company actually builds "
-    "and sells for AI-native startup classification. Prioritize homepage, "
-    "product/platform/solutions pages, about/company pages, careers/team/hiring "
-    "pages, and technical/research pages. Prefer pages with evidence about "
-    "product mechanism, AI/ML/LLM usage, autonomous agents, proprietary models "
-    "or data, target users, and workflow depth. Avoid legal, privacy, terms, "
-    "cookie, login, checkout, generic blog/news, support, and social pages."
+    "Select up to 5 pages that best explain what this company does, sells, who "
+    "it serves, and how the offering works. Prefer homepage, product/platform/"
+    "solutions/services/use-case, about, pricing, docs, technical/research "
+    "pages with concrete evidence. Capture AI/ML/automation only when explicit "
+    "or central. Avoid legal, privacy, login, checkout, support, social, and "
+    "blog/news archives."
 )
 
 DEFAULT_EXCLUDE_PATHS = [
@@ -45,6 +49,9 @@ DEFAULT_EXCLUDE_PATHS = [
     r"/account.*",
     r"/support.*",
     r"/help.*",
+    r"/careers?.*",
+    r"/jobs?.*",
+    r"/hiring.*",
     r"/blog/page/.*",
     r"/news/page/.*",
     r"/press/page/.*",
@@ -58,9 +65,9 @@ class TavilyCrawlConfig:
 
     limit: int = 5
     max_depth: int = 2
-    max_breadth: int = 12
+    max_breadth: int = 20
     extract_depth: str = "basic"
-    chunks_per_source: int = 3
+    chunks_per_source: int = 4
     timeout: float = 60.0
     format: str = "markdown"
     allow_external: bool = False
@@ -69,13 +76,14 @@ class TavilyCrawlConfig:
     include_usage: bool = True
     instructions: str = DEFAULT_INSTRUCTIONS
     exclude_paths: list[str] = field(default_factory=lambda: list(DEFAULT_EXCLUDE_PATHS))
+    max_retries: int = 2
+    retry_backoff_seconds: float = 2.0
+    canonicalize_urls: bool = True
 
     def request_payload(self, url: str) -> dict[str, Any]:
         """Return the JSON body for one Tavily Crawl request."""
-        return {
+        payload = {
             "url": url,
-            "instructions": self.instructions,
-            "chunks_per_source": self.chunks_per_source,
             "max_depth": self.max_depth,
             "max_breadth": self.max_breadth,
             "limit": self.limit,
@@ -88,6 +96,10 @@ class TavilyCrawlConfig:
             "timeout": self.timeout,
             "include_usage": self.include_usage,
         }
+        if self.instructions:
+            payload["instructions"] = self.instructions
+            payload["chunks_per_source"] = self.chunks_per_source
+        return payload
 
 
 @dataclass
@@ -122,6 +134,7 @@ class CrawlRunReport:
     attempted: int
     completed: int
     failed: int
+    empty_results: int
     skipped_existing: int
     skipped_invalid_url: int
     credits_used_this_run: float
@@ -134,6 +147,7 @@ class CrawlRunReport:
             f"  Attempted this run:       {self.attempted:,}",
             f"  Completed this run:       {self.completed:,}",
             f"  Failed this run:          {self.failed:,}",
+            f"  Empty crawl results:      {self.empty_results:,}",
             f"  Skipped existing:         {self.skipped_existing:,}",
             f"  Skipped invalid URL:      {self.skipped_invalid_url:,}",
             f"  Credits this run:         {self.credits_used_this_run:,.2f}",
@@ -166,7 +180,7 @@ def _completed_ids_from_jsonl(path: str | Path) -> set[str]:
             except json.JSONDecodeError:
                 continue
             org_uuid = str(obj.get("org_uuid", "")).strip()
-            if org_uuid and obj.get("ok") is True:
+            if org_uuid and (obj.get("ok") is True or obj.get("retryable") is False):
                 completed.add(org_uuid)
     return completed
 
@@ -207,15 +221,101 @@ def call_tavily_crawl(url: str, config: TavilyCrawlConfig, api_key: str) -> dict
         return json.loads(response.read().decode("utf-8"))
 
 
+def resolve_canonical_url(url: str, timeout: float = 15.0) -> str:
+    """Follow server redirects to the URL Tavily should start from."""
+    request = urllib.request.Request(
+        url,
+        method="GET",
+        headers={
+            "User-Agent": CANONICALIZE_USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return response.geturl()
+
+
+def _canonical_homepage_url(url: str, config: TavilyCrawlConfig) -> str:
+    if not config.canonicalize_urls:
+        return url
+    try:
+        resolved = resolve_canonical_url(url, timeout=min(config.timeout, 15.0))
+    except Exception:
+        return url
+    return resolved if is_valid_homepage_url(resolved) else url
+
+
+class TavilyCrawlCallError(Exception):
+    """Carries a normalized Tavily request error after retry handling."""
+
+    def __init__(self, error: dict[str, Any]):
+        super().__init__(str(error))
+        self.error = error
+
+
+def _has_usable_results(response: dict[str, Any]) -> bool:
+    results = response.get("results")
+    if not isinstance(results, list):
+        return False
+    return any(
+        isinstance(item, dict) and str(item.get("raw_content", "")).strip()
+        for item in results
+    )
+
+
 def _error_payload(exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, TavilyCrawlCallError):
+        return exc.error
     if isinstance(exc, urllib.error.HTTPError):
         body = exc.read().decode("utf-8", errors="replace")
         return {"type": "HTTPError", "status": exc.code, "body": body}
     return {"type": type(exc).__name__, "message": str(exc)}
 
 
+def _error_status(error: dict[str, Any]) -> tuple[str, bool]:
+    """Return (`crawl_status`, `retryable`) for a captured error payload."""
+    body = str(error.get("body", ""))
+    status = error.get("status")
+    error_type = str(error.get("type", ""))
+
+    if status == 400 and "Invalid Start URL" in body:
+        return "invalid_start_url", False
+    if status == 422:
+        return "request_validation_error", False
+    if status in {408, 409, 425, 429, 500, 502, 503, 504}:
+        return "transient_error", True
+    if error_type in {"TimeoutError", "URLError", "ConnectionError"}:
+        return "transient_error", True
+    return "error", False
+
+
+def _fallback_config(config: TavilyCrawlConfig) -> TavilyCrawlConfig:
+    """Less selective fallback for zero-page responses."""
+    return replace(config, instructions="", chunks_per_source=1)
+
+
+def _call_tavily_crawl_with_retries(
+    url: str,
+    config: TavilyCrawlConfig,
+    api_key: str,
+) -> dict[str, Any]:
+    attempts = max(1, config.max_retries + 1)
+    last_error: dict[str, Any] | None = None
+    for attempt in range(attempts):
+        try:
+            return call_tavily_crawl(url, config, api_key)
+        except Exception as exc:
+            error = _error_payload(exc)
+            _, retryable = _error_status(error)
+            last_error = error
+            if not retryable or attempt == attempts - 1:
+                break
+            time.sleep(config.retry_backoff_seconds * (2 ** attempt))
+    raise TavilyCrawlCallError(last_error or {"type": "UnknownError", "message": "unknown"})
+
+
 def run_tavily_crawl(
-    queue_csv: str | Path = DEFAULT_CRAWL_QUEUE_CSV,
+    queue_csv: str | Path = DEFAULT_CLASSIFIER_INPUT_CSV,
     output_jsonl: str | Path = DEFAULT_RAW_RESULTS_JSONL,
     state_json: str | Path = DEFAULT_CRAWL_STATE_JSON,
     config: TavilyCrawlConfig | None = None,
@@ -229,13 +329,15 @@ def run_tavily_crawl(
     state = TavilyCrawlState.load(state_json)
     completed_ids = _completed_ids_from_jsonl(output_jsonl)
 
-    queue = pd.read_csv(queue_csv, dtype=str, keep_default_na=False)
+    full = pd.read_csv(queue_csv, dtype=str, keep_default_na=False)
+    queue = full[tavily_eligible_mask(full)].copy()
     out_path = Path(output_jsonl)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     attempted = 0
     completed_this_run = 0
     failed_this_run = 0
+    empty_results_this_run = 0
     skipped_existing = 0
     skipped_invalid_url = 0
     credits_start = state.total_credits
@@ -269,26 +371,75 @@ def run_tavily_crawl(
             }
 
             try:
-                response = call_tavily_crawl(homepage_url, cfg, api_key)
+                crawl_url = _canonical_homepage_url(homepage_url, cfg)
+                record["canonical_homepage_url"] = crawl_url
+                response = _call_tavily_crawl_with_retries(crawl_url, cfg, api_key)
                 credits = extract_usage_credits(response)
                 state.total_credits += credits
-                state.completed += 1
                 state.last_org_uuid = org_uuid
-                completed_this_run += 1
-                completed_ids.add(org_uuid)
-                record.update({
-                    "ok": True,
-                    "usage_credits": credits,
-                    "response": response,
-                })
+
+                if _has_usable_results(response):
+                    state.completed += 1
+                    completed_this_run += 1
+                    completed_ids.add(org_uuid)
+                    record.update({
+                        "ok": True,
+                        "crawl_status": "success",
+                        "retryable": False,
+                        "usage_credits": credits,
+                        "response": response,
+                    })
+                else:
+                    fallback_cfg = _fallback_config(cfg)
+                    fallback_response = _call_tavily_crawl_with_retries(
+                        crawl_url,
+                        fallback_cfg,
+                        api_key,
+                    )
+                    fallback_credits = extract_usage_credits(fallback_response)
+                    state.total_credits += fallback_credits
+                    credits += fallback_credits
+
+                    if _has_usable_results(fallback_response):
+                        state.completed += 1
+                        completed_this_run += 1
+                        completed_ids.add(org_uuid)
+                        record.update({
+                            "ok": True,
+                            "crawl_status": "success_fallback",
+                            "retryable": False,
+                            "usage_credits": credits,
+                            "response": fallback_response,
+                            "primary_response": response,
+                            "fallback_config": asdict(fallback_cfg),
+                        })
+                    else:
+                        state.completed += 1
+                        empty_results_this_run += 1
+                        completed_ids.add(org_uuid)
+                        record.update({
+                            "ok": True,
+                            "crawl_status": "empty_results",
+                            "retryable": False,
+                            "usage_credits": credits,
+                            "response": fallback_response,
+                            "primary_response": response,
+                            "fallback_config": asdict(fallback_cfg),
+                        })
             except Exception as exc:
+                error = _error_payload(exc)
+                crawl_status, retryable = _error_status(error)
                 state.failed += 1
                 state.last_org_uuid = org_uuid
                 failed_this_run += 1
+                if not retryable:
+                    completed_ids.add(org_uuid)
                 record.update({
                     "ok": False,
+                    "crawl_status": crawl_status,
+                    "retryable": retryable,
                     "usage_credits": 0.0,
-                    "error": _error_payload(exc),
+                    "error": error,
                 })
 
             out.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -303,6 +454,7 @@ def run_tavily_crawl(
         attempted=attempted,
         completed=completed_this_run,
         failed=failed_this_run,
+        empty_results=empty_results_this_run,
         skipped_existing=skipped_existing,
         skipped_invalid_url=skipped_invalid_url,
         credits_used_this_run=state.total_credits - credits_start,

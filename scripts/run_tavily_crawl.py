@@ -17,7 +17,7 @@ from src.tavily_crawl import (
     TavilyCrawlConfig,
     run_tavily_crawl,
 )
-from src.enrichment import DEFAULT_CRAWL_QUEUE_CSV
+from src.enrichment import DEFAULT_CLASSIFIER_INPUT_CSV
 
 
 def _path(value: str) -> Path:
@@ -28,7 +28,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run Tavily Crawl over the prepared company homepage queue.",
     )
-    parser.add_argument("--queue", type=_path, default=DEFAULT_CRAWL_QUEUE_CSV)
+    parser.add_argument(
+        "--input",
+        "--queue",
+        type=_path,
+        dest="input",
+        default=DEFAULT_CLASSIFIER_INPUT_CSV,
+        help="classifier_input.csv (Tavily skips invalid URLs and website_alive=false).",
+    )
     parser.add_argument("--output", type=_path, default=DEFAULT_RAW_RESULTS_JSONL)
     parser.add_argument("--state", type=_path, default=DEFAULT_CRAWL_STATE_JSON)
     parser.add_argument("--budget-credits", type=float, default=100_000.0)
@@ -36,8 +43,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sleep-seconds", type=float, default=0.0)
     parser.add_argument("--limit", type=int, default=5)
     parser.add_argument("--max-depth", type=int, default=2)
-    parser.add_argument("--max-breadth", type=int, default=12)
-    parser.add_argument("--chunks-per-source", type=int, default=3)
+    parser.add_argument("--max-breadth", type=int, default=20)
+    parser.add_argument("--chunks-per-source", type=int, default=4)
     parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--allow-external", action="store_true")
     return parser
@@ -54,7 +61,7 @@ def main() -> None:
         allow_external=args.allow_external,
     )
     report = run_tavily_crawl(
-        queue_csv=args.queue,
+        queue_csv=args.input,
         output_jsonl=args.output,
         state_json=args.state,
         config=config,
