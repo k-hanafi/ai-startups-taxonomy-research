@@ -126,7 +126,7 @@ class TestFormatUserMessage:
         assert "Long Description: [not available]" in msg
 
     def test_truncation(self):
-        row = {**_SAMPLE_ROW, "Long description": "x" * 20_000}
+        row = {**_SAMPLE_ROW, "Long description": "x" * (MAX_USER_MESSAGE_CHARS + 1_000)}
         msg = format_user_message(row)
         assert len(msg) <= MAX_USER_MESSAGE_CHARS + 20  # +20 for "[truncated]\n"
         assert "[truncated]" in msg
@@ -144,15 +144,12 @@ class TestFormatUserMessage:
     def test_optional_resource_context(self):
         row = {
             **_SAMPLE_ROW,
-            "employee_count": "11-50",
-            "num_funding_rounds": "2",
+            "employee_count": "1-10",
             "total_funding_usd": "5000000",
-            "last_funding_date": "01-Jan-24",
-            "status": "operating",
         }
         msg = format_user_message(row)
         assert "Resource Context:" in msg
-        assert "EmployeeCount: 11-50" in msg
+        assert "EmployeeCount: 1-10" in msg
         assert "TotalFundingUSD: 5000000" in msg
 
     def test_optional_website_evidence(self):

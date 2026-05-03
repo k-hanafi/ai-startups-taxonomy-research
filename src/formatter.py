@@ -10,9 +10,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-# Truncation guard for website-enriched inputs. The Tavily evidence builder
-# already compacts page content, and this final cap protects batch file size.
-MAX_USER_MESSAGE_CHARS: int = 16_000
+# Emergency guard for pathological website-enriched inputs. Normal Tavily inputs
+# should stay well below this; it mainly protects OpenAI batch file size if a page
+# extraction unexpectedly returns very large content.
+MAX_USER_MESSAGE_CHARS: int = 100_000
 
 
 def _extract_year(date_str: str) -> str:
@@ -71,10 +72,7 @@ def _resource_context(row: dict[str, Any]) -> str:
     """Format scale/resource fields that help RAD confidence without dominating."""
     fields = [
         ("EmployeeCount", row.get("employee_count", "")),
-        ("FundingRounds", row.get("num_funding_rounds", "")),
         ("TotalFundingUSD", row.get("total_funding_usd", "")),
-        ("LastFundingDate", row.get("last_funding_date", "")),
-        ("Status", row.get("status", "")),
     ]
     parts = [f"{label}: {_clean(value)}" for label, value in fields if _clean(value)]
     return "; ".join(parts)
@@ -87,7 +85,7 @@ def format_user_message(row: dict[str, Any]) -> str:
         row: Dictionary whose keys are raw CSV column names
              (org_uuid, name, short_description, Long description,
               category_list, category_groups_list, founded_date), plus optional
-              website_evidence and resource-context fields.
+              employee_count, total_funding_usd, website_evidence, etc.
 
     Returns:
         Formatted text block matching the prompt's INPUT FORMAT section.
