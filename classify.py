@@ -37,7 +37,7 @@ from src.monitor import print_status, submit_and_monitor
 from src.submitter import BillingLimitError
 from src.state import BatchRecord, PipelineState
 from src.tokens import estimate_cost
-from src.website_evidence import DEFAULT_CLASSIFIER_INPUT_CSV
+from src.tavily_crawl import DEFAULT_CLASSIFIER_INPUT_CSV
 
 logger = logging.getLogger(__name__)
 
