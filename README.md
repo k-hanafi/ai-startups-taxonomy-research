@@ -19,17 +19,21 @@
 
 Generated artifacts are organized under `outputs/`:
 
-- `outputs/tavilycrawl/`: enriched 44k input CSV, Tavily crawl queue, raw crawl JSONL, crawl state, and classifier input with website evidence.
+- `outputs/tavilycrawl/`: raw Tavily JSONL, per-company processed output CSV, and the final classifier input CSV.
 - `outputs/batch_data/`: OpenAI batch request JSONL, downloaded raw results, per-batch CSVs, errors, and batch state.
-- `outputs/production_csvs/`: final research CSVs such as `classified_startups_v2.csv`, `classified_startups_v21_migrated.csv`, and new Tavily-enriched classifier outputs.
+- `outputs/production_csvs/`: final research CSV `production_classifications.csv`.
 - `outputs/logs/`: runtime logs.
 
 Run order:
 
 ```bash
-python scripts/prepare_tavily_enrichment.py
+# One-time: check which homepages are alive and write website_alive=true/false into master_csv.csv
+python scripts/update_website_liveness.py
+
+# Crawl (writes raw JSONL + tavily_processed_output.csv inline; builds classifier_input.csv on clean finish)
 python scripts/run_tavily_crawl.py --budget-credits 100000
-python scripts/build_website_evidence.py
+
+# Classify
 python classify.py prepare
 python classify.py submit
 python classify.py download

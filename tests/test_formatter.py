@@ -63,13 +63,16 @@ class TestExtractYear:
 
 class TestNormalizeFoundedDate:
     def test_crunchbase_compact_format(self):
-        assert _normalize_founded_date("01jan2020") == "2020-01-01"
+        assert _normalize_founded_date("01jan2020") == "2020-01"
 
     def test_master_hyphen_format(self):
-        assert _normalize_founded_date("01-Jan-24") == "2024-01-01"
+        assert _normalize_founded_date("01-Jan-24") == "2024-01"
 
     def test_iso_format(self):
-        assert _normalize_founded_date("2023-03-14") == "2023-03-14"
+        assert _normalize_founded_date("2023-03-14") == "2023-03"
+
+    def test_year_month_passthrough(self):
+        assert _normalize_founded_date("2022-04") == "2022-04"
 
     def test_year_only_fallback(self):
         assert _normalize_founded_date("founded in 2022") == "2022"
@@ -117,7 +120,7 @@ class TestFormatUserMessage:
         assert "Short Description: A test company" in msg
         assert "Long Description: Longer description" in msg
         assert "Keywords: AI,Software, Technology" in msg
-        assert "FoundedDate: 2020-01-01" in msg
+        assert "FoundedDate: 2020-01" in msg
         assert "YearFounded:" not in msg
 
     def test_missing_long_description(self):
