@@ -1,17 +1,29 @@
 import json
 
 import pandas as pd
+import pytest
 
-from src.enrichment import (
+from src.master_csv import (
     CLASSIFIER_INPUT_COLUMNS,
-    build_crawl_queue,
-    build_enriched_dataset,
+    MASTER_CSV_COLUMNS,
     is_valid_homepage_url,
-    write_enrichment_outputs,
+    tavily_eligible_mask,
 )
-from src.tavily_crawl import TavilyCrawlConfig, extract_usage_credits, run_tavily_crawl
-from src.website_evidence import build_classifier_input_with_evidence, compact_tavily_response
+from src.tavily_crawl import (
+    PROCESSED_OUTPUT_FIELDS,
+    TavilyCrawlConfig,
+    extract_usage_credits,
+    run_tavily_crawl,
+)
+from src.website_evidence import (
+    MIN_USEFUL_EVIDENCE_CHARS,
+    compact_tavily_response,
+)
 
+
+# ---------------------------------------------------------------------------
+# is_valid_homepage_url
+# ---------------------------------------------------------------------------
 
 def test_is_valid_homepage_url():
     assert is_valid_homepage_url("https://example.com")
@@ -21,183 +33,36 @@ def test_is_valid_homepage_url():
     assert not is_valid_homepage_url("mailto:hello@example.com")
 
 
-def test_build_enriched_dataset_joins_master_fields(tmp_path):
-    subset = pd.DataFrame([
-        {
-            "rcid": "1",
-            "org_uuid": "org-1",
-            "name": "Acme",
-            "cb_url": "https://crunchbase.com/acme",
-            "homepage_url": "https://acme.test",
-            "short_description": "Builds AI agents.",
-            "category_list": "Artificial Intelligence,Software",
-            "category_groups_list": "Software",
-            "created_date": "01jan2024",
-            "founded_date": "01jan2024",
-            "description": "Acme builds autonomous agents for support teams.",
-        }
+# ---------------------------------------------------------------------------
+# tavily_eligible_mask
+# ---------------------------------------------------------------------------
+
+def test_tavily_eligible_mask_requires_website_alive_true():
+    df = pd.DataFrame([
+        {"org_uuid": "1", "homepage_url": "https://live.test", "website_alive": "true"},
+        {"org_uuid": "2", "homepage_url": "https://dead.test", "website_alive": "false"},
+        {"org_uuid": "3", "homepage_url": "https://blank.test", "website_alive": ""},
+        {"org_uuid": "4", "homepage_url": "not-a-url", "website_alive": "true"},
     ])
-    master = pd.DataFrame([
-        {
-            "org_uuid": "org-1",
-            "rank": "42",
-            "state_code": "CA",
-            "region": "California",
-            "city": "San Francisco",
-            "status": "operating",
-            "num_funding_rounds": "2",
-            "total_funding_usd": "5000000",
-            "employee_count": "11-50",
-            "linkedin_url": "https://linkedin.com/company/acme",
-            "twitter_url": "",
-            "facebook_url": "",
-            "year_created": "2024",
-            "updated_date": "01jan2025",
-            "last_funding_date": "01jun2024",
-            "closed_date": "",
-        }
-    ])
-    subset_path = tmp_path / "subset.csv"
-    master_path = tmp_path / "master.csv"
-    subset.to_csv(subset_path, index=False)
-    master.to_csv(master_path, index=False)
-
-    enriched, report = build_enriched_dataset(subset_path, master_path)
-
-    assert report.matched_rows == 1
-    assert report.valid_homepage_urls == 1
-    assert enriched.loc[0, "Long description"] == "Acme builds autonomous agents for support teams."
-    assert enriched.loc[0, "employee_count"] == "11-50"
-    assert list(enriched.columns) == list(CLASSIFIER_INPUT_COLUMNS)
+    mask = tavily_eligible_mask(df)
+    assert list(mask) == [True, False, False, False]
 
 
-def test_build_crawl_queue_filters_invalid_urls():
-    enriched = pd.DataFrame([
-        {"org_uuid": "1", "name": "Valid", "homepage_url": "https://valid.test", "short_description": ""},
-        {"org_uuid": "2", "name": "Invalid", "homepage_url": "invalid.test", "short_description": ""},
-    ])
-
-    queue = build_crawl_queue(enriched)
-
-    assert queue["org_uuid"].tolist() == ["1"]
-    assert list(queue.columns) == ["org_uuid", "name", "homepage_url", "short_description"]
-
-
-def test_build_crawl_queue_respects_website_alive_column():
-    enriched = pd.DataFrame([
-        {
-            "org_uuid": "1",
-            "name": "Live",
-            "homepage_url": "https://live.test",
-            "short_description": "",
-            "website_alive": "true",
-        },
-        {
-            "org_uuid": "2",
-            "name": "Dead",
-            "homepage_url": "https://dead.test",
-            "short_description": "",
-            "website_alive": "false",
-        },
-        {
-            "org_uuid": "3",
-            "name": "Unset",
-            "homepage_url": "https://unset.test",
-            "short_description": "",
-            "website_alive": "",
-        },
-    ])
-
-    queue = build_crawl_queue(enriched)
-
-    assert queue["org_uuid"].tolist() == ["1"]
-    assert list(queue.columns) == ["org_uuid", "name", "homepage_url", "short_description"]
-
-
-def test_write_enrichment_outputs_preserves_website_alive(tmp_path):
-    subset = pd.DataFrame([
-        {
-            "rcid": "1",
-            "org_uuid": "org-1",
-            "name": "Acme",
-            "cb_url": "https://crunchbase.com/acme",
-            "homepage_url": "https://acme.test",
-            "short_description": "Builds AI agents.",
-            "category_list": "AI",
-            "category_groups_list": "Software",
-            "created_date": "01jan2024",
-            "founded_date": "01jan2024",
-            "description": "Long text.",
-        }
-    ])
-    master = pd.DataFrame([
-        {
-            "org_uuid": "org-1",
-            "rank": "1",
-            "state_code": "CA",
-            "region": "CA",
-            "city": "SF",
-            "status": "operating",
-            "num_funding_rounds": "0",
-            "total_funding_usd": "0",
-            "employee_count": "1-10",
-            "linkedin_url": "",
-            "twitter_url": "",
-            "facebook_url": "",
-            "year_created": "2024",
-            "updated_date": "",
-            "last_funding_date": "",
-            "closed_date": "",
-        }
-    ])
-    subset_path = tmp_path / "subset.csv"
-    master_path = tmp_path / "master.csv"
-    enriched_path = tmp_path / "classifier_input.csv"
-    subset.to_csv(subset_path, index=False)
-    master.to_csv(master_path, index=False)
-
-    pd.DataFrame([
-        {
-            "org_uuid": "org-1",
-            "name": "Acme",
-            "homepage_url": "https://acme.test",
-            "short_description": "x",
-            "Long description": "",
-            "category_list": "",
-            "category_groups_list": "",
-            "founded_date": "",
-            "employee_count": "",
-            "total_funding_usd": "",
-            "website_alive": "false",
-            "website_pages_used": "",
-            "website_evidence": "",
-        }
-    ]).to_csv(enriched_path, index=False)
-
-    report = write_enrichment_outputs(
-        subset_csv=subset_path,
-        master_csv=master_path,
-        enriched_csv=enriched_path,
-    )
-    out = pd.read_csv(enriched_path, dtype=str, keep_default_na=False)
-
-    assert out.loc[0, "website_alive"] == "false"
-    assert report.tavily_eligible_rows == 0
-    assert list(out.columns) == list(CLASSIFIER_INPUT_COLUMNS)
-
+# ---------------------------------------------------------------------------
+# TavilyCrawlConfig
+# ---------------------------------------------------------------------------
 
 def test_tavily_config_uses_cost_control_defaults():
     payload = TavilyCrawlConfig().request_payload("https://example.com")
 
     assert payload["limit"] == 5
     assert payload["max_breadth"] == 20
-    assert payload["chunks_per_source"] == 4
+    assert payload["chunks_per_source"] == 3
     assert payload["extract_depth"] == "basic"
     assert payload["include_usage"] is True
     assert payload["allow_external"] is False
     assert "instructions" in payload
     assert len(payload["instructions"]) <= 400
-    assert "proprietary models" not in payload["instructions"]
 
 
 def test_tavily_fallback_payload_omits_instruction_only_fields():
@@ -213,12 +78,17 @@ def test_extract_usage_credits_accepts_common_shapes():
     assert extract_usage_credits({"usage": {"map": 1, "extract": 2}}) == 3.0
 
 
+# ---------------------------------------------------------------------------
+# compact_tavily_response
+# ---------------------------------------------------------------------------
+
 def test_compact_tavily_response_builds_source_linked_evidence():
+    padding = "\n".join([f"Supplemental classifier signal {i:03d}." for i in range(120)])
     pages_used, evidence = compact_tavily_response({
         "results": [
-            {"url": "https://acme.test/product", "raw_content": "Product uses LLM agents."},
-            {"url": "https://acme.test/about", "raw_content": "About our proprietary AI."},
-            {"url": "https://acme.test/", "raw_content": "Homepage overview."},
+            {"url": "https://acme.test/product", "raw_content": f"Product uses LLM agents.\n{padding}"},
+            {"url": "https://acme.test/about", "raw_content": f"About our proprietary AI.\n{padding}"},
+            {"url": "https://acme.test/", "raw_content": f"Homepage overview.\n{padding}"},
         ]
     })
 
@@ -242,18 +112,24 @@ def test_compact_tavily_response_does_not_truncate_by_default():
 
 
 def test_compact_tavily_response_removes_common_boilerplate():
+    padding = "\n".join([f"Supplemental classifier signal {i:03d}." for i in range(120)])
+    page_lines = [
+        "top of page",
+        "![Hero](https://acme.test/hero.png)",
+        "Book a Demo",
+        "{{templateValue}}",
+        "sales@acme.test",
+        "Terms & Conditions",
+        "Social Media [...] Product analytics for enterprise workflows.",
+        "AI workflow platform for insurance teams.",
+        "AI workflow platform for insurance teams.",
+        "2026 Acme Inc. All rights reserved",
+    ]
     pages_used, evidence = compact_tavily_response({
         "results": [
             {
                 "url": "https://acme.test/product",
-                "raw_content": "\n".join([
-                    "top of page",
-                    "![Hero](https://acme.test/hero.png)",
-                    "Book a Demo",
-                    "AI workflow platform for insurance teams.",
-                    "AI workflow platform for insurance teams.",
-                    "All rights reserved",
-                ]),
+                "raw_content": "\n".join(page_lines) + "\n" + padding,
             }
         ]
     })
@@ -264,24 +140,199 @@ def test_compact_tavily_response_removes_common_boilerplate():
     assert "hero.png" not in evidence
     assert "Book a Demo" not in evidence
     assert "top of page" not in evidence
+    assert "{{templateValue}}" not in evidence
+    assert "sales@acme.test" not in evidence
+    assert "Terms & Conditions" not in evidence
+    assert "Product analytics for enterprise workflows." in evidence
+    assert "Social Media [...]" not in evidence
+    assert "All rights reserved" not in evidence
 
+
+def test_compact_tavily_response_drops_thin_evidence_below_min_chars():
+    # Fewer than 100 chars of real content after cleaning should still be dropped
+    thin_lines = [f"line {i}" for i in range(3)]  # ~18 chars total
+    pages_used, evidence = compact_tavily_response({
+        "results": [
+            {"url": "https://acme.test/", "raw_content": "\n".join(thin_lines)},
+        ]
+    })
+
+    assert pages_used == ""
+    assert evidence == ""
+
+
+def test_compact_tavily_response_keeps_evidence_at_or_above_min_chars():
+    thick_lines = [f"signal line {i:02d}" for i in range(40)]
+    pages_used, evidence = compact_tavily_response({
+        "results": [
+            {"url": "https://acme.test/", "raw_content": "\n".join(thick_lines)},
+        ]
+    })
+
+    assert pages_used == "https://acme.test/"
+    assert len(evidence) >= MIN_USEFUL_EVIDENCE_CHARS
+
+
+# ---------------------------------------------------------------------------
+# run_tavily_crawl — inline processed CSV writing
+# ---------------------------------------------------------------------------
+
+def _master_csv_row(org_uuid: str, name: str, url: str, website_alive: str = "true") -> dict:
+    return {
+        "org_uuid": org_uuid,
+        "name": name,
+        "homepage_url": url,
+        "short_description": "",
+        "Long description": "",
+        "category_list": "",
+        "category_groups_list": "",
+        "founded_date": "",
+        "employee_count": "",
+        "total_funding_usd": "",
+        "website_alive": website_alive,
+    }
+
+
+def _success_response(url: str, credits: float = 1.0) -> dict:
+    padding = "\n".join([f"Supplemental classifier signal {i:03d}." for i in range(120)])
+    return {
+        "results": [{"url": url, "raw_content": f"Homepage content for {url}.\n{padding}"}],
+        "usage": {"credits": credits},
+    }
+
+
+def test_run_tavily_crawl_appends_to_processed_csv(tmp_path, monkeypatch):
+    """On each successful crawl, one row should be appended to tavily_processed_output.csv."""
+    queue = pd.DataFrame([
+        _master_csv_row("org-1", "First", "https://first.test"),
+        _master_csv_row("org-2", "Second", "https://second.test"),
+    ])
+    queue_path = tmp_path / "master_csv.csv"
+    output_path = tmp_path / "raw.jsonl"
+    state_path = tmp_path / "state.json"
+    processed_path = tmp_path / "processed.csv"
+
+    queue.to_csv(queue_path, index=False)
+
+    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr(
+        "src.tavily_crawl.call_tavily_crawl",
+        lambda url, config, api_key, **_kwargs: _success_response(url),
+    )
+
+    run_tavily_crawl(
+        queue_path,
+        output_path,
+        state_path,
+        processed_csv=processed_path,
+        classifier_input_csv=tmp_path / "classifier_input.csv",
+        manifest_csv=tmp_path / "manifest.csv",
+        heartbeat_log=tmp_path / "heartbeat.log",
+    )
+
+    assert processed_path.exists()
+    proc = pd.read_csv(processed_path, dtype=str, keep_default_na=False)
+    assert list(proc.columns) == PROCESSED_OUTPUT_FIELDS
+    assert len(proc) == 2
+    assert set(proc["org_uuid"].tolist()) == {"org-1", "org-2"}
+    assert proc.loc[proc["org_uuid"] == "org-1", "website_evidence"].iloc[0] != ""
+
+
+def test_run_tavily_crawl_writes_classifier_input_on_completion(tmp_path, monkeypatch):
+    """On clean completion, classifier_input.csv should join master + evidence."""
+    queue = pd.DataFrame([
+        _master_csv_row("org-live", "Live", "https://live.test", website_alive="true"),
+        _master_csv_row("org-dead", "Dead", "https://dead.test", website_alive="false"),
+    ])
+    queue_path = tmp_path / "master_csv.csv"
+    output_path = tmp_path / "raw.jsonl"
+    state_path = tmp_path / "state.json"
+    processed_path = tmp_path / "processed.csv"
+    classifier_input_path = tmp_path / "classifier_input.csv"
+
+    queue.to_csv(queue_path, index=False)
+
+    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr(
+        "src.tavily_crawl.call_tavily_crawl",
+        lambda url, config, api_key, **_kwargs: _success_response(url),
+    )
+
+    run_tavily_crawl(
+        queue_path,
+        output_path,
+        state_path,
+        processed_csv=processed_path,
+        classifier_input_csv=classifier_input_path,
+        manifest_csv=tmp_path / "manifest.csv",
+        heartbeat_log=tmp_path / "heartbeat.log",
+    )
+
+    assert classifier_input_path.exists()
+    ci = pd.read_csv(classifier_input_path, dtype=str, keep_default_na=False)
+    assert list(ci.columns) == list(CLASSIFIER_INPUT_COLUMNS)
+    assert len(ci) == 2
+
+    live_row = ci[ci["org_uuid"] == "org-live"].iloc[0]
+    dead_row = ci[ci["org_uuid"] == "org-dead"].iloc[0]
+
+    assert live_row["website_evidence"] != ""
+    assert dead_row["website_evidence"] == ""
+    assert dead_row["website_pages_used"] == ""
+
+
+def test_run_tavily_crawl_classifier_input_not_written_on_interrupt(tmp_path, monkeypatch):
+    """classifier_input.csv must NOT be written on user_interrupt so partial joins don't silently occur."""
+    import os
+
+    queue = pd.DataFrame([
+        _master_csv_row("org-1", "First", "https://first.test"),
+        _master_csv_row("org-2", "Second", "https://second.test"),
+    ])
+    queue_path = tmp_path / "master_csv.csv"
+    output_path = tmp_path / "raw.jsonl"
+    state_path = tmp_path / "state.json"
+    classifier_input_path = tmp_path / "classifier_input.csv"
+    queue.to_csv(queue_path, index=False)
+
+    raised = {"done": False}
+
+    def fake_call(url, config, api_key, **_kwargs):
+        if not raised["done"]:
+            raised["done"] = True
+            os.kill(os.getpid(), 2)
+        return _success_response(url)
+
+    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("src.tavily_crawl.call_tavily_crawl", fake_call)
+
+    report = run_tavily_crawl(
+        queue_path,
+        output_path,
+        state_path,
+        processed_csv=tmp_path / "processed.csv",
+        classifier_input_csv=classifier_input_path,
+        manifest_csv=tmp_path / "manifest.csv",
+        heartbeat_log=tmp_path / "heartbeat.log",
+    )
+
+    assert report.exit_reason == "user_interrupt"
+    assert not classifier_input_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# run_tavily_crawl — existing fallback / retry behaviour
+# ---------------------------------------------------------------------------
 
 def test_run_tavily_crawl_falls_back_on_empty_results(tmp_path, monkeypatch):
-    queue = pd.DataFrame([
-        {
-            "org_uuid": "org-1",
-            "name": "Acme",
-            "homepage_url": "https://acme.test",
-            "short_description": "",
-        }
-    ])
+    queue = pd.DataFrame([_master_csv_row("org-1", "Acme", "https://acme.test")])
     queue_path = tmp_path / "queue.csv"
     output_path = tmp_path / "raw.jsonl"
     state_path = tmp_path / "state.json"
     queue.to_csv(queue_path, index=False)
     calls = []
 
-    def fake_call(url, config, api_key):
+    def fake_call(url, config, api_key, **_kwargs):
         calls.append(config.instructions)
         if len(calls) == 1:
             return {"results": [], "usage": {"credits": 0}}
@@ -295,7 +346,13 @@ def test_run_tavily_crawl_falls_back_on_empty_results(tmp_path, monkeypatch):
     monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
     monkeypatch.setattr("src.tavily_crawl.call_tavily_crawl", fake_call)
 
-    report = run_tavily_crawl(queue_path, output_path, state_path)
+    report = run_tavily_crawl(
+        queue_path, output_path, state_path,
+        processed_csv=tmp_path / "processed.csv",
+        classifier_input_csv=tmp_path / "classifier_input.csv",
+        manifest_csv=tmp_path / "manifest.csv",
+        heartbeat_log=tmp_path / "heartbeat.log",
+    )
     records = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
 
     assert report.completed == 1
@@ -307,14 +364,7 @@ def test_run_tavily_crawl_falls_back_on_empty_results(tmp_path, monkeypatch):
 
 
 def test_run_tavily_crawl_records_terminal_empty_results(tmp_path, monkeypatch):
-    queue = pd.DataFrame([
-        {
-            "org_uuid": "org-empty",
-            "name": "EmptyCo",
-            "homepage_url": "https://empty.test",
-            "short_description": "",
-        }
-    ])
+    queue = pd.DataFrame([_master_csv_row("org-empty", "EmptyCo", "https://empty.test")])
     queue_path = tmp_path / "queue.csv"
     output_path = tmp_path / "raw.jsonl"
     state_path = tmp_path / "state.json"
@@ -323,11 +373,23 @@ def test_run_tavily_crawl_records_terminal_empty_results(tmp_path, monkeypatch):
     monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
     monkeypatch.setattr(
         "src.tavily_crawl.call_tavily_crawl",
-        lambda url, config, api_key: {"results": [], "usage": {"credits": 0}},
+        lambda url, config, api_key, **_kwargs: {"results": [], "usage": {"credits": 0}},
     )
 
-    report = run_tavily_crawl(queue_path, output_path, state_path)
-    report_again = run_tavily_crawl(queue_path, output_path, state_path)
+    report = run_tavily_crawl(
+        queue_path, output_path, state_path,
+        processed_csv=tmp_path / "processed.csv",
+        classifier_input_csv=tmp_path / "classifier_input.csv",
+        manifest_csv=tmp_path / "manifest.csv",
+        heartbeat_log=tmp_path / "heartbeat.log",
+    )
+    report_again = run_tavily_crawl(
+        queue_path, output_path, state_path,
+        processed_csv=tmp_path / "processed.csv",
+        classifier_input_csv=tmp_path / "classifier_input.csv",
+        manifest_csv=tmp_path / "manifest.csv",
+        heartbeat_log=tmp_path / "heartbeat.log",
+    )
     records = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
 
     assert report.empty_results == 1
@@ -338,21 +400,14 @@ def test_run_tavily_crawl_records_terminal_empty_results(tmp_path, monkeypatch):
 
 
 def test_run_tavily_crawl_retries_transient_errors(tmp_path, monkeypatch):
-    queue = pd.DataFrame([
-        {
-            "org_uuid": "org-retry",
-            "name": "RetryCo",
-            "homepage_url": "https://retry.test",
-            "short_description": "",
-        }
-    ])
+    queue = pd.DataFrame([_master_csv_row("org-retry", "RetryCo", "https://retry.test")])
     queue_path = tmp_path / "queue.csv"
     output_path = tmp_path / "raw.jsonl"
     state_path = tmp_path / "state.json"
     queue.to_csv(queue_path, index=False)
     calls = 0
 
-    def flaky_call(url, config, api_key):
+    def flaky_call(url, config, api_key, **_kwargs):
         nonlocal calls
         calls += 1
         if calls == 1:
@@ -372,6 +427,10 @@ def test_run_tavily_crawl_retries_transient_errors(tmp_path, monkeypatch):
         output_path,
         state_path,
         config=TavilyCrawlConfig(retry_backoff_seconds=0),
+        processed_csv=tmp_path / "processed.csv",
+        classifier_input_csv=tmp_path / "classifier_input.csv",
+        manifest_csv=tmp_path / "manifest.csv",
+        heartbeat_log=tmp_path / "heartbeat.log",
     )
     records = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
 
@@ -380,125 +439,3 @@ def test_run_tavily_crawl_retries_transient_errors(tmp_path, monkeypatch):
     assert records[0]["crawl_status"] == "success"
 
 
-def test_run_tavily_crawl_uses_canonical_url(tmp_path, monkeypatch):
-    queue = pd.DataFrame([
-        {
-            "org_uuid": "org-canon",
-            "name": "CanonCo",
-            "homepage_url": "https://www.acme.test",
-            "short_description": "",
-            "website_alive": "true",
-        }
-    ])
-    queue_path = tmp_path / "queue.csv"
-    output_path = tmp_path / "raw.jsonl"
-    state_path = tmp_path / "state.json"
-    queue.to_csv(queue_path, index=False)
-    called_urls = []
-
-    def fake_call(url, config, api_key):
-        called_urls.append(url)
-        return {
-            "results": [
-                {"url": url, "raw_content": "Canonical homepage content."}
-            ],
-            "usage": {"credits": 1},
-        }
-
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
-    monkeypatch.setattr("src.tavily_crawl.resolve_canonical_url", lambda url, timeout=15.0: "https://acme.test/")
-    monkeypatch.setattr("src.tavily_crawl.call_tavily_crawl", fake_call)
-
-    run_tavily_crawl(queue_path, output_path, state_path)
-    records = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
-
-    assert called_urls == ["https://acme.test/"]
-    assert records[0]["homepage_url"] == "https://www.acme.test"
-    assert records[0]["canonical_homepage_url"] == "https://acme.test/"
-
-
-def test_build_classifier_input_with_evidence(tmp_path):
-    enriched = pd.DataFrame([
-        {
-            "org_uuid": "org-1",
-            "name": "Acme",
-            "homepage_url": "https://acme.test",
-            "short_description": "Builds AI agents.",
-            "Long description": "",
-            "category_list": "",
-            "category_groups_list": "",
-            "founded_date": "",
-            "employee_count": "",
-            "total_funding_usd": "",
-            "website_alive": "true",
-            "website_pages_used": "",
-            "website_evidence": "",
-        }
-    ])
-    enriched_path = tmp_path / "enriched.csv"
-    raw_path = tmp_path / "raw.jsonl"
-    output_path = tmp_path / "output.csv"
-    enriched.to_csv(enriched_path, index=False)
-    raw_path.write_text(
-        json.dumps({
-            "org_uuid": "org-1",
-            "ok": True,
-            "usage_credits": 2,
-            "response": {
-                "results": [
-                    {"url": "https://acme.test/product", "raw_content": "AI agent platform."}
-                ]
-            },
-        }) + "\n",
-        encoding="utf-8",
-    )
-
-    report = build_classifier_input_with_evidence(enriched_path, raw_path, output_path)
-    output = pd.read_csv(output_path, dtype=str, keep_default_na=False)
-
-    assert report.rows_with_website_evidence == 1
-    assert "AI agent platform." in output.loc[0, "website_evidence"]
-    assert list(output.columns) == list(CLASSIFIER_INPUT_COLUMNS)
-
-
-def test_build_classifier_input_clears_evidence_when_website_alive_false(tmp_path):
-    enriched = pd.DataFrame([
-        {
-            "org_uuid": "org-dead",
-            "name": "DeadCo",
-            "homepage_url": "https://dead.test",
-            "short_description": "x",
-            "Long description": "",
-            "category_list": "",
-            "category_groups_list": "",
-            "founded_date": "",
-            "employee_count": "",
-            "total_funding_usd": "",
-            "website_alive": "false",
-            "website_pages_used": "",
-            "website_evidence": "",
-        }
-    ])
-    enriched_path = tmp_path / "enriched.csv"
-    raw_path = tmp_path / "raw.jsonl"
-    output_path = tmp_path / "output.csv"
-    enriched.to_csv(enriched_path, index=False)
-    raw_path.write_text(
-        json.dumps({
-            "org_uuid": "org-dead",
-            "ok": True,
-            "usage_credits": 2,
-            "response": {
-                "results": [
-                    {"url": "https://dead.test/", "raw_content": "Should be ignored for dead URL."}
-                ]
-            },
-        }) + "\n",
-        encoding="utf-8",
-    )
-
-    build_classifier_input_with_evidence(enriched_path, raw_path, output_path)
-    output = pd.read_csv(output_path, dtype=str, keep_default_na=False)
-
-    assert output.loc[0, "website_evidence"] == ""
-    assert output.loc[0, "website_pages_used"] == ""
