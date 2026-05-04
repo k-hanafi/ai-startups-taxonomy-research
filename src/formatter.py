@@ -29,18 +29,24 @@ def _extract_year(date_str: str) -> str:
 
 
 def _normalize_founded_date(date_str: Any) -> str:
-    """Normalize Crunchbase founded dates to one prompt field.
+    """Normalize founded date strings to one prompt field.
 
-    Returns YYYY-MM-DD when month/day are available, YYYY when only a year can
-    be recovered, and Unknown when no usable date exists.
+    Accepts YYYY-MM (from master_csv.csv), full Crunchbase strings like
+    ``01jan2020``, ISO dates, and bare years. Returns YYYY-MM when a month is
+    available, YYYY when only a year can be recovered, and Unknown otherwise.
     """
     cleaned = _clean(date_str)
     if not cleaned:
         return "Unknown"
 
+    # Already normalized to YYYY-MM by build_master_csv.py
+    import re
+    if re.fullmatch(r"\d{4}-\d{2}", cleaned):
+        return cleaned
+
     for fmt in ("%d%b%Y", "%d-%b-%y", "%d-%b-%Y", "%Y-%m-%d", "%m/%d/%Y"):
         try:
-            return datetime.strptime(cleaned, fmt).strftime("%Y-%m-%d")
+            return datetime.strptime(cleaned, fmt).strftime("%Y-%m")
         except ValueError:
             pass
 
