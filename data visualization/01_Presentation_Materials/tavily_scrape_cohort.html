@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>V2 Classification Results — Dashboard</title>
+<title>Classification results — Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -76,7 +76,6 @@ h3 { font-family: var(--serif); font-size: 1.2rem; font-weight: 500; margin-bott
 p { color: var(--text2); font-size: 0.9rem; max-width: 720px; margin-bottom: 1.1rem; line-height: 1.75; }
 p:last-child { margin-bottom: 0; }
 
-/* Hero metrics */
 .hero-metrics {
   display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem;
   margin: 2rem 0 1.5rem;
@@ -93,7 +92,6 @@ p:last-child { margin-bottom: 0; }
 .mc-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.3rem; }
 .mc-ctx { font-size: 0.75rem; color: var(--muted); }
 
-/* Chart containers */
 .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 2rem 0; }
 .chart-row.single { grid-template-columns: 1fr; }
 .chart-box {
@@ -105,20 +103,12 @@ p:last-child { margin-bottom: 0; }
 .chart-box-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
 .chart-body { padding: 0.5rem 0.5rem; }
 
-/* Insight boxes */
 .insight { padding: 1.1rem 1.4rem; border-radius: 8px; margin: 1.5rem 0; font-size: 0.85rem; line-height: 1.7; }
 .insight p { font-size: 0.85rem; max-width: none; margin-bottom: 0.35rem; }
 .insight p:last-child { margin-bottom: 0; }
 .insight-blue { background: var(--indigo-light); border: 1px solid var(--indigo-border); color: var(--text2); }
 .insight-blue strong { color: #3730a3; }
-.insight-amber { background: var(--amber-light); border: 1px solid #fde68a; color: var(--text2); }
-.insight-amber strong { color: #92400e; }
-.insight-emerald { background: var(--emerald-light); border: 1px solid #a7f3d0; color: var(--text2); }
-.insight-emerald strong { color: #065f46; }
-.insight-rose { background: var(--rose-light); border: 1px solid #fecdd3; color: var(--text2); }
-.insight-rose strong { color: #9f1239; }
 
-/* Filter controls */
 .filter-bar {
   display: flex; align-items: center; gap: 1.5rem;
   padding: 0.85rem 1.4rem; background: var(--bg3); border: 1px solid var(--border);
@@ -162,8 +152,8 @@ footer strong { color: var(--text2); }
 <body>
 
 <nav>
-  <div class="nav-brand">Classification v2.0</div>
-  <div class="nav-sub">Results Dashboard</div>
+  <div class="nav-brand">Classification</div>
+  <div class="nav-sub">Evidence cohort · Tavily-enriched</div>
   <div class="nav-section">
     <div class="nav-label">Sections</div>
     <ul>
@@ -176,70 +166,58 @@ footer strong { color: var(--text2); }
   </div>
   <div class="nav-meta">
     <p><strong>Model</strong><br>gpt-5.4-nano</p>
-    <p style="margin-top:0.75rem;"><strong>Dataset</strong><br>265,322 startups<br>Crunchbase US</p>
-    <p style="margin-top:0.75rem;"><strong>Input</strong><br>Short + Long descriptions only</p>
+    <p style="margin-top:0.75rem;"><strong>Dataset</strong><br>21,510 startups<br>Crunchbase US</p>
+    <p style="margin-top:0.75rem;"><strong>Taxonomy</strong><br>10 classes<br>1A–1G, 0A–0C</p>
   </div>
 </nav>
 
 <main>
 
-<!-- ═══════ OVERVIEW ═══════ -->
 <section id="overview">
-  <span class="section-label">Proof of Concept</span>
-  <h1>V2 Two-Axis Classification<br>of 265,322 US Startups</h1>
+  <span class="section-label">Evidence cohort (Tavily-enriched)</span>
+  <h1>Two-Axis Classification<br>of 21,510 US Startups</h1>
   <p>
-    Every startup in the Crunchbase US dataset was classified using the v2 two-axis taxonomy.
-    Each company received one of 11 <strong>AI-native subclasses</strong> and a
-    <strong>Resource-Adjusted Dependency score</strong> (RAD).
-  </p>
-  <p>
-    Input: short and long descriptions only. No agentic search. No supplementary sources.
-    These results establish a baseline for the full pipeline.
+    <strong>Tavily-enriched</strong> classifications from <code>production_classifications.csv</code>,
+    same <strong>21,510</strong> paired companies as the baseline page: non-empty <strong>website_evidence</strong> in <code>classifier_input.csv</code> and a row in both exports. Side-by-side with the baseline view shows the effect of including Tavily crawl text in the prompt.
   </p>
 
   <div class="hero-metrics">
     <div class="metric-card hl">
       <div class="mc-label">Total Classified</div>
-      <div class="mc-val">265,322</div>
+      <div class="mc-val">21,510</div>
       <div class="mc-ctx">US startups</div>
     </div>
     <div class="metric-card hl">
       <div class="mc-label">AI-Native Rate</div>
-      <div class="mc-val">0.9%</div>
-      <div class="mc-ctx">2,262 startups</div>
+      <div class="mc-val">15.6%</div>
+      <div class="mc-ctx">3,350 startups</div>
     </div>
     <div class="metric-card">
       <div class="mc-label">GENAI-ERA Cohort</div>
-      <div class="mc-val">19.5%</div>
-      <div class="mc-ctx">51,787 founded 2023+</div>
+      <div class="mc-val">11.3%</div>
+      <div class="mc-ctx">2,438 founded 2023+</div>
     </div>
     <div class="metric-card">
       <div class="mc-label">Median Confidence</div>
-      <div class="mc-val">3</div>
+      <div class="mc-val">4</div>
       <div class="mc-ctx">conf_classification (1&ndash;5)</div>
     </div>
     <div class="metric-card" style="border-color:#fecdd3;background:var(--rose-light);">
       <div class="mc-label">Low Confidence</div>
-      <div class="mc-val" style="color:var(--rose);">48.1%</div>
-      <div class="mc-ctx">127,616 rows with conf &le; 2</div>
+      <div class="mc-val" style="color:var(--rose);">8.6%</div>
+      <div class="mc-ctx">1,859 rows with conf &le; 2</div>
     </div>
-  </div>
-
-  <div class="insight insight-amber">
-    <p><strong>48.1% of rows have confidence &le; 2.</strong>
-    Short and long descriptions alone do not give the model enough signal.
-    Richer inputs from agentic deep research would directly reduce this uncertainty.</p>
   </div>
 </section>
 
-<!-- ═══════ AI-NATIVE LANDSCAPE ═══════ -->
 <section id="landscape">
   <span class="section-label">01. Landscape</span>
   <h2>The AI-Native Startup Landscape</h2>
   <p>
-    Only <strong>0.9%</strong> (2,262) of 265,322 startups are AI-native.
-    Most fall into traditional tech (0A) or non-tech (0E).
-    Among AI-native startups, Applied Vertical AI (1B) leads.
+    In this cohort, <strong>15.6%</strong> (3,350) of 21,510 startups are AI-native &mdash;
+    thin and thick LLM wrappers are explicit subclasses (1C and 1D) on the AI-native side.
+    Most non-AI-native companies fall into traditional tech (0A) or non-tech (0C),
+    with the 0B bucket capturing AI-augmented businesses.
   </p>
 
   <div class="filter-bar">
@@ -260,7 +238,7 @@ footer strong { color: var(--text2); }
     <div class="chart-box">
       <div class="chart-box-header">
         <div class="chart-box-title">Subclass Distribution</div>
-        <div class="chart-box-desc">All 11 subclasses by count</div>
+        <div class="chart-box-desc">All 10 subclasses by count</div>
       </div>
       <div class="chart-body"><div id="chart-subclass" style="height:480px;"></div></div>
     </div>
@@ -277,25 +255,19 @@ footer strong { color: var(--text2); }
   </div>
 
   <div class="insight insight-blue">
-    <p><strong>GENAI-ERA AI-native rate: 2.45%.</strong>
-    PRE-GENAI: 0.47%.
-    Post-2023 startups are 5x more likely to build AI as the core product.</p>
+    <p><strong>GENAI-ERA AI-native rate: 42.78%.</strong>
+    PRE-GENAI: 12.1%.
+    Post-2023 startups are dramatically more likely to build AI as the core product mechanism.</p>
   </div>
 </section>
 
-<!-- ═══════ RAD SCORE ═══════ -->
 <section id="rad">
   <span class="section-label">02. Dependency</span>
   <h2>RAD Score Analysis</h2>
   <p>
-    6,457 startups have a meaningful RAD score (excluding RAD-NA).
+    3,349 startups have a meaningful RAD score (excluding RAD-NA).
     Most are <strong>RAD-H</strong>: structurally dependent on third-party GenAI APIs.
-    Only 137 show low structural dependency.
-  </p>
-  <p style="font-size:0.82rem;color:var(--muted);">
-    RAD is evaluated only for companies where AI plays a structural role (1A&ndash;1E, 0B, 0C).
-    Traditional tech (0A), non-tech (0E), and AI-adjacent (0D) companies receive RAD-NA by design.
-    The question &ldquo;how dependent on external GenAI?&rdquo; has no meaning for a company that does not use AI.
+    Only 175 show low structural dependency.
   </p>
 
   <div class="chart-row single">
@@ -317,21 +289,15 @@ footer strong { color: var(--text2); }
       <div class="chart-body"><div id="chart-heatmap" style="height:520px;"></div></div>
     </div>
   </div>
-
-  <div class="insight insight-emerald">
-    <p><strong>4,871 startups are RAD-H</strong> (high structural dependency on external GenAI).
-    The RAD split among AI-native startups shows how much of the ecosystem runs on borrowed infrastructure.</p>
-  </div>
 </section>
 
-<!-- ═══════ COHORT DYNAMICS ═══════ -->
 <section id="cohorts">
   <span class="section-label">03. Temporal</span>
   <h2>Cohort Dynamics</h2>
   <p>
     GPT-4 launched March 2023. That is the cohort boundary.
-    51,787 startups (19.5%) were founded after it.
-    How does their profile differ from the 213,535 PRE-GENAI startups?
+    2,438 startups (11.3%) were founded after it.
+    How does their profile differ from the 19,072 PRE-GENAI startups?
   </p>
 
   <div class="chart-row single">
@@ -355,14 +321,11 @@ footer strong { color: var(--text2); }
   </div>
 </section>
 
-<!-- ═══════ CONFIDENCE ═══════ -->
 <section id="confidence">
   <span class="section-label">04. Data Quality</span>
   <h2>Confidence &amp; Data Quality Audit</h2>
   <p>
-    Model confidence exposes where descriptions alone fall short.
-    <strong>48.1% of classifications</strong> have confidence &le; 2.
-    These rows would benefit most from agentic deep research.
+    Distributions of <code>conf_classification</code> and <code>conf_rad</code> (1&ndash;5), and mean classification confidence by subclass.
   </p>
 
   <div class="chart-row">
@@ -391,12 +354,6 @@ footer strong { color: var(--text2); }
       <div class="chart-body"><div id="chart-conf-subclass" style="height:420px;"></div></div>
     </div>
   </div>
-
-  <div class="insight insight-rose">
-    <p><strong>127,616 classifications (48.1%) have confidence &le; 2.</strong>
-    These companies lack enough text for reliable classification.
-    An agentic pipeline that retrieves websites, press releases, and product docs would convert these guesses into evidence-backed judgments.</p>
-  </div>
 </section>
 
 </main>
@@ -404,21 +361,22 @@ footer strong { color: var(--text2); }
 <footer>
   <strong>Model:</strong> gpt-5.4-nano &nbsp;&middot;&nbsp;
   <strong>Method:</strong> OpenAI Batch API with structured output &nbsp;&middot;&nbsp;
-  <strong>Input:</strong> Short + long descriptions only (no agentic search) &nbsp;&middot;&nbsp;
+  <strong>Taxonomy:</strong> 10 classes (1A&ndash;1G, 0A&ndash;0C) &nbsp;&middot;&nbsp;
   <strong>Date:</strong> April 2026
   <br>
-  Proof of concept. Next step: agentic deep research with richer input data.
+  Cohort: production classifications for the same company IDs as the paired baseline page.
 </footer>
 
 <script>
-const M = {"total": 265322, "ai_native_count": 2262, "ai_native_pct": 0.9, "genai_era_count": 51787, "genai_era_pct": 19.5, "median_conf": 3.0, "low_conf_count": 127616, "low_conf_pct": 48.1, "subclass_counts": {"1A": 206, "1B": 960, "1C": 351, "1D": 420, "1E": 325, "0A": 124995, "0B": 21372, "0C-THIN": 1007, "0C-THICK": 1543, "0D": 6484, "0E": 107659}, "rad_counts": {"RAD-H": 4871, "RAD-M": 1449, "RAD-L": 137, "RAD-NA": 258865}, "cohort_counts": {"PRE-GENAI": 213535, "GENAI-ERA": 51787}, "subclass_by_cohort": {"PRE-GENAI": {"1A": 111, "1B": 555, "1C": 118, "1D": 89, "1E": 122, "0A": 100121, "0B": 17027, "0C-THIN": 164, "0C-THICK": 770, "0D": 4951, "0E": 89507}, "GENAI-ERA": {"1A": 95, "1B": 405, "1C": 233, "1D": 331, "1E": 203, "0A": 24874, "0B": 4345, "0C-THIN": 843, "0C-THICK": 773, "0D": 1533, "0E": 18152}}, "ai_rate_by_cohort": {"PRE-GENAI": 0.47, "GENAI-ERA": 2.45}, "rad_by_cohort": {"PRE-GENAI": {"RAD-H": 425, "RAD-M": 1378, "RAD-L": 123, "RAD-NA": 211609}, "GENAI-ERA": {"RAD-H": 4446, "RAD-M": 71, "RAD-L": 14, "RAD-NA": 47256}}, "heatmap": {"1A": {"RAD-H": 85, "RAD-M": 42, "RAD-L": 77, "RAD-NA": 2}, "1B": {"RAD-H": 379, "RAD-M": 558, "RAD-L": 23, "RAD-NA": 0}, "1C": {"RAD-H": 247, "RAD-M": 84, "RAD-L": 18, "RAD-NA": 2}, "1D": {"RAD-H": 338, "RAD-M": 67, "RAD-L": 15, "RAD-NA": 0}, "1E": {"RAD-H": 201, "RAD-M": 120, "RAD-L": 4, "RAD-NA": 0}, "0A": {"RAD-H": 1, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 124994}, "0B": {"RAD-H": 1618, "RAD-M": 57, "RAD-L": 0, "RAD-NA": 19697}, "0C-THIN": {"RAD-H": 999, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 8}, "0C-THICK": {"RAD-H": 1002, "RAD-M": 521, "RAD-L": 0, "RAD-NA": 20}, "0D": {"RAD-H": 1, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 6483}, "0E": {"RAD-H": 0, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 107659}}, "conf_class_dist": {"1": 54065, "2": 73551, "3": 23171, "4": 39504, "5": 75031}, "conf_rad_dist": {"1": 3322, "2": 2109, "3": 671, "4": 254, "5": 997}, "conf_by_subclass": {"1A": {"median": 3.0, "q1": 3.0, "q3": 4.0, "mean": 3.24, "count": 206}, "1B": {"median": 3.0, "q1": 3.0, "q3": 4.0, "mean": 3.32, "count": 960}, "1C": {"median": 4.0, "q1": 3.0, "q3": 4.0, "mean": 3.44, "count": 351}, "1D": {"median": 3.0, "q1": 2.0, "q3": 4.0, "mean": 2.98, "count": 420}, "1E": {"median": 4.0, "q1": 3.0, "q3": 4.0, "mean": 3.51, "count": 325}, "0A": {"median": 2.0, "q1": 1.0, "q3": 3.0, "mean": 2.34, "count": 124995}, "0B": {"median": 2.0, "q1": 2.0, "q3": 3.0, "mean": 2.36, "count": 21372}, "0C-THIN": {"median": 2.0, "q1": 2.0, "q3": 3.0, "mean": 2.33, "count": 1007}, "0C-THICK": {"median": 2.0, "q1": 2.0, "q3": 2.0, "mean": 2.22, "count": 1543}, "0D": {"median": 2.0, "q1": 2.0, "q3": 4.0, "mean": 2.91, "count": 6484}, "0E": {"median": 5.0, "q1": 3.0, "q3": 5.0, "mean": 3.98, "count": 107659}}};
+const M = {"total": 21510, "ai_native_count": 3350, "ai_native_pct": 15.6, "genai_era_count": 2438, "genai_era_pct": 11.3, "median_conf": 4.0, "low_conf_count": 1859, "low_conf_pct": 8.6, "subclass_counts": {"1A": 45, "1B": 334, "1C": 41, "1D": 639, "1E": 1908, "1F": 322, "1G": 59, "0A": 18056, "0B": 38, "0C": 68}, "rad_counts": {"RAD-H": 1465, "RAD-M": 1709, "RAD-L": 175, "RAD-NA": 18161}, "cohort_counts": {"PRE-GENAI": 19072, "GENAI-ERA": 2438}, "subclass_by_cohort": {"PRE-GENAI": {"1A": 27, "1B": 214, "1C": 25, "1D": 422, "1E": 1402, "1F": 172, "1G": 45, "0A": 16668, "0B": 34, "0C": 63}, "GENAI-ERA": {"1A": 18, "1B": 120, "1C": 16, "1D": 217, "1E": 506, "1F": 150, "1G": 14, "0A": 1388, "0B": 4, "0C": 5}}, "ai_rate_by_cohort": {"PRE-GENAI": 12.1, "GENAI-ERA": 42.78}, "rad_by_cohort": {"PRE-GENAI": {"RAD-H": 843, "RAD-M": 1326, "RAD-L": 138, "RAD-NA": 16765}, "GENAI-ERA": {"RAD-H": 622, "RAD-M": 383, "RAD-L": 37, "RAD-NA": 1396}}, "heatmap": {"1A": {"RAD-H": 8, "RAD-M": 11, "RAD-L": 26, "RAD-NA": 0}, "1B": {"RAD-H": 307, "RAD-M": 24, "RAD-L": 3, "RAD-NA": 0}, "1C": {"RAD-H": 41, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 0}, "1D": {"RAD-H": 154, "RAD-M": 443, "RAD-L": 42, "RAD-NA": 0}, "1E": {"RAD-H": 736, "RAD-M": 1090, "RAD-L": 82, "RAD-NA": 0}, "1F": {"RAD-H": 167, "RAD-M": 140, "RAD-L": 15, "RAD-NA": 0}, "1G": {"RAD-H": 51, "RAD-M": 1, "RAD-L": 7, "RAD-NA": 0}, "0A": {"RAD-H": 1, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 18055}, "0B": {"RAD-H": 0, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 38}, "0C": {"RAD-H": 0, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 68}}, "conf_class_dist": {"1": 512, "2": 1347, "3": 1681, "4": 7470, "5": 10500}, "conf_rad_dist": {"1": 44, "2": 820, "3": 1764, "4": 667, "5": 10}, "conf_by_subclass": {"1A": {"median": 4.0, "q1": 4.0, "q3": 5.0, "mean": 4.18, "count": 45}, "1B": {"median": 4.0, "q1": 3.25, "q3": 4.0, "mean": 3.82, "count": 334}, "1C": {"median": 3.0, "q1": 2.0, "q3": 4.0, "mean": 3.2, "count": 41}, "1D": {"median": 3.0, "q1": 3.0, "q3": 4.0, "mean": 3.43, "count": 639}, "1E": {"median": 4.0, "q1": 3.0, "q3": 4.0, "mean": 3.72, "count": 1908}, "1F": {"median": 4.0, "q1": 4.0, "q3": 4.0, "mean": 3.95, "count": 322}, "1G": {"median": 4.0, "q1": 4.0, "q3": 4.0, "mean": 3.92, "count": 59}, "0A": {"median": 5.0, "q1": 4.0, "q3": 5.0, "mean": 4.31, "count": 18056}, "0B": {"median": 3.0, "q1": 2.25, "q3": 4.0, "mean": 3.16, "count": 38}, "0C": {"median": 5.0, "q1": 4.0, "q3": 5.0, "mean": 4.21, "count": 68}}};
 
-const SUBCLASS_ORDER = ["1A", "1B", "1C", "1D", "1E", "0A", "0B", "0C-THIN", "0C-THICK", "0D", "0E"];
-const SUBCLASS_LABELS = {"1A": "1A  Foundation Layer", "1B": "1B  Applied Vertical AI", "1C": "1C  AI-Native Tooling", "1D": "1D  Autonomous Agents", "1E": "1E  Generative Content", "0A": "0A  Traditional Tech", "0B": "0B  AI-Augmented", "0C-THIN": "0C-THIN  Thin Wrapper", "0C-THICK": "0C-THICK  Thick Integrator", "0D": "0D  AI-Adjacent", "0E": "0E  Non-Tech"};
-const SUBCLASS_COLORS = {"1A": "#4f46e5", "1B": "#7c3aed", "1C": "#0891b2", "1D": "#059669", "1E": "#d97706", "0A": "#94a3b8", "0B": "#64748b", "0C-THIN": "#e11d48", "0C-THICK": "#f59e0b", "0D": "#10b981", "0E": "#cbd5e1"};
+const SUBCLASS_ORDER = ["1A", "1B", "1C", "1D", "1E", "1F", "1G", "0A", "0B", "0C"];
+const SUBCLASS_LABELS = {"1A": "1A  Foundation Layer", "1B": "1B  AI-Native Tooling", "1C": "1C  Thin LLM Wrapper", "1D": "1D  Thick LLM Integrator", "1E": "1E  Applied Vertical AI", "1F": "1F  Autonomous Agents", "1G": "1G  Generative Content", "0A": "0A  Traditional Tech", "0B": "0B  AI-Augmented", "0C": "0C  Non-Tech"};
+const SUBCLASS_COLORS = {"1A": "#4f46e5", "1B": "#0891b2", "1C": "#e11d48", "1D": "#f59e0b", "1E": "#7c3aed", "1F": "#059669", "1G": "#d97706", "0A": "#94a3b8", "0B": "#64748b", "0C": "#cbd5e1"};
 const RAD_ORDER = ["RAD-H", "RAD-M", "RAD-L", "RAD-NA"];
 const RAD_COLORS = {"RAD-H": "#e11d48", "RAD-M": "#d97706", "RAD-L": "#059669", "RAD-NA": "#94a3b8"};
 const COHORT_COLORS = {"PRE-GENAI": "#64748b", "GENAI-ERA": "#4f46e5"};
+const RAD_NA_CLASSES = ["0A", "0B", "0C"];
 
 const plotlyConfig = {displayModeBar: false, responsive: true};
 const axisFont = {family: 'Inter, sans-serif', size: 11, color: '#4a4a4a'};
@@ -435,7 +393,6 @@ function plotLayout(extra) {
   }, extra || {});
 }
 
-// ── Chart 1a: Subclass distribution ──
 function renderSubclass() {
   const labels = SUBCLASS_ORDER.slice().reverse();
   const vals = labels.map(s => M.subclass_counts[s]);
@@ -457,7 +414,6 @@ function renderSubclass() {
   }), plotlyConfig);
 }
 
-// ── Chart 1b: AI-native rate by cohort ──
 function renderAiRateCohort() {
   const cohorts = ['PRE-GENAI', 'GENAI-ERA'];
   Plotly.newPlot('chart-ai-rate-cohort', [
@@ -485,7 +441,6 @@ function renderAiRateCohort() {
   }), plotlyConfig);
 }
 
-// ── Chart 2a: RAD distribution ──
 function renderRad() {
   const radActive = RAD_ORDER.filter(r => r !== 'RAD-NA');
   Plotly.newPlot('chart-rad', [{
@@ -510,13 +465,11 @@ function renderRad() {
   }), plotlyConfig);
 }
 
-// ── Chart 2b: Heatmap ──
 function renderHeatmap() {
-  const radNA_classes = new Set(['0A', '0D', '0E']);
+  const radNA_classes = new Set(RAD_NA_CLASSES);
   const yLabels = SUBCLASS_ORDER.map(s => SUBCLASS_LABELS[s]).concat(['Total']);
   const cols = RAD_ORDER.concat(['Total']);
 
-  // Build data grid: subclass rows + bottom totals row
   const radTotals = {};
   RAD_ORDER.forEach(r => radTotals[r] = 0);
   const rawGrid = [];
@@ -532,26 +485,21 @@ function renderHeatmap() {
     }
   });
 
-  // Bottom totals row (only H/M/L meaningful, NA and Total blank)
   const bottomRow = RAD_ORDER.map(r => (r === 'RAD-NA') ? null : radTotals[r]);
   const bottomTotal = bottomRow.filter(v => v !== null).reduce((a, b) => a + b, 0);
   bottomRow.push(bottomTotal);
 
-  // Build z grid: subclass rows have color, Total row + Total col are null (no color)
   const zHeat = rawGrid.map(row => row.slice());
-  zHeat.push(RAD_ORDER.map(() => null)); // bottom row: no color
+  zHeat.push(RAD_ORDER.map(() => null));
   const zLog = zHeat.map(row => row.map(v => (v != null && v > 0) ? Math.log10(v) : null));
   const textHeat = zHeat.map(row => row.map(v => (v != null && v > 0) ? v.toLocaleString() : ''));
 
-  // Null out Total column for all rows
   const zFull = zLog.map(row => row.concat([null]));
   const textFull = textHeat.map(row => row.concat(['']));
 
-  // Annotations for Total column (right) and Total row (bottom)
   const annotations = [];
   const boldFont = {family: 'JetBrains Mono', size: 11, color: '#1e2a4a'};
 
-  // Right-side totals per subclass row
   rowTotals.forEach((t, i) => {
     annotations.push({
       x: 'Total', y: yLabels[i],
@@ -560,7 +508,6 @@ function renderHeatmap() {
     });
   });
 
-  // Bottom totals per RAD column
   RAD_ORDER.forEach((r, i) => {
     const v = bottomRow[i];
     annotations.push({
@@ -570,7 +517,6 @@ function renderHeatmap() {
     });
   });
 
-  // Bottom-right grand total
   annotations.push({
     x: 'Total', y: 'Total',
     text: '<b>' + bottomTotal.toLocaleString() + '</b>',
@@ -594,7 +540,6 @@ function renderHeatmap() {
   }), plotlyConfig);
 }
 
-// ── Chart 3a: Subclass by cohort ──
 function renderSubclassCohort() {
   const labels = SUBCLASS_ORDER.slice().reverse().map(s => SUBCLASS_LABELS[s]);
   const traces = ['PRE-GENAI', 'GENAI-ERA'].map(c => ({
@@ -613,7 +558,6 @@ function renderSubclassCohort() {
   }), plotlyConfig);
 }
 
-// ── Chart 3b: RAD by cohort ──
 function renderRadCohort() {
   const radActive = RAD_ORDER.filter(r => r !== 'RAD-NA');
   const traces = ['PRE-GENAI', 'GENAI-ERA'].map(c => ({
@@ -635,7 +579,6 @@ function renderRadCohort() {
   }), plotlyConfig);
 }
 
-// ── Chart 4a: Classification confidence ──
 function renderConfClass() {
   const levels = Object.keys(M.conf_class_dist).map(Number).sort();
   const vals = levels.map(l => M.conf_class_dist[l]);
@@ -655,7 +598,6 @@ function renderConfClass() {
   }), plotlyConfig);
 }
 
-// ── Chart 4b: RAD confidence ──
 function renderConfRad() {
   const levels = Object.keys(M.conf_rad_dist).map(Number).sort();
   const vals = levels.map(l => M.conf_rad_dist[l]);
@@ -675,7 +617,6 @@ function renderConfRad() {
   }), plotlyConfig);
 }
 
-// ── Chart 4c: Confidence by subclass ──
 function renderConfSubclass() {
   const labels = SUBCLASS_ORDER.map(s => SUBCLASS_LABELS[s]);
   const medians = SUBCLASS_ORDER.map(s => M.conf_by_subclass[s].median);
@@ -706,7 +647,6 @@ function renderConfSubclass() {
   }), plotlyConfig);
 }
 
-// ── Render all ──
 renderSubclass();
 renderAiRateCohort();
 renderRad();
@@ -717,14 +657,12 @@ renderConfClass();
 renderConfRad();
 renderConfSubclass();
 
-// ── Scroll reveals ──
 const observer = new IntersectionObserver((entries) => {
   entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
 }, { threshold: 0.06, rootMargin: '0px 0px -30px 0px' });
 document.querySelectorAll('section').forEach(s => observer.observe(s));
 document.getElementById('overview').classList.add('visible');
 
-// ── Nav active state ──
 const sections = document.querySelectorAll('section');
 const navLinks = document.querySelectorAll('nav ul a');
 const navObs = new IntersectionObserver((entries) => {
@@ -737,19 +675,10 @@ const navObs = new IntersectionObserver((entries) => {
   });
 }, { threshold: 0.25 });
 sections.forEach(s => navObs.observe(s));
-
-// ── Cohort filter + confidence slider ──
-// Pre-compute filtered data for interactive charts
-// Filter data loaded via FILTER_DATA object.
 </script>
 
 <script>
-// ── Interactive filters (cohort + confidence) ──
-// The filter controls update chart-subclass only (the main distribution chart).
-// Full re-render requires pre-aggregated data for all filter combos.
-// For this dashboard we pre-aggregate in Python and inject.
-
-const FILTER_DATA = {"ALL_1": {"subclass": {"1A": 206, "1B": 960, "1C": 351, "1D": 420, "1E": 325, "0A": 124995, "0B": 21372, "0C-THIN": 1007, "0C-THICK": 1543, "0D": 6484, "0E": 107659}, "total": 265322, "ai_native": 2262}, "ALL_2": {"subclass": {"1A": 204, "1B": 958, "1C": 347, "1D": 417, "1E": 322, "0A": 82930, "0B": 20316, "0C-THIN": 903, "0C-THICK": 1488, "0D": 5808, "0E": 97564}, "total": 211257, "ai_native": 2248}, "ALL_3": {"subclass": {"1A": 155, "1B": 839, "1C": 309, "1D": 281, "1E": 285, "0A": 41202, "0B": 6970, "0C-THIN": 306, "0C-THICK": 361, "0D": 3180, "0E": 83818}, "total": 137706, "ai_native": 1869}, "ALL_4": {"subclass": {"1A": 95, "1B": 423, "1C": 195, "1D": 127, "1E": 185, "0A": 30591, "0B": 1609, "0C-THIN": 104, "0C-THICK": 31, "0D": 2344, "0E": 78831}, "total": 114535, "ai_native": 1025}, "ALL_5": {"subclass": {"1A": 8, "1B": 9, "1C": 6, "1D": 6, "1E": 25, "0A": 12727, "0B": 111, "0C-THIN": 24, "0C-THICK": 0, "0D": 1042, "0E": 61073}, "total": 75031, "ai_native": 54}, "PRE-GENAI_1": {"subclass": {"1A": 111, "1B": 555, "1C": 118, "1D": 89, "1E": 122, "0A": 100121, "0B": 17027, "0C-THIN": 164, "0C-THICK": 770, "0D": 4951, "0E": 89507}, "total": 213535, "ai_native": 995}, "PRE-GENAI_2": {"subclass": {"1A": 111, "1B": 554, "1C": 118, "1D": 89, "1E": 121, "0A": 68751, "0B": 16289, "0C-THIN": 139, "0C-THICK": 729, "0D": 4500, "0E": 81828}, "total": 173229, "ai_native": 993}, "PRE-GENAI_3": {"subclass": {"1A": 84, "1B": 497, "1C": 107, "1D": 69, "1E": 106, "0A": 36469, "0B": 6067, "0C-THIN": 45, "0C-THICK": 153, "0D": 2614, "0E": 71664}, "total": 117875, "ai_native": 863}, "PRE-GENAI_4": {"subclass": {"1A": 49, "1B": 277, "1C": 73, "1D": 29, "1E": 66, "0A": 27289, "0B": 1476, "0C-THIN": 14, "0C-THICK": 15, "0D": 1979, "0E": 67555}, "total": 98822, "ai_native": 494}, "PRE-GENAI_5": {"subclass": {"1A": 6, "1B": 6, "1C": 2, "1D": 0, "1E": 8, "0A": 11337, "0B": 100, "0C-THIN": 5, "0C-THICK": 0, "0D": 890, "0E": 52477}, "total": 64831, "ai_native": 22}, "GENAI-ERA_1": {"subclass": {"1A": 95, "1B": 405, "1C": 233, "1D": 331, "1E": 203, "0A": 24874, "0B": 4345, "0C-THIN": 843, "0C-THICK": 773, "0D": 1533, "0E": 18152}, "total": 51787, "ai_native": 1267}, "GENAI-ERA_2": {"subclass": {"1A": 93, "1B": 404, "1C": 229, "1D": 328, "1E": 201, "0A": 14179, "0B": 4027, "0C-THIN": 764, "0C-THICK": 759, "0D": 1308, "0E": 15736}, "total": 38028, "ai_native": 1255}, "GENAI-ERA_3": {"subclass": {"1A": 71, "1B": 342, "1C": 202, "1D": 212, "1E": 179, "0A": 4733, "0B": 903, "0C-THIN": 261, "0C-THICK": 208, "0D": 566, "0E": 12154}, "total": 19831, "ai_native": 1006}, "GENAI-ERA_4": {"subclass": {"1A": 46, "1B": 146, "1C": 122, "1D": 98, "1E": 119, "0A": 3302, "0B": 133, "0C-THIN": 90, "0C-THICK": 16, "0D": 365, "0E": 11276}, "total": 15713, "ai_native": 531}, "GENAI-ERA_5": {"subclass": {"1A": 2, "1B": 3, "1C": 4, "1D": 6, "1E": 17, "0A": 1390, "0B": 11, "0C-THIN": 19, "0C-THICK": 0, "0D": 152, "0E": 8596}, "total": 10200, "ai_native": 32}};
+const FILTER_DATA = {"ALL_1": {"subclass": {"1A": 45, "1B": 334, "1C": 41, "1D": 639, "1E": 1908, "1F": 322, "1G": 59, "0A": 18056, "0B": 38, "0C": 68}, "total": 21510, "ai_native": 3350}, "ALL_2": {"subclass": {"1A": 45, "1B": 334, "1C": 41, "1D": 639, "1E": 1907, "1F": 322, "1G": 59, "0A": 17551, "0B": 36, "0C": 64}, "total": 20998, "ai_native": 3347}, "ALL_3": {"subclass": {"1A": 44, "1B": 317, "1C": 29, "1D": 600, "1E": 1846, "1F": 309, "1G": 53, "0A": 16368, "0B": 28, "0C": 57}, "total": 19651, "ai_native": 3198}, "ALL_4": {"subclass": {"1A": 38, "1B": 250, "1C": 19, "1D": 308, "1E": 1390, "1F": 272, "1G": 48, "0A": 15574, "0B": 17, "0C": 54}, "total": 17970, "ai_native": 2325}, "ALL_5": {"subclass": {"1A": 16, "1B": 40, "1C": 1, "1D": 3, "1E": 50, "1F": 48, "1G": 12, "0A": 10286, "0B": 1, "0C": 43}, "total": 10500, "ai_native": 170}, "PRE-GENAI_1": {"subclass": {"1A": 27, "1B": 214, "1C": 25, "1D": 422, "1E": 1402, "1F": 172, "1G": 45, "0A": 16668, "0B": 34, "0C": 63}, "total": 19072, "ai_native": 2307}, "PRE-GENAI_2": {"subclass": {"1A": 27, "1B": 214, "1C": 25, "1D": 422, "1E": 1401, "1F": 172, "1G": 45, "0A": 16199, "0B": 33, "0C": 59}, "total": 18597, "ai_native": 2306}, "PRE-GENAI_3": {"subclass": {"1A": 26, "1B": 203, "1C": 16, "1D": 394, "1E": 1352, "1F": 160, "1G": 40, "0A": 15191, "0B": 26, "0C": 53}, "total": 17461, "ai_native": 2191}, "PRE-GENAI_4": {"subclass": {"1A": 21, "1B": 147, "1C": 10, "1D": 163, "1E": 980, "1F": 134, "1G": 36, "0A": 14487, "0B": 16, "0C": 51}, "total": 16045, "ai_native": 1491}, "PRE-GENAI_5": {"subclass": {"1A": 8, "1B": 18, "1C": 1, "1D": 2, "1E": 21, "1F": 16, "1G": 9, "0A": 9631, "0B": 1, "0C": 41}, "total": 9748, "ai_native": 75}, "GENAI-ERA_1": {"subclass": {"1A": 18, "1B": 120, "1C": 16, "1D": 217, "1E": 506, "1F": 150, "1G": 14, "0A": 1388, "0B": 4, "0C": 5}, "total": 2438, "ai_native": 1043}, "GENAI-ERA_2": {"subclass": {"1A": 18, "1B": 120, "1C": 16, "1D": 217, "1E": 506, "1F": 150, "1G": 14, "0A": 1352, "0B": 3, "0C": 5}, "total": 2401, "ai_native": 1041}, "GENAI-ERA_3": {"subclass": {"1A": 18, "1B": 114, "1C": 13, "1D": 206, "1E": 494, "1F": 149, "1G": 13, "0A": 1177, "0B": 2, "0C": 4}, "total": 2190, "ai_native": 1007}, "GENAI-ERA_4": {"subclass": {"1A": 17, "1B": 103, "1C": 9, "1D": 145, "1E": 410, "1F": 138, "1G": 12, "0A": 1087, "0B": 1, "0C": 3}, "total": 1925, "ai_native": 834}, "GENAI-ERA_5": {"subclass": {"1A": 8, "1B": 22, "1C": 0, "1D": 1, "1E": 29, "1F": 32, "1G": 3, "0A": 655, "0B": 0, "0C": 2}, "total": 752, "ai_native": 95}};
 </script>
 
 

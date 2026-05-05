@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
-"""Build the v2.0 dashboard from the v2.1-migrated CSV.
+"""Build the Tavily-enriched ~20k subset dashboard from production classifications.
 
-Same chart design as build_v2_dashboard.py but driven by the new 10-class
-taxonomy (1A-1G + 0A, 0B, 0C) and the migrated dataset.
+Same chart design as build_classification_dashboard.py (10-class taxonomy: 1A–1G + 0A, 0B, 0C).
 
-Reads outputs/production_csvs/classified_startups_v21_migrated.csv, computes all metrics and
+Reads outputs/production_csvs/production_classifications.csv, computes all metrics and
 chart data, and writes:
-    data visualization/01_Presentation_Materials/v2_dashboard2.0.html
+    data visualization/01_Presentation_Materials/tavily_full_production_cohort.html
 """
 
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 from pathlib import Path
 
 import pandas as pd
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CSV_PATH = _PROJECT_ROOT / "outputs" / "production_csvs" / "classified_startups_v21_migrated.csv"
+CSV_PATH = _PROJECT_ROOT / "outputs" / "production_csvs" / "production_classifications.csv"
 OUTPUT_PATH = (
-    _PROJECT_ROOT / "data visualization" / "01_Presentation_Materials" / "v2_dashboard2.0.html"
+    _PROJECT_ROOT / "data visualization" / "01_Presentation_Materials" / "tavily_full_production_cohort.html"
 )
 
 SUBCLASS_ORDER = ["1A", "1B", "1C", "1D", "1E", "1F", "1G", "0A", "0B", "0C"]
@@ -35,8 +36,8 @@ SUBCLASS_LABELS = {
     "0B": "0B  AI-Augmented",
     "0C": "0C  Non-Tech",
 }
-# Colors follow semantic meaning across the v2 -> v2.1 remap so that visual
-# identity is preserved class-by-class:
+# Colors follow semantic meaning across subclasses so visual identity is
+# preserved class-by-class:
 #   1A Foundation        -> indigo (unchanged)
 #   1B Tooling           -> cyan (was old 1C color)
 #   1C Thin Wrapper      -> rose (was old 0C-THIN color)
@@ -60,8 +61,7 @@ RAD_ORDER = ["RAD-H", "RAD-M", "RAD-L", "RAD-NA"]
 RAD_COLORS = {"RAD-H": "#e11d48", "RAD-M": "#d97706", "RAD-L": "#059669", "RAD-NA": "#94a3b8"}
 COHORT_COLORS = {"PRE-GENAI": "#64748b", "GENAI-ERA": "#4f46e5"}
 
-# Under v2.1, RAD is a function of ai_native: ai_native=0 (0A, 0B, 0C) always
-# gets RAD-NA. Used by the heatmap to suppress row totals for those rows.
+# Heatmap: subclasses 0A–0C are RAD-NA only (row totals suppressed for H/M/L).
 RAD_NA_CLASSES = ["0A", "0B", "0C"]
 
 
@@ -143,7 +143,7 @@ def build_html(m: dict) -> str:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>V2.0 Classification Results — Dashboard</title>
+<title>Tavily production cohort — Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -248,12 +248,6 @@ p:last-child {{ margin-bottom: 0; }}
 .insight p:last-child {{ margin-bottom: 0; }}
 .insight-blue {{ background: var(--indigo-light); border: 1px solid var(--indigo-border); color: var(--text2); }}
 .insight-blue strong {{ color: #3730a3; }}
-.insight-amber {{ background: var(--amber-light); border: 1px solid #fde68a; color: var(--text2); }}
-.insight-amber strong {{ color: #92400e; }}
-.insight-emerald {{ background: var(--emerald-light); border: 1px solid #a7f3d0; color: var(--text2); }}
-.insight-emerald strong {{ color: #065f46; }}
-.insight-rose {{ background: var(--rose-light); border: 1px solid #fecdd3; color: var(--text2); }}
-.insight-rose strong {{ color: #9f1239; }}
 
 .filter-bar {{
   display: flex; align-items: center; gap: 1.5rem;
@@ -298,8 +292,8 @@ footer strong {{ color: var(--text2); }}
 <body>
 
 <nav>
-  <div class="nav-brand">Classification v2.0</div>
-  <div class="nav-sub">Results Dashboard</div>
+  <div class="nav-brand">Tavily production</div>
+  <div class="nav-sub">Full classified cohort</div>
   <div class="nav-section">
     <div class="nav-label">Sections</div>
     <ul>
@@ -312,26 +306,22 @@ footer strong {{ color: var(--text2); }}
   </div>
   <div class="nav-meta">
     <p><strong>Model</strong><br>gpt-5.4-nano</p>
-    <p style="margin-top:0.75rem;"><strong>Dataset</strong><br>{m["total"]:,} startups<br>Crunchbase US</p>
-    <p style="margin-top:0.75rem;"><strong>Taxonomy</strong><br>v2.1 (10 classes)<br>Migrated from v2</p>
+    <p style="margin-top:0.75rem;"><strong>Dataset</strong><br>All production rows<br>{m["total"]:,} classified</p>
+    <p style="margin-top:0.75rem;"><strong>Method</strong><br>Tavily-enriched<br>(website scraping)</p>
+    <p style="margin-top:0.75rem;"><strong>Taxonomy</strong><br>10 classes<br>1A–1G, 0A–0C</p>
   </div>
 </nav>
 
 <main>
 
 <section id="overview">
-  <span class="section-label">Refreshed Taxonomy</span>
-  <h1>V2.0 Two-Axis Classification<br>of {m["total"]:,} US Startups</h1>
+  <span class="section-label">Tavily-Enriched Inputs</span>
+  <h1>Tavily-Enriched Classification<br>of {m["total"]:,} US Startups</h1>
   <p>
-    Same dataset as V2, refreshed under the v2.1 taxonomy.
-    The 11-class system was collapsed to <strong>10 classes</strong>:
-    LLM wrappers (thin and thick) were promoted to AI-native as new classes 1C and 1D,
-    AI-augmented companies remain in the 0B bucket,
-    and the AI-native side was reordered to flow from foundation outward.
-  </p>
-  <p>
-    RAD is now a clean function of <code>ai_native</code>: every AI-native company gets RAD-H/M/L,
-    every non-AI-native company gets RAD-NA. No exceptions, no per-class sub-rules.
+    Every row in <strong>production_classifications.csv</strong> for this pipeline run ({m["total"]:,} companies),
+    classified under the <strong>10-class taxonomy</strong> (1A&ndash;1G plus 0A, 0B, 0C).
+    Each company was enriched with <strong>Tavily web scraping</strong> before inference: homepage and
+    product/about content was appended to Crunchbase descriptions so the model could use on-site evidence.
   </p>
 
   <div class="hero-metrics">
@@ -361,20 +351,14 @@ footer strong {{ color: var(--text2); }}
       <div class="mc-ctx">{m["low_conf_count"]:,} rows with conf &le; 2</div>
     </div>
   </div>
-
-  <div class="insight insight-amber">
-    <p><strong>{m["low_conf_pct"]}% of rows have confidence &le; 2.</strong>
-    Short and long descriptions alone do not give the model enough signal.
-    Richer inputs from agentic deep research would directly reduce this uncertainty.</p>
-  </div>
 </section>
 
 <section id="landscape">
   <span class="section-label">01. Landscape</span>
   <h2>The AI-Native Startup Landscape</h2>
   <p>
-    Under v2.1, <strong>{m["ai_native_pct"]}%</strong> ({m["ai_native_count"]:,}) of {m["total"]:,} startups are AI-native &mdash;
-    a higher rate than v2 because thin and thick LLM wrappers (now 1C and 1D) moved to the AI-native side.
+    In this full production cohort, <strong>{m["ai_native_pct"]}%</strong> ({m["ai_native_count"]:,}) of {m["total"]:,}
+    startups are AI-native under this taxonomy &mdash; thin and thick LLM wrappers appear as classes 1C and 1D on the AI-native side.
     Most non-AI-native companies fall into traditional tech (0A) or non-tech (0C),
     with the 0B bucket capturing AI-augmented businesses.
   </p>
@@ -428,11 +412,6 @@ footer strong {{ color: var(--text2); }}
     Most are <strong>RAD-H</strong>: structurally dependent on third-party GenAI APIs.
     Only {m["rad_counts"]["RAD-L"]} show low structural dependency.
   </p>
-  <p style="font-size:0.82rem;color:var(--muted);">
-    Under v2.1, RAD is a strict function of <code>ai_native</code>: the seven AI-native classes (1A&ndash;1G) always receive RAD-H, RAD-M, or RAD-L,
-    and the three non-AI-native classes (0A, 0B, 0C) always receive RAD-NA.
-    The question &ldquo;how dependent on external GenAI?&rdquo; has no meaning for a company that does not use AI as its product mechanism.
-  </p>
 
   <div class="chart-row single">
     <div class="chart-box">
@@ -452,11 +431,6 @@ footer strong {{ color: var(--text2); }}
       </div>
       <div class="chart-body"><div id="chart-heatmap" style="height:520px;"></div></div>
     </div>
-  </div>
-
-  <div class="insight insight-emerald">
-    <p><strong>{m["rad_counts"]["RAD-H"]:,} startups are RAD-H</strong> (high structural dependency on external GenAI).
-    The RAD split among AI-native startups shows how much of the ecosystem runs on borrowed infrastructure.</p>
   </div>
 </section>
 
@@ -494,9 +468,7 @@ footer strong {{ color: var(--text2); }}
   <span class="section-label">04. Data Quality</span>
   <h2>Confidence &amp; Data Quality Audit</h2>
   <p>
-    Model confidence exposes where descriptions alone fall short.
-    <strong>{m["low_conf_pct"]}% of classifications</strong> have confidence &le; 2.
-    These rows would benefit most from agentic deep research.
+    Distributions of <code>conf_classification</code> and <code>conf_rad</code> (1&ndash;5), and mean classification confidence by subclass.
   </p>
 
   <div class="chart-row">
@@ -520,16 +492,10 @@ footer strong {{ color: var(--text2); }}
     <div class="chart-box">
       <div class="chart-box-header">
         <div class="chart-box-title">Confidence by Subclass</div>
-        <div class="chart-box-desc">Which categories are hardest to classify from descriptions alone?</div>
+        <div class="chart-box-desc">Which categories remain noisiest after website enrichment?</div>
       </div>
       <div class="chart-body"><div id="chart-conf-subclass" style="height:420px;"></div></div>
     </div>
-  </div>
-
-  <div class="insight insight-rose">
-    <p><strong>{m["low_conf_count"]:,} classifications ({m["low_conf_pct"]}%) have confidence &le; 2.</strong>
-    These companies lack enough text for reliable classification.
-    An agentic pipeline that retrieves websites, press releases, and product docs would convert these guesses into evidence-backed judgments.</p>
   </div>
 </section>
 
@@ -538,10 +504,10 @@ footer strong {{ color: var(--text2); }}
 <footer>
   <strong>Model:</strong> gpt-5.4-nano &nbsp;&middot;&nbsp;
   <strong>Method:</strong> OpenAI Batch API with structured output &nbsp;&middot;&nbsp;
-  <strong>Taxonomy:</strong> v2.1 (10 classes; migrated from v2) &nbsp;&middot;&nbsp;
-  <strong>Date:</strong> April 2026
+  <strong>Taxonomy:</strong> 10 classes (1A&ndash;1G, 0A&ndash;0C) &nbsp;&middot;&nbsp;
+  <strong>Date:</strong> May 2026
   <br>
-  Same dataset, refreshed taxonomy. Next step: re-run the LLM pipeline natively on v2.1 with agentic deep research.
+  {m["total"]:,}-company production export. Inputs enriched with Tavily web scraping (homepage + product pages) before classification.
 </footer>
 
 <script>
@@ -862,37 +828,7 @@ const FILTER_DATA = {{}};
 </html>'''
 
 
-def main() -> None:
-    print(f"Reading {CSV_PATH} ...")
-    df = pd.read_csv(CSV_PATH)
-    print(f"  {len(df):,} rows loaded.")
-
-    print("Computing metrics ...")
-    m = compute_metrics(df)
-
-    filter_data = {}
-    for cohort in ["ALL", "PRE-GENAI", "GENAI-ERA"]:
-        for min_conf in range(1, 6):
-            cdf = df.copy()
-            if cohort != "ALL":
-                cdf = cdf[cdf.cohort == cohort]
-            cdf = cdf[cdf.conf_classification >= min_conf]
-            key = f"{cohort}_{min_conf}"
-            filter_data[key] = {
-                "subclass": {s: int((cdf.subclass == s).sum()) for s in SUBCLASS_ORDER},
-                "total": len(cdf),
-                "ai_native": int((cdf.ai_native == 1).sum()),
-            }
-
-    print("Building HTML ...")
-    html = build_html(m)
-
-    html = html.replace(
-        "const FILTER_DATA = {};",
-        f"const FILTER_DATA = {json.dumps(filter_data)};",
-    )
-
-    filter_js = """
+FILTER_JS = """
 <script>
 (function() {
   let currentCohort = 'ALL';
@@ -943,12 +879,76 @@ def main() -> None:
 })();
 </script>"""
 
-    html = html.replace("</body>", filter_js + "\n</body>")
 
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_PATH.write_text(html, encoding="utf-8")
-    print(f"Dashboard written to {OUTPUT_PATH}")
-    print(f"  File size: {OUTPUT_PATH.stat().st_size / 1024:.0f} KB")
+def write_tavily_dashboard(df: pd.DataFrame, output_path: Path) -> None:
+    """Write the Tavily-themed dashboard HTML for an in-memory classification frame."""
+    m = compute_metrics(df)
+    filter_data: dict = {}
+    for cohort in ["ALL", "PRE-GENAI", "GENAI-ERA"]:
+        for min_conf in range(1, 6):
+            cdf = df.copy()
+            if cohort != "ALL":
+                cdf = cdf[cdf.cohort == cohort]
+            cdf = cdf[cdf.conf_classification >= min_conf]
+            key = f"{cohort}_{min_conf}"
+            filter_data[key] = {
+                "subclass": {s: int((cdf.subclass == s).sum()) for s in SUBCLASS_ORDER},
+                "total": len(cdf),
+                "ai_native": int((cdf.ai_native == 1).sum()),
+            }
+
+    html = build_html(m)
+    html = html.replace(
+        "const FILTER_DATA = {};",
+        f"const FILTER_DATA = {json.dumps(filter_data)};",
+    )
+    html = html.replace("</body>", FILTER_JS + "\n</body>")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(html, encoding="utf-8")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Build tavily_full_production_cohort.html from a classified startups CSV "
+            f"(default: {CSV_PATH.name})."
+        )
+    )
+    parser.add_argument(
+        "--csv",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=f"Input CSV path (default: {CSV_PATH})",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=None,
+        help=f"Output HTML path (default: {OUTPUT_PATH})",
+    )
+    args = parser.parse_args()
+    csv_path = args.csv.expanduser().resolve() if args.csv is not None else CSV_PATH.resolve()
+    out_path = args.output.expanduser().resolve() if args.output is not None else OUTPUT_PATH.resolve()
+
+    if not csv_path.is_file():
+        print(f"Missing input CSV: {csv_path}", file=sys.stderr)
+        print(
+            "Run the classify downloader when batches complete (writes production_classifications.csv), "
+            "or pass --csv PATH to another file with the same columns.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    print(f"Reading {csv_path} ...")
+    df = pd.read_csv(csv_path)
+    print(f"  {len(df):,} rows loaded.")
+
+    print("Building HTML ...")
+    write_tavily_dashboard(df, out_path)
+    print(f"Dashboard written to {out_path}")
+    print(f"  File size: {out_path.stat().st_size / 1024:.0f} KB")
 
 
 if __name__ == "__main__":
