@@ -9,13 +9,13 @@ to start. --dry-run on prepare and run prints the full cost plan without
 touching the API.
 
 Usage:
-    python classify.py prepare [--dry-run] [--data path/to/input.csv]
-    python classify.py submit  [--concurrency 3]
+    python classify.py prepare  [--dry-run] [--data path/to/input.csv]
+    python classify.py submit   [--concurrency 50]
     python classify.py status
     python classify.py download
     python classify.py retry
-    python classify.py merge   [--output path]
-    python classify.py run     [--dry-run] [--concurrency 3] [--data path/to/input.csv]
+    python classify.py merge    [--output path]   # prints report only
+    python classify.py run      [--dry-run] [--concurrency 50] [--data path/to/input.csv]
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from src.config import DEFAULT_BATCH_SIZE, DEFAULT_MODEL, ESTIMATED_TOKENS_PER_R
 from src.downloader import collect_failed_custom_ids, download_completed
 from src.formatter import build_custom_id, format_user_message
 from src.logger import setup_logging
-from src.merger import DEFAULT_OUTPUT_PATH, merge_batch_csvs, print_report
+from src.merger import DEFAULT_OUTPUT_PATH, print_report
 from src.monitor import print_status, submit_and_monitor
 from src.submitter import BillingLimitError
 from src.state import BatchRecord, PipelineState
@@ -76,14 +76,17 @@ def _cmd_prepare(args: argparse.Namespace) -> None:
     if args.dry_run:
         return
 
-    files = build_batch_files(
-        data_csv, model=args.model, batch_size=args.batch_size, row_slice=row_slice,
-    )
+    files = build_batch_files(df, model=args.model, batch_size=args.batch_size)
 
     state = PipelineState.load()
     state.run_id = ""
     state.model = args.model
     state.total_companies = len(df)
+    # Clear stale batch records and token totals so re-runs start clean.
+    state.batches = {}
+    state.total_prompt_tokens = 0
+    state.total_completion_tokens = 0
+    state.total_cached_tokens = 0
 
     for idx, fpath in enumerate(files, start=1):
         row_start = (idx - 1) * args.batch_size
@@ -227,11 +230,10 @@ def _cmd_retry(args: argparse.Namespace) -> None:
 
 
 def _cmd_merge(args: argparse.Namespace) -> None:
-    """Merge all batch outputs into one CSV and print the report."""
+    """Print the classification distribution and cost report."""
     setup_logging()
     state = PipelineState.load()
     output_path = Path(args.output) if args.output else DEFAULT_OUTPUT_PATH
-    merge_batch_csvs(state, output_path)
     print_report(state, output_path)
 
 
@@ -315,7 +317,7 @@ def _cmd_test(args: argparse.Namespace) -> None:
 
 
 def _cmd_run(args: argparse.Namespace) -> None:
-    """Full pipeline: prepare, submit, download, merge."""
+    """Full pipeline: prepare, submit, download, then print report."""
     setup_logging()
 
     args_ns = argparse.Namespace(**vars(args))
@@ -326,7 +328,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     _cmd_submit(args_ns)
     _cmd_download(args_ns)
-    _cmd_merge(args_ns)
+    print_report(PipelineState.load(), DEFAULT_OUTPUT_PATH)
 
 
 # -- Argument parsing -----------------------------------------------------------
@@ -384,8 +386,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Submit pending batches and monitor until all complete",
     )
     _add_common_args(p)
-    p.add_argument("--concurrency", type=int, default=1,
-                   help="Max batches in-flight simultaneously (default: 1)")
+    p.add_argument("--concurrency", type=int, default=50,
+                   help="Max batches in-flight simultaneously (default: 50 — effectively all)")
     p.set_defaults(func=_cmd_submit)
 
     # status
@@ -428,15 +430,15 @@ def build_parser() -> argparse.ArgumentParser:
     # run
     p = subs.add_parser(
         "run",
-        help="Full pipeline: prepare -> submit -> download -> merge",
+        help="Full pipeline: prepare -> submit -> download -> report",
     )
     _add_common_args(p)
     p.add_argument("--dry-run", action="store_true", dest="dry_run",
                    help="Run prepare in dry-run mode only")
     p.add_argument("--rows", default=None,
                    help="Row range to process, e.g. '0:50000'")
-    p.add_argument("--concurrency", type=int, default=1,
-                   help="Max batches in-flight simultaneously (default: 1)")
+    p.add_argument("--concurrency", type=int, default=50,
+                   help="Max batches in-flight simultaneously (default: 50 — effectively all)")
     p.add_argument("--output", default=None)
     p.set_defaults(func=_cmd_run)
 

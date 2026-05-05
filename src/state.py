@@ -57,6 +57,7 @@ class BatchRecord:
     request_count: int = 0
     completed_count: int = 0
     failed_count: int = 0
+    rows_written: int = 0
 
 
 _BATCH_RECORD_FIELDS.update(f.name for f in fields(BatchRecord))

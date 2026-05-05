@@ -1,8 +1,8 @@
-"""Merge per-batch CSVs into the final research deliverable.
+"""Classification distribution and cost report.
 
-Raw per-batch CSVs scattered across outputs/ are not usable for analysis.
-This module produces classified_startups_v2.csv and prints the numbers
-that feed the paper: subclass distribution, RAD score breakdown, cohort
+Results are written directly to production_classifications.csv during
+download, so no separate merge step is needed. This module provides the
+rich terminal report: subclass distribution, RAD score breakdown, cohort
 splits, token usage, cache hit rate, and actual cost.
 """
 
@@ -16,52 +16,13 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
-from src.paths import BATCH_OUTPUTS_DIR, DEFAULT_CLASSIFICATION_OUTPUT_CSV
-from src.schema import ClassificationResult
+from src.paths import DEFAULT_CLASSIFICATION_OUTPUT_CSV
 from src.state import PipelineState
 from src.tokens import BATCH_DISCOUNT, CACHE_DISCOUNT, MODEL_PRICING
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_OUTPUT_PATH = DEFAULT_CLASSIFICATION_OUTPUT_CSV
-
-
-def merge_batch_csvs(
-    state: PipelineState,
-    output_path: Path = DEFAULT_OUTPUT_PATH,
-) -> Path:
-    """Concatenate all per-batch CSVs into one final output file.
-
-    Args:
-        state: Pipeline state (used for batch ordering).
-        output_path: Where to write the merged CSV.
-
-    Returns:
-        Path to the written file.
-    """
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = list(ClassificationResult.model_fields.keys())
-    total_rows = 0
-
-    with open(output_path, "w", newline="", encoding="utf-8") as out_f:
-        writer = csv.DictWriter(out_f, fieldnames=fieldnames)
-        writer.writeheader()
-
-        for key in sorted(state.batches, key=lambda k: state.batches[k].batch_number):
-            rec = state.batches[key]
-            batch_csv = BATCH_OUTPUTS_DIR / f"batch_{rec.batch_number:04d}.csv"
-            if not batch_csv.exists():
-                logger.warning("Missing CSV for batch %d. Skipping.", rec.batch_number)
-                continue
-
-            with open(batch_csv, newline="", encoding="utf-8") as in_f:
-                reader = csv.DictReader(in_f)
-                for row in reader:
-                    writer.writerow(row)
-                    total_rows += 1
-
-    logger.info("Merged %d rows into %s", total_rows, output_path.name)
-    return output_path
 
 
 def _build_distribution_table(rows: list[dict]) -> Table:
@@ -73,7 +34,6 @@ def _build_distribution_table(rows: list[dict]) -> Table:
 
     table = Table(title="Classification Distribution", expand=True)
 
-    # Subclass breakdown
     table.add_column("Subclass", style="cyan")
     table.add_column("Count", justify="right")
     table.add_column("", min_width=3)

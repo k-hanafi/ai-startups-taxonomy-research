@@ -7,6 +7,9 @@ separately so failed and expired requests are never lost.
 
 Per-response cached_tokens from the usage object are aggregated so the
 final report can show actual dollars saved from prompt caching.
+
+Results are appended to production_classifications.csv directly during
+download so no separate merge step is required.
 """
 
 from __future__ import annotations
@@ -16,7 +19,11 @@ import json
 import logging
 from pathlib import Path
 
-from src.paths import BATCH_ERRORS_DIR, BATCH_OUTPUTS_DIR, BATCH_RESULTS_DIR
+from src.paths import (
+    BATCH_ERRORS_DIR,
+    BATCH_RESULTS_DIR,
+    DEFAULT_CLASSIFICATION_OUTPUT_CSV,
+)
 from src.schema import ClassificationResult
 from src.state import PipelineState
 from src.submitter import get_client
@@ -25,7 +32,6 @@ logger = logging.getLogger(__name__)
 
 RESULTS_DIR = BATCH_RESULTS_DIR
 ERRORS_DIR = BATCH_ERRORS_DIR
-OUTPUTS_DIR = BATCH_OUTPUTS_DIR
 
 
 def _download_file(client, file_id: str, dest: Path) -> Path:
@@ -126,32 +132,38 @@ def _parse_result_line(line: dict) -> dict | None:
     }
 
 
-def _write_batch_csv(records: list[dict], batch_num: int) -> Path:
-    """Write parsed classification results to a per-batch CSV."""
-    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-    path = OUTPUTS_DIR / f"batch_{batch_num:04d}.csv"
+def _append_to_output_csv(records: list[dict], output_path: Path) -> int:
+    """Append parsed classification results directly to the production CSV.
 
+    Writes the header only when the file does not yet exist or is empty.
+    Returns the number of rows written.
+    """
     if not records:
-        logger.warning("No valid records for batch %d. Skipping CSV.", batch_num)
-        return path
+        return 0
 
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = list(ClassificationResult.model_fields.keys())
+    write_header = not output_path.exists() or output_path.stat().st_size == 0
 
-    with open(path, "w", newline="", encoding="utf-8") as f:
+    with open(output_path, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
+        if write_header:
+            writer.writeheader()
         for rec in records:
             writer.writerow(rec["classification"])
 
-    logger.info("Wrote %d rows -> %s", len(records), path.name)
-    return path
+    return len(records)
 
 
-def download_completed(state: PipelineState) -> None:
-    """Download results for all completed batches and update usage stats.
+def download_completed(
+    state: PipelineState,
+    output_path: Path = DEFAULT_CLASSIFICATION_OUTPUT_CSV,
+) -> None:
+    """Download results for all completed batches and append to production CSV.
 
-    Skips batches whose output files have already been downloaded (based on
-    whether the local result file exists).
+    Skips batches that have already been fully processed (rows_written > 0).
+    Handles crash-recovery: if the raw JSONL exists but rows_written is 0,
+    re-parses and appends without re-downloading.
     """
     client = get_client()
     completed = state.completed_batches()
@@ -172,11 +184,15 @@ def download_completed(state: PipelineState) -> None:
 
         result_path = RESULTS_DIR / f"batch_{rec.batch_number:04d}.jsonl"
 
-        if result_path.exists():
-            logger.info("Batch %d already downloaded. Skipping.", rec.batch_number)
+        if result_path.exists() and rec.rows_written > 0:
+            logger.info(
+                "Batch %d already downloaded and written (%d rows). Skipping.",
+                rec.batch_number, rec.rows_written,
+            )
             continue
 
-        _download_file(client, rec.output_file_id, result_path)
+        if not result_path.exists():
+            _download_file(client, rec.output_file_id, result_path)
 
         parsed_records: list[dict] = []
         batch_prompt_toks = 0
@@ -193,7 +209,8 @@ def download_completed(state: PipelineState) -> None:
                     batch_completion_toks += result["usage"]["completion_tokens"]
                     batch_cached_toks += result["usage"]["cached_tokens"]
 
-        _write_batch_csv(parsed_records, rec.batch_number)
+        rows_written = _append_to_output_csv(parsed_records, output_path)
+        rec.rows_written = rows_written
 
         state.total_prompt_tokens += batch_prompt_toks
         state.total_completion_tokens += batch_completion_toks
@@ -204,8 +221,8 @@ def download_completed(state: PipelineState) -> None:
             if batch_prompt_toks > 0 else 0.0
         )
         logger.info(
-            "Batch %d: %d results, %d prompt toks, %d cached (%.1f%% hit rate)",
-            rec.batch_number, len(parsed_records),
+            "Batch %d: %d rows -> %s, %d prompt toks, %d cached (%.1f%% hit rate)",
+            rec.batch_number, rows_written, output_path.name,
             batch_prompt_toks, batch_cached_toks, cache_rate,
         )
 
