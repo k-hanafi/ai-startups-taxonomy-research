@@ -46,14 +46,19 @@ Startups receive:
 Before classifying a company I enrich every row with live evidence from its own website, then joins it with crunchbase data and inputs it into the classifier.
 
 ```mermaid
-flowchart LR
-    A[Crunchbase 267k] --> B[Live website probe]
-    B --> C[Tavily crawl]
-    C --> D[NLP post-processing]
-    D --> E[Join with Crunchbase fields]
-    E --> F[GPT-5 OpenAI Batch API]
-    F --> G[Structured output schema]
-    G --> H[Production CSV]
+flowchart TD
+    subgraph enrich ["Enrich Crunchbase data with live company website scrape"]
+        A[("Crunchbase database (267k companies)")] -->|all rows| B[Live website probe]
+        B -->|dead or parked| X[Excluded from crawl]
+        B -->|alive homepages| C[Tavily 5-page crawl]
+        C -->|raw markdown| D[NLP post-processing]
+        D --> E[Join with Crunchbase fields]
+    end
+    subgraph classification [Classification]
+        E -->|classifier input| F[GPT-5 via OpenAI Batch API]
+        F -->|structured JSON| G[Pydantic structured output]
+        G -->|validated rows| H[("Production dataset")]
+    end
 ```
 
 
