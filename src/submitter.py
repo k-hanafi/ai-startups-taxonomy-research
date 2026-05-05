@@ -22,7 +22,7 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from src.config import DEFAULT_BATCH_SIZE, DEFAULT_MODEL, OPENAI_API_KEY
+from src.config import DEFAULT_MODEL, OPENAI_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -131,55 +131,3 @@ def generate_run_id(model: str = DEFAULT_MODEL) -> str:
     return f"v2-{model}-{ts}"
 
 
-def submit_batch_files(
-    batch_files: list[Path],
-    *,
-    model: str = DEFAULT_MODEL,
-    batch_size: int = DEFAULT_BATCH_SIZE,
-    total_rows: int | None = None,
-) -> list[dict[str, str]]:
-    """Upload and submit all batch files sequentially.
-
-    Args:
-        batch_files: Paths to JSONL files from builder.build_batch_files().
-        model: Model name for metadata tagging.
-        batch_size: Requests per file, used for row range calculation.
-        total_rows: Actual total row count. Caps the last batch range.
-
-    Returns:
-        List of dicts with batch_id, file_id, file_path, and metadata.
-    """
-    client = get_client()
-    run_id = generate_run_id(model)
-    total = len(batch_files)
-    results: list[dict[str, str]] = []
-
-    for idx, fpath in enumerate(batch_files, start=1):
-        row_start = (idx - 1) * batch_size
-        row_end = row_start + batch_size - 1
-        if total_rows is not None:
-            row_end = min(row_end, total_rows - 1)
-        row_range = f"{row_start}-{row_end}"
-
-        file_id = upload_batch_file(client, fpath)
-        batch_id = create_batch(
-            client,
-            file_id,
-            run_id=run_id,
-            batch_number=idx,
-            total_batches=total,
-            row_range=row_range,
-            model=model,
-        )
-
-        results.append({
-            "batch_id": batch_id,
-            "file_id": file_id,
-            "file_path": str(fpath),
-            "run_id": run_id,
-            "batch_number": str(idx),
-            "row_range": row_range,
-        })
-
-    logger.info("Submitted %d batches under run_id=%s", total, run_id)
-    return results

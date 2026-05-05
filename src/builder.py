@@ -103,27 +103,23 @@ def build_request_body(
 
 
 def build_batch_files(
-    csv_path: str | Path,
+    data: pd.DataFrame | str | Path,
     model: str = DEFAULT_MODEL,
     batch_size: int = DEFAULT_BATCH_SIZE,
-    row_slice: slice | None = None,
 ) -> list[Path]:
-    """Read the dataset CSV and write JSONL batch files to outputs/batch_data/requests/.
+    """Write JSONL batch files to outputs/batch_data/requests/.
 
     Args:
-        csv_path: Path to the input CSV.
+        data: Pre-loaded DataFrame or path to the input CSV.
         model: Model name for request bodies.
         batch_size: Number of requests per JSONL file.
-        row_slice: Optional slice to process a subset of rows.
 
     Returns:
         List of paths to the written JSONL files.
     """
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    df = pd.read_csv(csv_path)
-    if row_slice is not None:
-        df = df.iloc[row_slice]
+    df = data if isinstance(data, pd.DataFrame) else pd.read_csv(data)
 
     system_prompt = load_system_prompt()
     schema = _openai_strict_schema()

@@ -53,19 +53,20 @@ MAX_FILE_SIZE_MB: int = 190                     # 200 MB hard limit minus 10 MB 
 # Per-request budget
 # ---------------------------------------------------------------------------
 
-# Measured from the 1k pilot run: 7,299 avg prompt + 210 avg completion.
+# Measured from full 44k dataset (500-row sample): 9,593 avg prompt tokens.
+# P95 = 12,503; max = 28,068 (outlier with very large website evidence).
 # Used by the sliding-window queue pressure control to stay under 15B queue limit.
-# Update if the system prompt length changes significantly.
-ESTIMATED_TOKENS_PER_REQUEST: int = 7_500
+ESTIMATED_TOKENS_PER_REQUEST: int = 10_000
 
 # Hard cap on model output per request. The v2 output is ~150-300 tokens.
-# This cap prevents runaway cost from any malformed response.
-MAX_OUTPUT_TOKENS: int = 450
+# 1000 gives 4-5× headroom over observed avg (210) without risk of truncation.
+MAX_OUTPUT_TOKENS: int = 1000
 
 # ---------------------------------------------------------------------------
 # Batch construction defaults
 # ---------------------------------------------------------------------------
 
-# Calibrated from pilot: 1k requests = 36 MB → 5k = 180 MB (within 190 MB cap).
-# 7k would produce ~252 MB, exceeding the 200 MB OpenAI hard limit.
-DEFAULT_BATCH_SIZE: int = 5_000
+# Calibrated from full 44k dataset: avg 51 KB/row (website evidence increases size
+# vs the 1k pilot which had 36 KB/row). 3500 rows = ~170 MB avg, 176 MB max.
+# Stays comfortably under the 190 MB soft cap and 200 MB OpenAI hard limit.
+DEFAULT_BATCH_SIZE: int = 3_500
