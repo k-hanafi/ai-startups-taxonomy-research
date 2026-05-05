@@ -52,9 +52,9 @@ def _emit_billing_resume_help(state: PipelineState) -> None:
         "https://platform.openai.com/settings/organization/limits[/]\n\n"
         "[bold]2.[/] Resume submission and wait for completion:\n"
         "    [green]python classify.py submit[/]\n\n"
-        "[bold]3.[/] Fetch results and merge:\n"
+        "[bold]3.[/] Fetch results (writes to production_classifications.csv):\n"
         "    [green]python classify.py download[/]\n"
-        "    [green]python classify.py merge[/]\n\n"
+        "    [green]python classify.py merge[/]  # optional: print report\n\n"
         "State is saved; you do not need to re-run [italic]prepare[/]."
     )
     Console().print()
@@ -153,15 +153,15 @@ def _can_submit_more(state: PipelineState, concurrency: int) -> bool:
 def submit_and_monitor(
     state: PipelineState,
     *,
-    concurrency: int = 1,
+    concurrency: int = 50,
     model: str = DEFAULT_MODEL,
     batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> None:
     """Submit pending batches with queue pressure control, then monitor.
 
-    The concurrency parameter is a sliding window. It caps how many batches
-    are in-flight simultaneously and only submits the next when a running
-    one completes and releases tokens from the 15B queue limit.
+    All batches submit concurrently by default (concurrency=50). The 90%
+    queue pressure guard (15B token limit) is the real throttle — a manual
+    concurrency cap is rarely needed in practice.
     """
     client = get_client()
     run_id = state.run_id or generate_run_id(model)

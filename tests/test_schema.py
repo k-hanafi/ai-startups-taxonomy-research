@@ -47,7 +47,7 @@ class TestValidInput:
             assert result.subclass == sc
 
     def test_rejects_retired_subclasses(self):
-        """v2 codes 0C-THIN, 0C-THICK, 0D, and 0E were removed in v2.1."""
+        """Legacy draft codes 0C-THIN, 0C-THICK, 0D, and 0E were removed from the final taxonomy."""
         for sc in ["0C-THIN", "0C-THICK", "0D", "0E"]:
             with pytest.raises(ValidationError):
                 ClassificationResult.model_validate(_make(subclass=sc))
