@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tavily production cohort — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+:root {
+  --bg: #ffffff;
+  --bg2: #ffffff;
+  --bg3: #f8f9fb;
+  --border: #e5e7eb;
+  --border2: #d1d5db;
+  --text: #1a1a1a;
+  --text2: #4a4a4a;
+  --muted: #8a8a8a;
+  --navy: #1e2a4a;
+  --navy-light: #f0f2f7;
+  --indigo: #4f46e5;
+  --indigo-light: #eef2ff;
+  --indigo-border: #c7d2fe;
+  --emerald: #059669;
+  --emerald-light: #ecfdf5;
+  --amber: #d97706;
+  --amber-light: #fffbeb;
+  --rose: #e11d48;
+  --rose-light: #fff1f2;
+  --cyan: #0891b2;
+  --violet: #7c3aed;
+  --slate: #475569;
+  --serif: 'Cormorant Garamond', Georgia, serif;
+  --sans: 'Inter', -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { font-family: var(--sans); background: var(--bg); color: var(--text); line-height: 1.7; font-size: 15px; }
+::selection { background: var(--navy); color: white; }
+
+nav {
+  position: fixed; top: 0; left: 0; height: 100vh; width: 216px;
+  padding: 2.25rem 1.75rem; background: #000000; border-right: 1px solid rgba(255,255,255,0.08);
+  z-index: 100; display: flex; flex-direction: column; overflow-y: auto;
+}
+.nav-brand { font-family: var(--serif); font-size: 1rem; font-weight: 600; color: #ffffff; margin-bottom: 0.2rem; }
+.nav-sub { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.5); margin-bottom: 2.5rem; }
+.nav-section { margin-bottom: 1.5rem; }
+.nav-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(255,255,255,0.4); margin-bottom: 0.55rem; }
+nav ul { list-style: none; }
+nav ul li { margin-bottom: 0.3rem; }
+nav ul a { color: rgba(255,255,255,0.65); text-decoration: none; font-size: 0.8rem; display: block; padding: 0.15rem 0; transition: color 0.15s; }
+nav ul a:hover, nav ul a.active { color: #ffffff; font-weight: 500; }
+.nav-meta { margin-top: auto; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1); }
+.nav-meta p { font-size: 0.7rem; color: rgba(255,255,255,0.45); line-height: 1.6; }
+.nav-meta strong { color: rgba(255,255,255,0.7); }
+
+main { margin-left: 216px; }
+section {
+  padding: 5rem 4.5rem; max-width: 1100px;
+  border-bottom: 1px solid var(--border);
+  opacity: 0; transform: translateY(20px);
+  transition: opacity 0.65s ease, transform 0.65s ease;
+}
+section.visible { opacity: 1; transform: translateY(0); }
+section:last-of-type { border-bottom: none; }
+
+.section-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--navy); font-weight: 600; margin-bottom: 0.85rem; display: block; }
+h1 { font-family: var(--serif); font-size: clamp(2.2rem, 4vw, 3rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.4rem; color: var(--navy); }
+h2 { font-family: var(--serif); font-size: clamp(1.6rem, 2.8vw, 2rem); font-weight: 400; line-height: 1.2; margin-bottom: 0.85rem; color: var(--navy); }
+h3 { font-family: var(--serif); font-size: 1.2rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--navy); }
+p { color: var(--text2); font-size: 0.9rem; max-width: 720px; margin-bottom: 1.1rem; line-height: 1.75; }
+p:last-child { margin-bottom: 0; }
+
+.hero-metrics {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem;
+  margin: 2rem 0 1.5rem;
+}
+.metric-card {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 1.25rem 1.3rem; text-align: center;
+  transition: box-shadow 0.2s;
+}
+.metric-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+.metric-card.hl { border-color: var(--indigo-border); background: var(--indigo-light); }
+.mc-val { font-family: var(--serif); font-size: 2.2rem; line-height: 1; margin-bottom: 0.25rem; color: var(--navy); }
+.metric-card.hl .mc-val { color: var(--indigo); }
+.mc-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.3rem; }
+.mc-ctx { font-size: 0.75rem; color: var(--muted); }
+
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 2rem 0; }
+.chart-row.single { grid-template-columns: 1fr; }
+.chart-box {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+  overflow: hidden;
+}
+.chart-box-header { padding: 1.1rem 1.4rem 0.75rem; border-bottom: 1px solid var(--border); }
+.chart-box-title { font-family: var(--serif); font-size: 1.05rem; font-weight: 600; color: var(--navy); margin-bottom: 0.3rem; }
+.chart-box-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
+.chart-body { padding: 0.5rem 0.5rem; }
+
+.insight { padding: 1.1rem 1.4rem; border-radius: 8px; margin: 1.5rem 0; font-size: 0.85rem; line-height: 1.7; }
+.insight p { font-size: 0.85rem; max-width: none; margin-bottom: 0.35rem; }
+.insight p:last-child { margin-bottom: 0; }
+.insight-blue { background: var(--indigo-light); border: 1px solid var(--indigo-border); color: var(--text2); }
+.insight-blue strong { color: #3730a3; }
+
+.filter-bar {
+  display: flex; align-items: center; gap: 1.5rem;
+  padding: 0.85rem 1.4rem; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; margin: 1.5rem 0; flex-wrap: wrap;
+}
+.filter-bar label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--navy); }
+.filter-bar .pill-group { display: flex; gap: 0; }
+.pill-btn {
+  font-family: var(--mono); font-size: 0.7rem; padding: 0.35rem 0.85rem;
+  border: 1px solid var(--border); background: var(--bg2); color: var(--text2);
+  cursor: pointer; transition: all 0.15s;
+}
+.pill-btn:first-child { border-radius: 5px 0 0 5px; }
+.pill-btn:last-child { border-radius: 0 5px 5px 0; }
+.pill-btn:not(:last-child) { border-right: none; }
+.pill-btn.active { background: var(--navy); color: white; border-color: var(--navy); }
+
+.slider-group { display: flex; align-items: center; gap: 0.6rem; }
+.slider-group input[type=range] { width: 120px; accent-color: var(--navy); }
+.slider-val { font-family: var(--mono); font-size: 0.75rem; color: var(--navy); font-weight: 600; min-width: 20px; }
+
+footer {
+  padding: 2.5rem 4.5rem; text-align: center; color: var(--muted);
+  font-size: 0.75rem; border-top: 1px solid var(--border); margin-left: 216px;
+  line-height: 1.8;
+}
+footer strong { color: var(--text2); }
+
+@media (max-width: 1100px) {
+  nav { display: none; } main { margin-left: 0; } section { padding: 3rem 1.5rem; }
+  .hero-metrics { grid-template-columns: repeat(2, 1fr); }
+  .chart-row { grid-template-columns: 1fr; }
+  footer { margin-left: 0; padding: 2rem 1.5rem; }
+}
+@media print {
+  section { opacity: 1 !important; transform: none !important; }
+  nav { display: none; } main { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">Tavily production</div>
+  <div class="nav-sub">Full classified cohort</div>
+  <div class="nav-section">
+    <div class="nav-label">Sections</div>
+    <ul>
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#landscape">AI-Native Landscape</a></li>
+      <li><a href="#rad">RAD Score Analysis</a></li>
+      <li><a href="#cohorts">Cohort Dynamics</a></li>
+      <li><a href="#confidence">Confidence Audit</a></li>
+    </ul>
+  </div>
+  <div class="nav-meta">
+    <p><strong>Model</strong><br>gpt-5.4-nano</p>
+    <p style="margin-top:0.75rem;"><strong>Dataset</strong><br>All production rows<br>44,386 classified</p>
+    <p style="margin-top:0.75rem;"><strong>Method</strong><br>Tavily-enriched<br>(website scraping)</p>
+    <p style="margin-top:0.75rem;"><strong>Taxonomy</strong><br>10 classes<br>1A–1G, 0A–0C</p>
+  </div>
+</nav>
+
+<main>
+
+<section id="overview">
+  <span class="section-label">Tavily-Enriched Inputs</span>
+  <h1>Tavily-Enriched Classification<br>of 44,386 US Startups</h1>
+  <p>
+    Every row in <strong>production_classifications.csv</strong> for this pipeline run (44,386 companies),
+    classified under the <strong>10-class taxonomy</strong> (1A&ndash;1G plus 0A, 0B, 0C).
+    Each company was enriched with <strong>Tavily web scraping</strong> before inference: homepage and
+    product/about content was appended to Crunchbase descriptions so the model could use on-site evidence.
+  </p>
+
+  <div class="hero-metrics">
+    <div class="metric-card hl">
+      <div class="mc-label">Total Classified</div>
+      <div class="mc-val">44,386</div>
+      <div class="mc-ctx">US startups</div>
+    </div>
+    <div class="metric-card hl">
+      <div class="mc-label">AI-Native Rate</div>
+      <div class="mc-val">10.3%</div>
+      <div class="mc-ctx">4,554 startups</div>
+    </div>
+    <div class="metric-card">
+      <div class="mc-label">GENAI-ERA Cohort</div>
+      <div class="mc-val">8.7%</div>
+      <div class="mc-ctx">3,868 founded 2023+</div>
+    </div>
+    <div class="metric-card">
+      <div class="mc-label">Median Confidence</div>
+      <div class="mc-val">4</div>
+      <div class="mc-ctx">conf_classification (1&ndash;5)</div>
+    </div>
+    <div class="metric-card" style="border-color:#fecdd3;background:var(--rose-light);">
+      <div class="mc-label">Low Confidence</div>
+      <div class="mc-val" style="color:var(--rose);">29.6%</div>
+      <div class="mc-ctx">13,146 rows with conf &le; 2</div>
+    </div>
+  </div>
+</section>
+
+<section id="landscape">
+  <span class="section-label">01. Landscape</span>
+  <h2>The AI-Native Startup Landscape</h2>
+  <p>
+    In this full production cohort, <strong>10.3%</strong> (4,554) of 44,386
+    startups are AI-native under this taxonomy &mdash; thin and thick LLM wrappers appear as classes 1C and 1D on the AI-native side.
+    Most non-AI-native companies fall into traditional tech (0A) or non-tech (0C),
+    with the 0B bucket capturing AI-augmented businesses.
+  </p>
+
+  <div class="filter-bar">
+    <label>Cohort Filter</label>
+    <div class="pill-group" id="cohort-filter">
+      <button class="pill-btn active" data-cohort="ALL">All</button>
+      <button class="pill-btn" data-cohort="PRE-GENAI">PRE-GENAI</button>
+      <button class="pill-btn" data-cohort="GENAI-ERA">GENAI-ERA</button>
+    </div>
+    <label style="margin-left:auto;">Min Confidence</label>
+    <div class="slider-group">
+      <input type="range" id="conf-slider" min="1" max="5" value="1" step="1">
+      <span class="slider-val" id="conf-slider-val">1</span>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Subclass Distribution</div>
+        <div class="chart-box-desc">All 10 subclasses by count</div>
+      </div>
+      <div class="chart-body"><div id="chart-subclass" style="height:480px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">AI-Native Rate by Cohort</div>
+        <div class="chart-box-desc">PRE-GENAI vs GENAI-ERA</div>
+      </div>
+      <div class="chart-body"><div id="chart-ai-rate-cohort" style="height:360px;"></div></div>
+    </div>
+  </div>
+
+  <div class="insight insight-blue">
+    <p><strong>GENAI-ERA AI-native rate: 36.12%.</strong>
+    PRE-GENAI: 7.79%.
+    Post-2023 startups are dramatically more likely to build AI as the core product mechanism.</p>
+  </div>
+</section>
+
+<section id="rad">
+  <span class="section-label">02. Dependency</span>
+  <h2>RAD Score Analysis</h2>
+  <p>
+    4,547 startups have a meaningful RAD score (excluding RAD-NA).
+    Most are <strong>RAD-H</strong>: structurally dependent on third-party GenAI APIs.
+    Only 202 show low structural dependency.
+  </p>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">RAD Score Distribution</div>
+        <div class="chart-box-desc">Structural dependency on third-party GenAI</div>
+      </div>
+      <div class="chart-body"><div id="chart-rad" style="height:360px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Subclass &times; RAD Heatmap</div>
+        <div class="chart-box-desc">Which subclasses are most API-dependent?</div>
+      </div>
+      <div class="chart-body"><div id="chart-heatmap" style="height:520px;"></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="cohorts">
+  <span class="section-label">03. Temporal</span>
+  <h2>Cohort Dynamics</h2>
+  <p>
+    GPT-4 launched March 2023. That is the cohort boundary.
+    3,868 startups (8.7%) were founded after it.
+    How does their profile differ from the 40,518 PRE-GENAI startups?
+  </p>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Subclass Distribution by Cohort</div>
+        <div class="chart-box-desc">Which subclasses are new vs established?</div>
+      </div>
+      <div class="chart-body"><div id="chart-subclass-cohort" style="height:480px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">RAD Score by Cohort</div>
+        <div class="chart-box-desc">Are GENAI-ERA startups more API-dependent?</div>
+      </div>
+      <div class="chart-body"><div id="chart-rad-cohort" style="height:360px;"></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="confidence">
+  <span class="section-label">04. Data Quality</span>
+  <h2>Confidence &amp; Data Quality Audit</h2>
+  <p>
+    Distributions of <code>conf_classification</code> and <code>conf_rad</code> (1&ndash;5), and mean classification confidence by subclass.
+  </p>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Classification Confidence Distribution</div>
+        <div class="chart-box-desc">conf_classification values 1&ndash;5 across all rows</div>
+      </div>
+      <div class="chart-body"><div id="chart-conf-class" style="height:380px;"></div></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">RAD Confidence Distribution</div>
+        <div class="chart-box-desc">conf_rad values 1&ndash;5 (excluding null/RAD-NA)</div>
+      </div>
+      <div class="chart-body"><div id="chart-conf-rad" style="height:380px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Confidence by Subclass</div>
+        <div class="chart-box-desc">Which categories remain noisiest after website enrichment?</div>
+      </div>
+      <div class="chart-body"><div id="chart-conf-subclass" style="height:420px;"></div></div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <strong>Model:</strong> gpt-5.4-nano &nbsp;&middot;&nbsp;
+  <strong>Method:</strong> OpenAI Batch API with structured output &nbsp;&middot;&nbsp;
+  <strong>Taxonomy:</strong> 10 classes (1A&ndash;1G, 0A&ndash;0C) &nbsp;&middot;&nbsp;
+  <strong>Date:</strong> May 2026
+  <br>
+  44,386-company production export. Inputs enriched with Tavily web scraping (homepage + product pages) before classification.
+</footer>
+
+<script>
+const M = {"total": 44386, "ai_native_count": 4554, "ai_native_pct": 10.3, "genai_era_count": 3868, "genai_era_pct": 8.7, "median_conf": 4.0, "low_conf_count": 13146, "low_conf_pct": 29.6, "subclass_counts": {"1A": 75, "1B": 525, "1C": 143, "1D": 866, "1E": 2422, "1F": 401, "1G": 111, "0A": 35810, "0B": 228, "0C": 3805}, "rad_counts": {"RAD-H": 2226, "RAD-M": 2119, "RAD-L": 202, "RAD-NA": 39839}, "cohort_counts": {"PRE-GENAI": 40518, "GENAI-ERA": 3868}, "subclass_by_cohort": {"PRE-GENAI": {"1A": 53, "1B": 351, "1C": 92, "1D": 588, "1E": 1767, "1F": 215, "1G": 85, "0A": 33511, "0B": 206, "0C": 3650}, "GENAI-ERA": {"1A": 22, "1B": 174, "1C": 51, "1D": 278, "1E": 655, "1F": 186, "1G": 26, "0A": 2299, "0B": 22, "0C": 155}}, "ai_rate_by_cohort": {"PRE-GENAI": 7.79, "GENAI-ERA": 36.12}, "rad_by_cohort": {"PRE-GENAI": {"RAD-H": 1278, "RAD-M": 1710, "RAD-L": 165, "RAD-NA": 37365}, "GENAI-ERA": {"RAD-H": 948, "RAD-M": 409, "RAD-L": 37, "RAD-NA": 2474}}, "heatmap": {"1A": {"RAD-H": 21, "RAD-M": 24, "RAD-L": 30, "RAD-NA": 0}, "1B": {"RAD-H": 487, "RAD-M": 33, "RAD-L": 5, "RAD-NA": 0}, "1C": {"RAD-H": 143, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 0}, "1D": {"RAD-H": 275, "RAD-M": 539, "RAD-L": 52, "RAD-NA": 0}, "1E": {"RAD-H": 972, "RAD-M": 1362, "RAD-L": 88, "RAD-NA": 0}, "1F": {"RAD-H": 227, "RAD-M": 157, "RAD-L": 17, "RAD-NA": 0}, "1G": {"RAD-H": 97, "RAD-M": 4, "RAD-L": 10, "RAD-NA": 0}, "0A": {"RAD-H": 4, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 35806}, "0B": {"RAD-H": 0, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 228}, "0C": {"RAD-H": 0, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 3805}}, "conf_class_dist": {"1": 4383, "2": 8763, "3": 3667, "4": 12548, "5": 15025}, "conf_rad_dist": {"1": 126, "2": 1415, "3": 2084, "4": 764, "5": 13}, "conf_by_subclass": {"1A": {"median": 4.0, "q1": 3.0, "q3": 4.0, "mean": 3.64, "count": 75}, "1B": {"median": 4.0, "q1": 3.0, "q3": 4.0, "mean": 3.42, "count": 525}, "1C": {"median": 2.0, "q1": 2.0, "q3": 3.0, "mean": 2.48, "count": 143}, "1D": {"median": 3.0, "q1": 3.0, "q3": 4.0, "mean": 3.16, "count": 866}, "1E": {"median": 4.0, "q1": 3.0, "q3": 4.0, "mean": 3.47, "count": 2422}, "1F": {"median": 4.0, "q1": 3.0, "q3": 4.0, "mean": 3.72, "count": 401}, "1G": {"median": 4.0, "q1": 2.0, "q3": 4.0, "mean": 3.33, "count": 111}, "0A": {"median": 4.0, "q1": 2.0, "q3": 5.0, "mean": 3.51, "count": 35810}, "0B": {"median": 2.0, "q1": 2.0, "q3": 3.0, "mean": 2.32, "count": 228}, "0C": {"median": 5.0, "q1": 4.0, "q3": 5.0, "mean": 4.39, "count": 3805}}};
+
+const SUBCLASS_ORDER = ["1A", "1B", "1C", "1D", "1E", "1F", "1G", "0A", "0B", "0C"];
+const SUBCLASS_LABELS = {"1A": "1A  Foundation Layer", "1B": "1B  AI-Native Tooling", "1C": "1C  Thin LLM Wrapper", "1D": "1D  Thick LLM Integrator", "1E": "1E  Applied Vertical AI", "1F": "1F  Autonomous Agents", "1G": "1G  Generative Content", "0A": "0A  Traditional Tech", "0B": "0B  AI-Augmented", "0C": "0C  Non-Tech"};
+const SUBCLASS_COLORS = {"1A": "#4f46e5", "1B": "#0891b2", "1C": "#e11d48", "1D": "#f59e0b", "1E": "#7c3aed", "1F": "#059669", "1G": "#d97706", "0A": "#94a3b8", "0B": "#64748b", "0C": "#cbd5e1"};
+const RAD_ORDER = ["RAD-H", "RAD-M", "RAD-L", "RAD-NA"];
+const RAD_COLORS = {"RAD-H": "#e11d48", "RAD-M": "#d97706", "RAD-L": "#059669", "RAD-NA": "#94a3b8"};
+const COHORT_COLORS = {"PRE-GENAI": "#64748b", "GENAI-ERA": "#4f46e5"};
+const RAD_NA_CLASSES = ["0A", "0B", "0C"];
+
+const plotlyConfig = {displayModeBar: false, responsive: true};
+const axisFont = {family: 'Inter, sans-serif', size: 11, color: '#4a4a4a'};
+const titleFont = {family: 'Inter, sans-serif', size: 12, color: '#1e2a4a'};
+
+function plotLayout(extra) {
+  return Object.assign({
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    margin: {l: 130, r: 24, t: 24, b: 50},
+    font: axisFont,
+    xaxis: {gridcolor: '#f0f0f0', zerolinecolor: '#e5e7eb'},
+    yaxis: {gridcolor: '#f0f0f0', zerolinecolor: '#e5e7eb'},
+  }, extra || {});
+}
+
+function renderSubclass() {
+  const labels = SUBCLASS_ORDER.slice().reverse();
+  const vals = labels.map(s => M.subclass_counts[s]);
+  const colors = labels.map(s => SUBCLASS_COLORS[s]);
+  const displayLabels = labels.map(s => SUBCLASS_LABELS[s]);
+
+  Plotly.newPlot('chart-subclass', [{
+    type: 'bar', orientation: 'h',
+    y: displayLabels, x: vals,
+    marker: {color: colors},
+    text: vals.map(v => v.toLocaleString()),
+    textposition: 'outside',
+    textfont: {family: 'JetBrains Mono', size: 10},
+    hovertemplate: '%{y}<br>%{x:,} companies<extra></extra>',
+  }], plotLayout({
+    yaxis: {automargin: true, tickfont: {family: 'JetBrains Mono', size: 11}},
+    xaxis: {title: {text: 'Number of startups', font: titleFont}},
+    margin: {l: 200, r: 60, t: 16, b: 44},
+  }), plotlyConfig);
+}
+
+function renderAiRateCohort() {
+  const cohorts = ['PRE-GENAI', 'GENAI-ERA'];
+  Plotly.newPlot('chart-ai-rate-cohort', [
+    {
+      type: 'bar', name: 'AI-Native',
+      x: cohorts, y: cohorts.map(c => M.ai_rate_by_cohort[c]),
+      marker: {color: '#4f46e5'},
+      text: cohorts.map(c => M.ai_rate_by_cohort[c] + '%'),
+      textposition: 'outside',
+      textfont: {family: 'JetBrains Mono', size: 12, color: '#4f46e5'},
+      hovertemplate: '%{x}<br>AI-Native: %{y:.2f}%<extra></extra>',
+    },
+    {
+      type: 'bar', name: 'Not AI-Native',
+      x: cohorts, y: cohorts.map(c => (100 - M.ai_rate_by_cohort[c]).toFixed(2)),
+      marker: {color: '#e2e8f0'},
+      hovertemplate: '%{x}<br>Not AI-Native: %{y}%<extra></extra>',
+    },
+  ], plotLayout({
+    barmode: 'group',
+    yaxis: {title: {text: 'Percentage', font: titleFont}, range: [0, 105]},
+    xaxis: {tickfont: {family: 'JetBrains Mono', size: 12}},
+    legend: {orientation: 'h', y: 1.08, x: 0.5, xanchor: 'center', font: {size: 11}},
+    margin: {l: 55, r: 24, t: 40, b: 44},
+  }), plotlyConfig);
+}
+
+function renderRad() {
+  const radActive = RAD_ORDER.filter(r => r !== 'RAD-NA');
+  Plotly.newPlot('chart-rad', [{
+    type: 'bar',
+    x: radActive,
+    y: radActive.map(r => M.rad_counts[r]),
+    marker: {color: radActive.map(r => RAD_COLORS[r])},
+    text: radActive.map(r => M.rad_counts[r].toLocaleString()),
+    textposition: 'outside',
+    textfont: {family: 'JetBrains Mono', size: 11},
+    hovertemplate: '%{x}<br>%{y:,} companies<extra></extra>',
+  }], plotLayout({
+    yaxis: {title: {text: 'Number of startups', font: titleFont}},
+    xaxis: {tickfont: {family: 'JetBrains Mono', size: 12}},
+    margin: {l: 65, r: 24, t: 16, b: 44},
+    annotations: [{
+      x: 0.98, y: 0.95, xref: 'paper', yref: 'paper',
+      text: 'Excluding ' + M.rad_counts['RAD-NA'].toLocaleString() + ' RAD-NA',
+      showarrow: false, font: {size: 10, color: '#8a8a8a', family: 'Inter'},
+      xanchor: 'right',
+    }],
+  }), plotlyConfig);
+}
+
+function renderHeatmap() {
+  const radNA_classes = new Set(RAD_NA_CLASSES);
+  const yLabels = SUBCLASS_ORDER.map(s => SUBCLASS_LABELS[s]).concat(['Total']);
+  const cols = RAD_ORDER.concat(['Total']);
+
+  const radTotals = {};
+  RAD_ORDER.forEach(r => radTotals[r] = 0);
+  const rawGrid = [];
+  const rowTotals = [];
+
+  SUBCLASS_ORDER.forEach(s => {
+    const row = RAD_ORDER.map(r => M.heatmap[s][r]);
+    rawGrid.push(row);
+    const total = radNA_classes.has(s) ? null : row.reduce((a, b) => a + b, 0);
+    rowTotals.push(total);
+    if (!radNA_classes.has(s)) {
+      RAD_ORDER.forEach((r, i) => radTotals[r] += row[i]);
+    }
+  });
+
+  const bottomRow = RAD_ORDER.map(r => (r === 'RAD-NA') ? null : radTotals[r]);
+  const bottomTotal = bottomRow.filter(v => v !== null).reduce((a, b) => a + b, 0);
+  bottomRow.push(bottomTotal);
+
+  const zHeat = rawGrid.map(row => row.slice());
+  zHeat.push(RAD_ORDER.map(() => null));
+  const zLog = zHeat.map(row => row.map(v => (v != null && v > 0) ? Math.log10(v) : null));
+  const textHeat = zHeat.map(row => row.map(v => (v != null && v > 0) ? v.toLocaleString() : ''));
+
+  const zFull = zLog.map(row => row.concat([null]));
+  const textFull = textHeat.map(row => row.concat(['']));
+
+  const annotations = [];
+  const boldFont = {family: 'JetBrains Mono', size: 11, color: '#1e2a4a'};
+
+  rowTotals.forEach((t, i) => {
+    annotations.push({
+      x: 'Total', y: yLabels[i],
+      text: (t !== null && t > 0) ? '<b>' + t.toLocaleString() + '</b>' : '',
+      showarrow: false, font: boldFont,
+    });
+  });
+
+  RAD_ORDER.forEach((r, i) => {
+    const v = bottomRow[i];
+    annotations.push({
+      x: r, y: 'Total',
+      text: (v !== null && v > 0) ? '<b>' + v.toLocaleString() + '</b>' : '',
+      showarrow: false, font: boldFont,
+    });
+  });
+
+  annotations.push({
+    x: 'Total', y: 'Total',
+    text: '<b>' + bottomTotal.toLocaleString() + '</b>',
+    showarrow: false, font: boldFont,
+  });
+
+  Plotly.newPlot('chart-heatmap', [{
+    type: 'heatmap',
+    z: zFull, x: cols, y: yLabels,
+    text: textFull, texttemplate: '%{text}',
+    customdata: zFull,
+    colorscale: [[0, '#f8f9fb'], [0.2, '#eef2ff'], [0.4, '#c7d2fe'], [0.65, '#818cf8'], [1, '#3730a3']],
+    showscale: false,
+    hovertemplate: '%{y}<br>%{x}: %{text}<extra></extra>',
+    xgap: 2, ygap: 2,
+  }], plotLayout({
+    yaxis: {automargin: true, tickfont: {family: 'JetBrains Mono', size: 10}, autorange: 'reversed'},
+    xaxis: {side: 'top', tickfont: {family: 'JetBrains Mono', size: 11}},
+    margin: {l: 190, r: 16, t: 40, b: 16},
+    annotations: annotations,
+  }), plotlyConfig);
+}
+
+function renderSubclassCohort() {
+  const labels = SUBCLASS_ORDER.slice().reverse().map(s => SUBCLASS_LABELS[s]);
+  const traces = ['PRE-GENAI', 'GENAI-ERA'].map(c => ({
+    type: 'bar', orientation: 'h', name: c,
+    y: labels,
+    x: SUBCLASS_ORDER.slice().reverse().map(s => M.subclass_by_cohort[c][s]),
+    marker: {color: COHORT_COLORS[c]},
+    hovertemplate: c + '<br>%{y}: %{x:,}<extra></extra>',
+  }));
+  Plotly.newPlot('chart-subclass-cohort', traces, plotLayout({
+    barmode: 'group',
+    yaxis: {automargin: true, tickfont: {family: 'JetBrains Mono', size: 10}},
+    xaxis: {title: {text: 'Number of startups', font: titleFont}},
+    legend: {orientation: 'h', y: 1.06, x: 0.5, xanchor: 'center', font: {size: 11}},
+    margin: {l: 200, r: 24, t: 40, b: 44},
+  }), plotlyConfig);
+}
+
+function renderRadCohort() {
+  const radActive = RAD_ORDER.filter(r => r !== 'RAD-NA');
+  const traces = ['PRE-GENAI', 'GENAI-ERA'].map(c => ({
+    type: 'bar', name: c,
+    x: radActive,
+    y: radActive.map(r => M.rad_by_cohort[c][r]),
+    marker: {color: COHORT_COLORS[c]},
+    text: radActive.map(r => M.rad_by_cohort[c][r].toLocaleString()),
+    textposition: 'outside',
+    textfont: {family: 'JetBrains Mono', size: 10},
+    hovertemplate: c + '<br>%{x}: %{y:,}<extra></extra>',
+  }));
+  Plotly.newPlot('chart-rad-cohort', traces, plotLayout({
+    barmode: 'group',
+    yaxis: {title: {text: 'Number of startups', font: titleFont}},
+    xaxis: {tickfont: {family: 'JetBrains Mono', size: 12}},
+    legend: {orientation: 'h', y: 1.06, x: 0.5, xanchor: 'center', font: {size: 11}},
+    margin: {l: 65, r: 24, t: 40, b: 44},
+  }), plotlyConfig);
+}
+
+function renderConfClass() {
+  const levels = Object.keys(M.conf_class_dist).map(Number).sort();
+  const vals = levels.map(l => M.conf_class_dist[l]);
+  const colors = levels.map(l => l <= 2 ? '#e11d48' : l === 3 ? '#d97706' : '#059669');
+  Plotly.newPlot('chart-conf-class', [{
+    type: 'bar',
+    x: levels, y: vals,
+    marker: {color: colors},
+    text: vals.map(v => v.toLocaleString()),
+    textposition: 'outside',
+    textfont: {family: 'JetBrains Mono', size: 10},
+    hovertemplate: 'Confidence %{x}<br>%{y:,} companies<extra></extra>',
+  }], plotLayout({
+    xaxis: {title: {text: 'Confidence Level', font: titleFont}, dtick: 1, tickfont: {family: 'JetBrains Mono', size: 13}},
+    yaxis: {title: {text: 'Count', font: titleFont}},
+    margin: {l: 70, r: 24, t: 16, b: 50},
+  }), plotlyConfig);
+}
+
+function renderConfRad() {
+  const levels = Object.keys(M.conf_rad_dist).map(Number).sort();
+  const vals = levels.map(l => M.conf_rad_dist[l]);
+  const colors = levels.map(l => l <= 2 ? '#e11d48' : l === 3 ? '#d97706' : '#059669');
+  Plotly.newPlot('chart-conf-rad', [{
+    type: 'bar',
+    x: levels, y: vals,
+    marker: {color: colors},
+    text: vals.map(v => v.toLocaleString()),
+    textposition: 'outside',
+    textfont: {family: 'JetBrains Mono', size: 10},
+    hovertemplate: 'Confidence %{x}<br>%{y:,} companies<extra></extra>',
+  }], plotLayout({
+    xaxis: {title: {text: 'Confidence Level', font: titleFont}, dtick: 1, tickfont: {family: 'JetBrains Mono', size: 13}},
+    yaxis: {title: {text: 'Count', font: titleFont}},
+    margin: {l: 60, r: 24, t: 16, b: 50},
+  }), plotlyConfig);
+}
+
+function renderConfSubclass() {
+  const labels = SUBCLASS_ORDER.map(s => SUBCLASS_LABELS[s]);
+  const medians = SUBCLASS_ORDER.map(s => M.conf_by_subclass[s].median);
+  const means = SUBCLASS_ORDER.map(s => M.conf_by_subclass[s].mean);
+  const colors = SUBCLASS_ORDER.map(s => SUBCLASS_COLORS[s]);
+  Plotly.newPlot('chart-conf-subclass', [
+    {
+      type: 'bar', name: 'Mean confidence',
+      x: labels, y: means,
+      marker: {color: colors},
+      text: means.map(v => v.toFixed(1)),
+      textposition: 'outside',
+      textfont: {family: 'JetBrains Mono', size: 10},
+      hovertemplate: '%{x}<br>Mean: %{y:.2f}<extra></extra>',
+    },
+  ], plotLayout({
+    yaxis: {title: {text: 'Mean Confidence', font: titleFont}, range: [0, 5.5]},
+    xaxis: {tickangle: -35, tickfont: {family: 'JetBrains Mono', size: 9}},
+    margin: {l: 55, r: 24, t: 16, b: 120},
+    shapes: [{
+      type: 'line', x0: -0.5, x1: SUBCLASS_ORDER.length - 0.5,
+      y0: 3, y1: 3, line: {color: '#d97706', width: 1, dash: 'dot'},
+    }],
+    annotations: [{
+      x: SUBCLASS_ORDER.length - 0.7, y: 3.15, text: 'Threshold = 3',
+      showarrow: false, font: {size: 10, color: '#d97706', family: 'JetBrains Mono'},
+    }],
+  }), plotlyConfig);
+}
+
+renderSubclass();
+renderAiRateCohort();
+renderRad();
+renderHeatmap();
+renderSubclassCohort();
+renderRadCohort();
+renderConfClass();
+renderConfRad();
+renderConfSubclass();
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.06, rootMargin: '0px 0px -30px 0px' });
+document.querySelectorAll('section').forEach(s => observer.observe(s));
+document.getElementById('overview').classList.add('visible');
+
+const sections = document.querySelectorAll('section');
+const navLinks = document.querySelectorAll('nav ul a');
+const navObs = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const link = document.querySelector('nav ul a[href="#' + e.target.id + '"]');
+      if (link) link.classList.add('active');
+    }
+  });
+}, { threshold: 0.25 });
+sections.forEach(s => navObs.observe(s));
+</script>
+
+<script>
+const FILTER_DATA = {"ALL_1": {"subclass": {"1A": 75, "1B": 525, "1C": 143, "1D": 866, "1E": 2422, "1F": 401, "1G": 111, "0A": 35810, "0B": 228, "0C": 3805}, "total": 44386, "ai_native": 4554}, "ALL_2": {"subclass": {"1A": 74, "1B": 522, "1C": 138, "1D": 864, "1E": 2417, "1F": 401, "1G": 111, "0A": 31559, "0B": 211, "0C": 3706}, "total": 40003, "ai_native": 4527}, "ALL_3": {"subclass": {"1A": 63, "1B": 418, "1C": 51, "1D": 686, "1E": 2077, "1F": 355, "1G": 79, "0A": 23938, "0B": 67, "0C": 3506}, "total": 31240, "ai_native": 3729}, "ALL_4": {"subclass": {"1A": 44, "1B": 288, "1C": 21, "1D": 320, "1E": 1433, "1F": 287, "1G": 56, "0A": 21717, "0B": 22, "0C": 3385}, "total": 27573, "ai_native": 2449}, "ALL_5": {"subclass": {"1A": 17, "1B": 42, "1C": 1, "1D": 4, "1E": 51, "1F": 48, "1G": 13, "0A": 12539, "0B": 1, "0C": 2309}, "total": 15025, "ai_native": 176}, "PRE-GENAI_1": {"subclass": {"1A": 53, "1B": 351, "1C": 92, "1D": 588, "1E": 1767, "1F": 215, "1G": 85, "0A": 33511, "0B": 206, "0C": 3650}, "total": 40518, "ai_native": 3157}, "PRE-GENAI_2": {"subclass": {"1A": 52, "1B": 348, "1C": 87, "1D": 587, "1E": 1763, "1F": 215, "1G": 85, "0A": 29683, "0B": 191, "0C": 3558}, "total": 36569, "ai_native": 3137}, "PRE-GENAI_3": {"subclass": {"1A": 41, "1B": 269, "1C": 30, "1D": 453, "1E": 1519, "1F": 181, "1G": 57, "0A": 22592, "0B": 64, "0C": 3381}, "total": 28587, "ai_native": 2550}, "PRE-GENAI_4": {"subclass": {"1A": 26, "1B": 167, "1C": 11, "1D": 171, "1E": 1008, "1F": 138, "1G": 42, "0A": 20491, "0B": 21, "0C": 3268}, "total": 25343, "ai_native": 1563}, "PRE-GENAI_5": {"subclass": {"1A": 9, "1B": 19, "1C": 1, "1D": 3, "1E": 21, "1F": 16, "1G": 10, "0A": 11821, "0B": 1, "0C": 2238}, "total": 14139, "ai_native": 79}, "GENAI-ERA_1": {"subclass": {"1A": 22, "1B": 174, "1C": 51, "1D": 278, "1E": 655, "1F": 186, "1G": 26, "0A": 2299, "0B": 22, "0C": 155}, "total": 3868, "ai_native": 1397}, "GENAI-ERA_2": {"subclass": {"1A": 22, "1B": 174, "1C": 51, "1D": 277, "1E": 654, "1F": 186, "1G": 26, "0A": 1876, "0B": 20, "0C": 148}, "total": 3434, "ai_native": 1390}, "GENAI-ERA_3": {"subclass": {"1A": 22, "1B": 149, "1C": 21, "1D": 233, "1E": 558, "1F": 174, "1G": 22, "0A": 1346, "0B": 3, "0C": 125}, "total": 2653, "ai_native": 1179}, "GENAI-ERA_4": {"subclass": {"1A": 18, "1B": 121, "1C": 10, "1D": 149, "1E": 425, "1F": 149, "1G": 14, "0A": 1226, "0B": 1, "0C": 117}, "total": 2230, "ai_native": 886}, "GENAI-ERA_5": {"subclass": {"1A": 8, "1B": 23, "1C": 0, "1D": 1, "1E": 30, "1F": 32, "1G": 3, "0A": 718, "0B": 0, "0C": 71}, "total": 886, "ai_native": 97}};
+</script>
+
+
+<script>
+(function() {
+  let currentCohort = 'ALL';
+  let currentMinConf = 1;
+
+  function updateSubclassChart() {
+    const key = currentCohort + '_' + currentMinConf;
+    const fd = FILTER_DATA[key];
+    if (!fd) return;
+    const labels = SUBCLASS_ORDER.slice().reverse();
+    const vals = labels.map(s => fd.subclass[s]);
+    const colors = labels.map(s => SUBCLASS_COLORS[s]);
+    const displayLabels = labels.map(s => SUBCLASS_LABELS[s]);
+
+    Plotly.react('chart-subclass', [{
+      type: 'bar', orientation: 'h',
+      y: displayLabels, x: vals,
+      marker: {color: colors},
+      text: vals.map(v => v.toLocaleString()),
+      textposition: 'outside',
+      textfont: {family: 'JetBrains Mono', size: 10},
+      hovertemplate: '%{y}<br>%{x:,} companies<extra></extra>',
+    }], {
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {family: 'Inter, sans-serif', size: 11, color: '#4a4a4a'},
+      yaxis: {automargin: true, tickfont: {family: 'JetBrains Mono', size: 11}, gridcolor: '#f0f0f0'},
+      xaxis: {title: {text: 'Number of startups (' + fd.total.toLocaleString() + ' shown)', font: {family: 'Inter', size: 12, color: '#1e2a4a'}}, gridcolor: '#f0f0f0', zerolinecolor: '#e5e7eb'},
+      margin: {l: 200, r: 60, t: 16, b: 44},
+    }, {displayModeBar: false, responsive: true});
+  }
+
+  document.querySelectorAll('#cohort-filter .pill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#cohort-filter .pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentCohort = btn.dataset.cohort;
+      updateSubclassChart();
+    });
+  });
+
+  const slider = document.getElementById('conf-slider');
+  const sliderVal = document.getElementById('conf-slider-val');
+  slider.addEventListener('input', () => {
+    currentMinConf = parseInt(slider.value);
+    sliderVal.textContent = currentMinConf;
+    updateSubclassChart();
+  });
+})();
+</script>
+</body>
+</html>
