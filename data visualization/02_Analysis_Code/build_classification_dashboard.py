@@ -1,47 +1,64 @@
 #!/usr/bin/env python3
-"""Build the v2 classification results dashboard as a standalone HTML file.
+"""Build the main classification dashboard from the migrated US baseline CSV.
 
-Reads outputs/production_csvs/classified_startups_v2.csv, computes all metrics and chart
-data, and writes data visualization/01_Presentation_Materials/v2_dashboard.html.
+10-class taxonomy (1A–1G + 0A, 0B, 0C). Reads outputs/legacy_csv/classified_startups_v21_migrated.csv,
+computes metrics and chart data, and writes:
+    data visualization/01_Presentation_Materials/full_baseline_cohort.html
 """
 
 from __future__ import annotations
 
 import json
-from collections import Counter
 from pathlib import Path
 
 import pandas as pd
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CSV_PATH = _PROJECT_ROOT / "outputs" / "production_csvs" / "classified_startups_v2.csv"
+CSV_PATH = _PROJECT_ROOT / "outputs" / "legacy_csv" / "classified_startups_v21_migrated.csv"
 OUTPUT_PATH = (
-    _PROJECT_ROOT / "data visualization" / "01_Presentation_Materials" / "v2_dashboard.html"
+    _PROJECT_ROOT / "data visualization" / "01_Presentation_Materials" / "full_baseline_cohort.html"
 )
 
-SUBCLASS_ORDER = ["1A", "1B", "1C", "1D", "1E", "0A", "0B", "0C-THIN", "0C-THICK", "0D", "0E"]
+SUBCLASS_ORDER = ["1A", "1B", "1C", "1D", "1E", "1F", "1G", "0A", "0B", "0C"]
 SUBCLASS_LABELS = {
     "1A": "1A  Foundation Layer",
-    "1B": "1B  Applied Vertical AI",
-    "1C": "1C  AI-Native Tooling",
-    "1D": "1D  Autonomous Agents",
-    "1E": "1E  Generative Content",
+    "1B": "1B  AI-Native Tooling",
+    "1C": "1C  Thin LLM Wrapper",
+    "1D": "1D  Thick LLM Integrator",
+    "1E": "1E  Applied Vertical AI",
+    "1F": "1F  Autonomous Agents",
+    "1G": "1G  Generative Content",
     "0A": "0A  Traditional Tech",
     "0B": "0B  AI-Augmented",
-    "0C-THIN": "0C-THIN  Thin Wrapper",
-    "0C-THICK": "0C-THICK  Thick Integrator",
-    "0D": "0D  AI-Adjacent",
-    "0E": "0E  Non-Tech",
+    "0C": "0C  Non-Tech",
 }
+# Colors follow semantic meaning across subclasses so that visual identity is
+# preserved class-by-class:
+#   1A Foundation        -> indigo (unchanged)
+#   1B Tooling           -> cyan (was old 1C color)
+#   1C Thin Wrapper      -> rose (was old 0C-THIN color)
+#   1D Thick Integrator  -> amber-yellow (was old 0C-THICK color)
+#   1E Vertical AI       -> violet (was old 1B color)
+#   1F Autonomous Agents -> emerald (was old 1D color)
+#   1G Generative        -> amber (was old 1E color)
 SUBCLASS_COLORS = {
-    "1A": "#4f46e5", "1B": "#7c3aed", "1C": "#0891b2",
-    "1D": "#059669", "1E": "#d97706",
-    "0A": "#94a3b8", "0B": "#64748b", "0C-THIN": "#e11d48",
-    "0C-THICK": "#f59e0b", "0D": "#10b981", "0E": "#cbd5e1",
+    "1A": "#4f46e5",
+    "1B": "#0891b2",
+    "1C": "#e11d48",
+    "1D": "#f59e0b",
+    "1E": "#7c3aed",
+    "1F": "#059669",
+    "1G": "#d97706",
+    "0A": "#94a3b8",
+    "0B": "#64748b",
+    "0C": "#cbd5e1",
 }
 RAD_ORDER = ["RAD-H", "RAD-M", "RAD-L", "RAD-NA"]
 RAD_COLORS = {"RAD-H": "#e11d48", "RAD-M": "#d97706", "RAD-L": "#059669", "RAD-NA": "#94a3b8"}
 COHORT_COLORS = {"PRE-GENAI": "#64748b", "GENAI-ERA": "#4f46e5"}
+
+# Heatmap: subclasses 0A–0C are RAD-NA only (row totals suppressed for H/M/L).
+RAD_NA_CLASSES = ["0A", "0B", "0C"]
 
 
 def compute_metrics(df: pd.DataFrame) -> dict:
@@ -59,43 +76,37 @@ def compute_metrics(df: pd.DataFrame) -> dict:
     cohort_counts = {"PRE-GENAI": int((df.cohort == "PRE-GENAI").sum()),
                      "GENAI-ERA": int((df.cohort == "GENAI-ERA").sum())}
 
-    # Subclass x cohort
     subclass_by_cohort = {}
     for cohort in ["PRE-GENAI", "GENAI-ERA"]:
         cdf = df[df.cohort == cohort]
         subclass_by_cohort[cohort] = {s: int((cdf.subclass == s).sum()) for s in SUBCLASS_ORDER}
 
-    # AI-native rate by cohort
     ai_rate_by_cohort = {}
     for cohort in ["PRE-GENAI", "GENAI-ERA"]:
         cdf = df[df.cohort == cohort]
         ai_rate_by_cohort[cohort] = round((cdf.ai_native == 1).mean() * 100, 2)
 
-    # RAD by cohort (excluding RAD-NA for meaningful comparison)
     rad_by_cohort = {}
     for cohort in ["PRE-GENAI", "GENAI-ERA"]:
         cdf = df[df.cohort == cohort]
         rad_by_cohort[cohort] = {r: int((cdf.rad_score == r).sum()) for r in RAD_ORDER}
 
-    # Subclass x RAD heatmap
     heatmap = {}
     for s in SUBCLASS_ORDER:
         heatmap[s] = {r: int(((df.subclass == s) & (df.rad_score == r)).sum()) for r in RAD_ORDER}
 
-    # Confidence distributions
     conf_class_dist = {int(k): int(v) for k, v in df.conf_classification.value_counts().sort_index().items()}
     conf_rad_valid = df.conf_rad.dropna()
     conf_rad_dist = {int(k): int(v) for k, v in conf_rad_valid.value_counts().sort_index().items()}
 
-    # Confidence by subclass (median + IQR)
     conf_by_subclass = {}
     for s in SUBCLASS_ORDER:
         vals = df[df.subclass == s].conf_classification
         conf_by_subclass[s] = {
-            "median": float(vals.median()),
-            "q1": float(vals.quantile(0.25)),
-            "q3": float(vals.quantile(0.75)),
-            "mean": round(float(vals.mean()), 2),
+            "median": float(vals.median()) if len(vals) else 0.0,
+            "q1": float(vals.quantile(0.25)) if len(vals) else 0.0,
+            "q3": float(vals.quantile(0.75)) if len(vals) else 0.0,
+            "mean": round(float(vals.mean()), 2) if len(vals) else 0.0,
             "count": int(len(vals)),
         }
 
@@ -128,7 +139,7 @@ def build_html(m: dict) -> str:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>V2 Classification Results — Dashboard</title>
+<title>Classification results — Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -201,7 +212,6 @@ h3 {{ font-family: var(--serif); font-size: 1.2rem; font-weight: 500; margin-bot
 p {{ color: var(--text2); font-size: 0.9rem; max-width: 720px; margin-bottom: 1.1rem; line-height: 1.75; }}
 p:last-child {{ margin-bottom: 0; }}
 
-/* Hero metrics */
 .hero-metrics {{
   display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem;
   margin: 2rem 0 1.5rem;
@@ -218,7 +228,6 @@ p:last-child {{ margin-bottom: 0; }}
 .mc-label {{ font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.3rem; }}
 .mc-ctx {{ font-size: 0.75rem; color: var(--muted); }}
 
-/* Chart containers */
 .chart-row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 2rem 0; }}
 .chart-row.single {{ grid-template-columns: 1fr; }}
 .chart-box {{
@@ -230,20 +239,12 @@ p:last-child {{ margin-bottom: 0; }}
 .chart-box-desc {{ font-size: 0.78rem; color: var(--muted); line-height: 1.5; }}
 .chart-body {{ padding: 0.5rem 0.5rem; }}
 
-/* Insight boxes */
 .insight {{ padding: 1.1rem 1.4rem; border-radius: 8px; margin: 1.5rem 0; font-size: 0.85rem; line-height: 1.7; }}
 .insight p {{ font-size: 0.85rem; max-width: none; margin-bottom: 0.35rem; }}
 .insight p:last-child {{ margin-bottom: 0; }}
 .insight-blue {{ background: var(--indigo-light); border: 1px solid var(--indigo-border); color: var(--text2); }}
 .insight-blue strong {{ color: #3730a3; }}
-.insight-amber {{ background: var(--amber-light); border: 1px solid #fde68a; color: var(--text2); }}
-.insight-amber strong {{ color: #92400e; }}
-.insight-emerald {{ background: var(--emerald-light); border: 1px solid #a7f3d0; color: var(--text2); }}
-.insight-emerald strong {{ color: #065f46; }}
-.insight-rose {{ background: var(--rose-light); border: 1px solid #fecdd3; color: var(--text2); }}
-.insight-rose strong {{ color: #9f1239; }}
 
-/* Filter controls */
 .filter-bar {{
   display: flex; align-items: center; gap: 1.5rem;
   padding: 0.85rem 1.4rem; background: var(--bg3); border: 1px solid var(--border);
@@ -287,7 +288,7 @@ footer strong {{ color: var(--text2); }}
 <body>
 
 <nav>
-  <div class="nav-brand">Classification v2.0</div>
+  <div class="nav-brand">Classification</div>
   <div class="nav-sub">Results Dashboard</div>
   <div class="nav-section">
     <div class="nav-label">Sections</div>
@@ -302,24 +303,20 @@ footer strong {{ color: var(--text2); }}
   <div class="nav-meta">
     <p><strong>Model</strong><br>gpt-5.4-nano</p>
     <p style="margin-top:0.75rem;"><strong>Dataset</strong><br>{m["total"]:,} startups<br>Crunchbase US</p>
-    <p style="margin-top:0.75rem;"><strong>Input</strong><br>Short + Long descriptions only</p>
+    <p style="margin-top:0.75rem;"><strong>Taxonomy</strong><br>10 classes<br>1A–1G, 0A–0C</p>
   </div>
 </nav>
 
 <main>
 
-<!-- ═══════ OVERVIEW ═══════ -->
 <section id="overview">
-  <span class="section-label">Proof of Concept</span>
-  <h1>V2 Two-Axis Classification<br>of {m["total"]:,} US Startups</h1>
+  <span class="section-label">Taxonomy</span>
+  <h1>Two-Axis Classification<br>of {m["total"]:,} US Startups</h1>
   <p>
-    Every startup in the Crunchbase US dataset was classified using the v2 two-axis taxonomy.
-    Each company received one of 11 <strong>AI-native subclasses</strong> and a
-    <strong>Resource-Adjusted Dependency score</strong> (RAD).
-  </p>
-  <p>
-    Input: short and long descriptions only. No agentic search. No supplementary sources.
-    These results establish a baseline for the full pipeline.
+    Full US Crunchbase cohort: short and long descriptions only at classification time.
+    The model uses a <strong>10-class taxonomy</strong> (1A&ndash;1G for AI-native patterns, 0A&ndash;0C for non-native buckets):
+    thin and thick LLM wrappers are 1C and 1D, AI-augmented companies sit in 0B,
+    and the AI-native subclasses are ordered from foundation (1A) outward.
   </p>
 
   <div class="hero-metrics">
@@ -349,22 +346,16 @@ footer strong {{ color: var(--text2); }}
       <div class="mc-ctx">{m["low_conf_count"]:,} rows with conf &le; 2</div>
     </div>
   </div>
-
-  <div class="insight insight-amber">
-    <p><strong>{m["low_conf_pct"]}% of rows have confidence &le; 2.</strong>
-    Short and long descriptions alone do not give the model enough signal.
-    Richer inputs from agentic deep research would directly reduce this uncertainty.</p>
-  </div>
 </section>
 
-<!-- ═══════ AI-NATIVE LANDSCAPE ═══════ -->
 <section id="landscape">
   <span class="section-label">01. Landscape</span>
   <h2>The AI-Native Startup Landscape</h2>
   <p>
-    Only <strong>{m["ai_native_pct"]}%</strong> ({m["ai_native_count"]:,}) of {m["total"]:,} startups are AI-native.
-    Most fall into traditional tech (0A) or non-tech (0E).
-    Among AI-native startups, Applied Vertical AI (1B) leads.
+    In this cohort, <strong>{m["ai_native_pct"]}%</strong> ({m["ai_native_count"]:,}) of {m["total"]:,} startups are AI-native &mdash;
+    thin and thick LLM wrappers are explicit subclasses (1C and 1D) on the AI-native side.
+    Most non-AI-native companies fall into traditional tech (0A) or non-tech (0C),
+    with the 0B bucket capturing AI-augmented businesses.
   </p>
 
   <div class="filter-bar">
@@ -385,7 +376,7 @@ footer strong {{ color: var(--text2); }}
     <div class="chart-box">
       <div class="chart-box-header">
         <div class="chart-box-title">Subclass Distribution</div>
-        <div class="chart-box-desc">All 11 subclasses by count</div>
+        <div class="chart-box-desc">All 10 subclasses by count</div>
       </div>
       <div class="chart-body"><div id="chart-subclass" style="height:480px;"></div></div>
     </div>
@@ -404,11 +395,10 @@ footer strong {{ color: var(--text2); }}
   <div class="insight insight-blue">
     <p><strong>GENAI-ERA AI-native rate: {m["ai_rate_by_cohort"]["GENAI-ERA"]}%.</strong>
     PRE-GENAI: {m["ai_rate_by_cohort"]["PRE-GENAI"]}%.
-    Post-2023 startups are 5x more likely to build AI as the core product.</p>
+    Post-2023 startups are dramatically more likely to build AI as the core product mechanism.</p>
   </div>
 </section>
 
-<!-- ═══════ RAD SCORE ═══════ -->
 <section id="rad">
   <span class="section-label">02. Dependency</span>
   <h2>RAD Score Analysis</h2>
@@ -416,11 +406,6 @@ footer strong {{ color: var(--text2); }}
     {m["rad_counts"]["RAD-H"] + m["rad_counts"]["RAD-M"] + m["rad_counts"]["RAD-L"]:,} startups have a meaningful RAD score (excluding RAD-NA).
     Most are <strong>RAD-H</strong>: structurally dependent on third-party GenAI APIs.
     Only {m["rad_counts"]["RAD-L"]} show low structural dependency.
-  </p>
-  <p style="font-size:0.82rem;color:var(--muted);">
-    RAD is evaluated only for companies where AI plays a structural role (1A&ndash;1E, 0B, 0C).
-    Traditional tech (0A), non-tech (0E), and AI-adjacent (0D) companies receive RAD-NA by design.
-    The question &ldquo;how dependent on external GenAI?&rdquo; has no meaning for a company that does not use AI.
   </p>
 
   <div class="chart-row single">
@@ -442,14 +427,8 @@ footer strong {{ color: var(--text2); }}
       <div class="chart-body"><div id="chart-heatmap" style="height:520px;"></div></div>
     </div>
   </div>
-
-  <div class="insight insight-emerald">
-    <p><strong>{m["rad_counts"]["RAD-H"]:,} startups are RAD-H</strong> (high structural dependency on external GenAI).
-    The RAD split among AI-native startups shows how much of the ecosystem runs on borrowed infrastructure.</p>
-  </div>
 </section>
 
-<!-- ═══════ COHORT DYNAMICS ═══════ -->
 <section id="cohorts">
   <span class="section-label">03. Temporal</span>
   <h2>Cohort Dynamics</h2>
@@ -480,14 +459,11 @@ footer strong {{ color: var(--text2); }}
   </div>
 </section>
 
-<!-- ═══════ CONFIDENCE ═══════ -->
 <section id="confidence">
   <span class="section-label">04. Data Quality</span>
   <h2>Confidence &amp; Data Quality Audit</h2>
   <p>
-    Model confidence exposes where descriptions alone fall short.
-    <strong>{m["low_conf_pct"]}% of classifications</strong> have confidence &le; 2.
-    These rows would benefit most from agentic deep research.
+    Distributions of <code>conf_classification</code> and <code>conf_rad</code> (1&ndash;5), and mean classification confidence by subclass.
   </p>
 
   <div class="chart-row">
@@ -516,12 +492,6 @@ footer strong {{ color: var(--text2); }}
       <div class="chart-body"><div id="chart-conf-subclass" style="height:420px;"></div></div>
     </div>
   </div>
-
-  <div class="insight insight-rose">
-    <p><strong>{m["low_conf_count"]:,} classifications ({m["low_conf_pct"]}%) have confidence &le; 2.</strong>
-    These companies lack enough text for reliable classification.
-    An agentic pipeline that retrieves websites, press releases, and product docs would convert these guesses into evidence-backed judgments.</p>
-  </div>
 </section>
 
 </main>
@@ -529,10 +499,10 @@ footer strong {{ color: var(--text2); }}
 <footer>
   <strong>Model:</strong> gpt-5.4-nano &nbsp;&middot;&nbsp;
   <strong>Method:</strong> OpenAI Batch API with structured output &nbsp;&middot;&nbsp;
-  <strong>Input:</strong> Short + long descriptions only (no agentic search) &nbsp;&middot;&nbsp;
+  <strong>Taxonomy:</strong> 10 classes (1A&ndash;1G, 0A&ndash;0C) &nbsp;&middot;&nbsp;
   <strong>Date:</strong> April 2026
   <br>
-  Proof of concept. Next step: agentic deep research with richer input data.
+  Full US baseline run: Crunchbase descriptions only; batch API with structured output.
 </footer>
 
 <script>
@@ -544,6 +514,7 @@ const SUBCLASS_COLORS = {json.dumps(SUBCLASS_COLORS)};
 const RAD_ORDER = {json.dumps(RAD_ORDER)};
 const RAD_COLORS = {json.dumps(RAD_COLORS)};
 const COHORT_COLORS = {json.dumps(COHORT_COLORS)};
+const RAD_NA_CLASSES = {json.dumps(RAD_NA_CLASSES)};
 
 const plotlyConfig = {{displayModeBar: false, responsive: true}};
 const axisFont = {{family: 'Inter, sans-serif', size: 11, color: '#4a4a4a'}};
@@ -560,7 +531,6 @@ function plotLayout(extra) {{
   }}, extra || {{}});
 }}
 
-// ── Chart 1a: Subclass distribution ──
 function renderSubclass() {{
   const labels = SUBCLASS_ORDER.slice().reverse();
   const vals = labels.map(s => M.subclass_counts[s]);
@@ -582,7 +552,6 @@ function renderSubclass() {{
   }}), plotlyConfig);
 }}
 
-// ── Chart 1b: AI-native rate by cohort ──
 function renderAiRateCohort() {{
   const cohorts = ['PRE-GENAI', 'GENAI-ERA'];
   Plotly.newPlot('chart-ai-rate-cohort', [
@@ -610,7 +579,6 @@ function renderAiRateCohort() {{
   }}), plotlyConfig);
 }}
 
-// ── Chart 2a: RAD distribution ──
 function renderRad() {{
   const radActive = RAD_ORDER.filter(r => r !== 'RAD-NA');
   Plotly.newPlot('chart-rad', [{{
@@ -635,13 +603,11 @@ function renderRad() {{
   }}), plotlyConfig);
 }}
 
-// ── Chart 2b: Heatmap ──
 function renderHeatmap() {{
-  const radNA_classes = new Set(['0A', '0D', '0E']);
+  const radNA_classes = new Set(RAD_NA_CLASSES);
   const yLabels = SUBCLASS_ORDER.map(s => SUBCLASS_LABELS[s]).concat(['Total']);
   const cols = RAD_ORDER.concat(['Total']);
 
-  // Build data grid: subclass rows + bottom totals row
   const radTotals = {{}};
   RAD_ORDER.forEach(r => radTotals[r] = 0);
   const rawGrid = [];
@@ -657,26 +623,21 @@ function renderHeatmap() {{
     }}
   }});
 
-  // Bottom totals row (only H/M/L meaningful, NA and Total blank)
   const bottomRow = RAD_ORDER.map(r => (r === 'RAD-NA') ? null : radTotals[r]);
   const bottomTotal = bottomRow.filter(v => v !== null).reduce((a, b) => a + b, 0);
   bottomRow.push(bottomTotal);
 
-  // Build z grid: subclass rows have color, Total row + Total col are null (no color)
   const zHeat = rawGrid.map(row => row.slice());
-  zHeat.push(RAD_ORDER.map(() => null)); // bottom row: no color
+  zHeat.push(RAD_ORDER.map(() => null));
   const zLog = zHeat.map(row => row.map(v => (v != null && v > 0) ? Math.log10(v) : null));
   const textHeat = zHeat.map(row => row.map(v => (v != null && v > 0) ? v.toLocaleString() : ''));
 
-  // Null out Total column for all rows
   const zFull = zLog.map(row => row.concat([null]));
   const textFull = textHeat.map(row => row.concat(['']));
 
-  // Annotations for Total column (right) and Total row (bottom)
   const annotations = [];
   const boldFont = {{family: 'JetBrains Mono', size: 11, color: '#1e2a4a'}};
 
-  // Right-side totals per subclass row
   rowTotals.forEach((t, i) => {{
     annotations.push({{
       x: 'Total', y: yLabels[i],
@@ -685,7 +646,6 @@ function renderHeatmap() {{
     }});
   }});
 
-  // Bottom totals per RAD column
   RAD_ORDER.forEach((r, i) => {{
     const v = bottomRow[i];
     annotations.push({{
@@ -695,7 +655,6 @@ function renderHeatmap() {{
     }});
   }});
 
-  // Bottom-right grand total
   annotations.push({{
     x: 'Total', y: 'Total',
     text: '<b>' + bottomTotal.toLocaleString() + '</b>',
@@ -719,7 +678,6 @@ function renderHeatmap() {{
   }}), plotlyConfig);
 }}
 
-// ── Chart 3a: Subclass by cohort ──
 function renderSubclassCohort() {{
   const labels = SUBCLASS_ORDER.slice().reverse().map(s => SUBCLASS_LABELS[s]);
   const traces = ['PRE-GENAI', 'GENAI-ERA'].map(c => ({{
@@ -738,7 +696,6 @@ function renderSubclassCohort() {{
   }}), plotlyConfig);
 }}
 
-// ── Chart 3b: RAD by cohort ──
 function renderRadCohort() {{
   const radActive = RAD_ORDER.filter(r => r !== 'RAD-NA');
   const traces = ['PRE-GENAI', 'GENAI-ERA'].map(c => ({{
@@ -760,7 +717,6 @@ function renderRadCohort() {{
   }}), plotlyConfig);
 }}
 
-// ── Chart 4a: Classification confidence ──
 function renderConfClass() {{
   const levels = Object.keys(M.conf_class_dist).map(Number).sort();
   const vals = levels.map(l => M.conf_class_dist[l]);
@@ -780,7 +736,6 @@ function renderConfClass() {{
   }}), plotlyConfig);
 }}
 
-// ── Chart 4b: RAD confidence ──
 function renderConfRad() {{
   const levels = Object.keys(M.conf_rad_dist).map(Number).sort();
   const vals = levels.map(l => M.conf_rad_dist[l]);
@@ -800,7 +755,6 @@ function renderConfRad() {{
   }}), plotlyConfig);
 }}
 
-// ── Chart 4c: Confidence by subclass ──
 function renderConfSubclass() {{
   const labels = SUBCLASS_ORDER.map(s => SUBCLASS_LABELS[s]);
   const medians = SUBCLASS_ORDER.map(s => M.conf_by_subclass[s].median);
@@ -831,7 +785,6 @@ function renderConfSubclass() {{
   }}), plotlyConfig);
 }}
 
-// ── Render all ──
 renderSubclass();
 renderAiRateCohort();
 renderRad();
@@ -842,14 +795,12 @@ renderConfClass();
 renderConfRad();
 renderConfSubclass();
 
-// ── Scroll reveals ──
 const observer = new IntersectionObserver((entries) => {{
   entries.forEach(e => {{ if (e.isIntersecting) e.target.classList.add('visible'); }});
 }}, {{ threshold: 0.06, rootMargin: '0px 0px -30px 0px' }});
 document.querySelectorAll('section').forEach(s => observer.observe(s));
 document.getElementById('overview').classList.add('visible');
 
-// ── Nav active state ──
 const sections = document.querySelectorAll('section');
 const navLinks = document.querySelectorAll('nav ul a');
 const navObs = new IntersectionObserver((entries) => {{
@@ -862,23 +813,9 @@ const navObs = new IntersectionObserver((entries) => {{
   }});
 }}, {{ threshold: 0.25 }});
 sections.forEach(s => navObs.observe(s));
-
-// ── Cohort filter + confidence slider ──
-// Pre-compute filtered data for interactive charts
-const fullData = {json.dumps({
-    "subclass_by_cohort_conf": "PLACEHOLDER"
-})};
-
-// We need to pass the raw per-row data for interactive filtering.
-// Instead, we pre-compute all combinations server-side.
 </script>
 
 <script>
-// ── Interactive filters (cohort + confidence) ──
-// The filter controls update chart-subclass only (the main distribution chart).
-// Full re-render requires pre-aggregated data for all filter combos.
-// For this dashboard we pre-aggregate in Python and inject.
-
 const FILTER_DATA = {{}};
 </script>
 
@@ -894,7 +831,6 @@ def main() -> None:
     print("Computing metrics ...")
     m = compute_metrics(df)
 
-    # Pre-compute filtered aggregations for interactive controls
     filter_data = {}
     for cohort in ["ALL", "PRE-GENAI", "GENAI-ERA"]:
         for min_conf in range(1, 6):
@@ -912,13 +848,11 @@ def main() -> None:
     print("Building HTML ...")
     html = build_html(m)
 
-    # Inject the filter data
     html = html.replace(
         "const FILTER_DATA = {};",
         f"const FILTER_DATA = {json.dumps(filter_data)};",
     )
 
-    # Add the interactive filter JS
     filter_js = """
 <script>
 (function() {
@@ -969,15 +903,6 @@ def main() -> None:
   });
 })();
 </script>"""
-
-    # Remove the placeholder fullData reference
-    html = html.replace(
-        """const fullData = {"subclass_by_cohort_conf": "PLACEHOLDER"};
-
-// We need to pass the raw per-row data for interactive filtering.
-// Instead, we pre-compute all combinations server-side.""",
-        "// Filter data loaded via FILTER_DATA object.",
-    )
 
     html = html.replace("</body>", filter_js + "\n</body>")
 
