@@ -7,7 +7,8 @@ a feasibility measurement, not the real scrape: we sample (not census) so a few
 hundred queries give a tight estimate of the coverage percentage before we
 commit to building the full historical pipeline.
 
-Resumable: re-running skips org_uuids already in the output CSV.
+Resumable: re-running skips org_uuids already resolved (status=ok), including
+confirmed no-March-2023 misses — those never hit the API again.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import argparse
 import csv
 import json
 import random
+import sys
 import threading
 import time
 import urllib.error
@@ -26,23 +28,65 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from wayback_machine.config import (  # noqa: E402
+    CDX_429_MIN_PAUSE_SECONDS,
+    CDX_DEFAULT_CONCURRENCY,
+    CDX_DEFAULT_RETRIES,
+    CDX_DEFAULT_TIMEOUT_SECONDS,
+    CDX_SAFE_RPM,
+    WINDOW_FROM,
+    WINDOW_TO,
+)
+
 COHORT_CSV = PROJECT_ROOT / "wayback_machine" / "data" / "wayback_cohort.csv"
 OUTPUT_CSV = PROJECT_ROOT / "wayback_machine" / "data" / "coverage_sample.csv"
 
 CDX_ENDPOINT = "http://web.archive.org/cdx/search/cdx"
 TARGET = datetime(2023, 3, 14)
-WINDOW_FROM = "20221201"
-WINDOW_TO = "20230630"
+USER_AGENT = "wayback-coverage-probe/2.0 (research; contact: batchkit)"
 
-# Tunables set from CLI args in main(); read by probe_one in worker threads.
-JITTER = (0.3, 0.9)
 DO_EVER_CALL = True
+_LIMITER: CdxRateLimiter | None = None
+_CDX_RETRIES = CDX_DEFAULT_RETRIES
+_CDX_TIMEOUT = CDX_DEFAULT_TIMEOUT_SECONDS
 
 OUTPUT_FIELDS = [
     "org_uuid", "name", "homepage_url", "founded_date", "host",
     "has_2023", "closest_ts", "days_from_target", "n_window_captures",
     "has_any_ever", "status",
 ]
+
+
+class CdxRateLimiter:
+    """Global CDX throttle: one slot every (60/rpm) seconds, freeze all threads on 429.
+
+    IA documents /cdx/* at 60 req/min; clients should target 48/min (80% headroom).
+    On 429, every worker must pause ≥60s or risk an hour-long IP block.
+    """
+
+    def __init__(self, rpm: float, *, pause_on_429: float = CDX_429_MIN_PAUSE_SECONDS) -> None:
+        self._min_interval = 60.0 / rpm
+        self._pause_on_429 = pause_on_429
+        self._lock = threading.Lock()
+        self._next_slot = 0.0
+        self._frozen_until = 0.0
+
+    def wait_turn(self) -> None:
+        with self._lock:
+            now = time.monotonic()
+            wake = max(self._next_slot, self._frozen_until)
+            if now < wake:
+                time.sleep(wake - now)
+                now = time.monotonic()
+            self._next_slot = now + self._min_interval
+
+    def freeze_for_429(self, retry_after: float | None) -> float:
+        with self._lock:
+            pause = max(self._pause_on_429, retry_after or 0.0)
+            self._frozen_until = max(self._frozen_until, time.monotonic() + pause)
+            return pause
 
 
 def to_host(url: str) -> str:
@@ -55,14 +99,19 @@ def to_host(url: str) -> str:
     return net[4:] if net.startswith("www.") else net
 
 
-def _cdx_get(params: str, *, retries: int = 2, timeout: float = 40.0) -> list[list[str]]:
-    """GET the CDX endpoint, retrying transient failures. Returns parsed rows minus header."""
+def _cdx_get(params: str) -> list[list[str]]:
+    """GET the CDX endpoint with global rate limiting and patient retries."""
+    if _LIMITER is None:
+        msg = "CdxRateLimiter not initialized"
+        raise RuntimeError(msg)
+
     url = f"{CDX_ENDPOINT}?{params}"
     last_exc: Exception | None = None
-    for attempt in range(retries):
+    for attempt in range(_CDX_RETRIES):
+        _LIMITER.wait_turn()
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "wayback-coverage-probe/1.0"})
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(req, timeout=_CDX_TIMEOUT) as resp:
                 body = resp.read().decode("utf-8", errors="replace").strip()
             if not body:
                 return []
@@ -71,17 +120,18 @@ def _cdx_get(params: str, *, retries: int = 2, timeout: float = 40.0) -> list[li
         except urllib.error.HTTPError as exc:
             last_exc = exc
             if exc.code == 429:
-                retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                wait = float(retry_after) if retry_after and retry_after.isdigit() else 6.0 * (attempt + 1)
-                time.sleep(wait)
+                retry_hdr = exc.headers.get("Retry-After") if exc.headers else None
+                retry_after = float(retry_hdr) if retry_hdr and retry_hdr.isdigit() else None
+                pause = _LIMITER.freeze_for_429(retry_after)
+                print(f"  CDX 429 — pausing all requests {pause:.0f}s", flush=True)
+                time.sleep(pause)
             elif exc.code in {500, 502, 503, 504}:
-                time.sleep(2.0 * (attempt + 1))
+                time.sleep(min(30.0, 2.0 * (2**attempt)))
             else:
                 raise
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
             last_exc = exc
-            # Connection drops = throttling; a cheap single retry, then move on (errors retried next run).
-            time.sleep(2.0 * (attempt + 1))
+            time.sleep(min(30.0, 2.0 * (2**attempt)))
     if last_exc:
         raise last_exc
     return []
@@ -102,7 +152,6 @@ def probe_one(row: dict[str, str]) -> dict[str, str]:
         result["status"] = "no_host"
         return result
 
-    time.sleep(random.uniform(*JITTER))  # politeness jitter — keep us under the CDX rate limit
     try:
         window = _cdx_get(
             f"url={quote(host)}&from={WINDOW_FROM}&to={WINDOW_TO}"
@@ -124,21 +173,24 @@ def probe_one(row: dict[str, str]) -> dict[str, str]:
                 continue
             if best_days is None or days < best_days:
                 best_days, best_ts = days, ts
-        result.update(has_2023="True", closest_ts=best_ts,
-                      days_from_target=str(best_days if best_days is not None else ""),
-                      has_any_ever="True", status="ok")
+        result.update(
+            has_2023="True",
+            closest_ts=best_ts,
+            days_from_target=str(best_days if best_days is not None else ""),
+            has_any_ever="True",
+            status="ok",
+        )
         return result
 
-    # No 2023 window capture. Optionally check whether the domain is archived at all.
-    # Skipped on the full-census run to halve calls on misses (we already learned
-    # from the 300 sample that "never archived" is ~0).
     result["has_2023"] = "False"
     if not DO_EVER_CALL:
         result["has_any_ever"] = ""
         result["status"] = "ok"
         return result
     try:
-        ever = _cdx_get(f"url={quote(host)}&filter=statuscode:200&collapse=urlkey&limit=1&output=json")
+        ever = _cdx_get(
+            f"url={quote(host)}&filter=statuscode:200&collapse=urlkey&limit=1&output=json"
+        )
         result["has_any_ever"] = "True" if ever else "False"
         result["status"] = "ok"
     except Exception as exc:  # noqa: BLE001
@@ -147,9 +199,10 @@ def probe_one(row: dict[str, str]) -> dict[str, str]:
 
 
 def load_resolved_ids(path: Path) -> set[str]:
-    """Return org_uuids already resolved (status ok) in a prior run, so we skip them.
+    """Return org_uuids already resolved (status ok) — never query the API again.
 
-    Error rows are intentionally NOT counted, so a resumed run retries them.
+    Includes confirmed no-March-2023 misses (ok + has_2023=False). Error rows are
+    intentionally NOT counted, so a resumed run retries throttle failures only.
     """
     if not path.exists():
         return set()
@@ -162,28 +215,38 @@ def load_resolved_ids(path: Path) -> set[str]:
 
 
 def main() -> None:
-    global JITTER, DO_EVER_CALL
+    global DO_EVER_CALL, _LIMITER, _CDX_RETRIES, _CDX_TIMEOUT
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sample-size", type=int, default=300,
                         help="Companies to probe. Use 0 (or >= cohort) for the full census.")
-    parser.add_argument("--concurrency", type=int, default=4)
+    parser.add_argument("--concurrency", type=int, default=CDX_DEFAULT_CONCURRENCY,
+                        help="Worker threads (keep at 1 unless rpm is raised).")
+    parser.add_argument("--rpm", type=float, default=float(CDX_SAFE_RPM),
+                        help="Max CDX requests/min globally (IA hard cap 60; safe 48).")
+    parser.add_argument("--retries", type=int, default=CDX_DEFAULT_RETRIES,
+                        help="Per-request retries before recording an error row.")
+    parser.add_argument("--timeout", type=float, default=CDX_DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", type=Path, default=OUTPUT_CSV)
     parser.add_argument("--skip-ever-call", action="store_true",
                         help="Skip the second 'archived ever?' call on misses (faster for big runs).")
-    parser.add_argument("--jitter-min", type=float, default=0.3)
-    parser.add_argument("--jitter-max", type=float, default=0.9)
     args = parser.parse_args()
 
-    JITTER = (args.jitter_min, args.jitter_max)
+    if args.rpm > 60:
+        parser.error("--rpm cannot exceed IA hard cap of 60/min for /cdx/*")
+    if args.concurrency > 1 and args.rpm >= 48:
+        print("  note: concurrency>1 with rpm≤48 rarely helps; workers share one rate limit",
+              flush=True)
+
+    _LIMITER = CdxRateLimiter(args.rpm)
+    _CDX_RETRIES = args.retries
+    _CDX_TIMEOUT = args.timeout
     DO_EVER_CALL = not args.skip_ever_call
 
     with COHORT_CSV.open(encoding="utf-8", newline="") as f:
         cohort = list(csv.DictReader(f))
 
     if args.sample_size <= 0 or args.sample_size >= len(cohort):
-        # Full census, but shuffled (fixed seed) so an interrupted overnight run leaves an
-        # UNBIASED random subset rather than a non-random prefix of the cohort file.
         targets = list(cohort)
         random.Random(args.seed).shuffle(targets)
         mode = f"FULL census ({len(cohort):,}), shuffled seed {args.seed}"
@@ -194,14 +257,16 @@ def main() -> None:
 
     done = load_resolved_ids(args.output)
     todo = [r for r in targets if r.get("org_uuid") not in done]
-    print(f"Cohort={len(cohort):,}  {mode}  already_resolved={len(done)}  to_probe={len(todo)}  "
-          f"concurrency={args.concurrency}  ever_call={DO_EVER_CALL}", flush=True)
+    print(
+        f"Cohort={len(cohort):,}  {mode}  already_resolved={len(done)}  to_probe={len(todo)}  "
+        f"concurrency={args.concurrency}  rpm={args.rpm:.0f}  retries={args.retries}  "
+        f"ever_call={DO_EVER_CALL}",
+        flush=True,
+    )
     if not todo:
         print("Nothing to do.", flush=True)
         return
 
-    # Incremental append + flush per row: an interruption (sleep, crash) loses at most
-    # the in-flight rows, and a resumed run skips everything already written.
     args.output.parent.mkdir(parents=True, exist_ok=True)
     write_header = not args.output.exists() or args.output.stat().st_size == 0
     lock = threading.Lock()
@@ -230,9 +295,11 @@ def main() -> None:
                     pct = hit / ok * 100 if ok else 0.0
                     rate = n / (time.monotonic() - started) * 60
                     eta_h = (len(todo) - n) / (rate / 60) / 3600 if rate else float("inf")
-                    print(f"  probed={n:,}/{len(todo):,}  resolved={ok:,}  err={err:,}  "
-                          f"has_2023={hit:,} ({pct:.1f}%)  {rate:.0f}/min  ETA={eta_h:.1f}h",
-                          flush=True)
+                    print(
+                        f"  probed={n:,}/{len(todo):,}  resolved={ok:,}  err={err:,}  "
+                        f"has_2023={hit:,} ({pct:.1f}%)  {rate:.0f}/min  ETA={eta_h:.1f}h",
+                        flush=True,
+                    )
 
         with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
             list(pool.map(work, todo))
@@ -240,8 +307,11 @@ def main() -> None:
     n, hit, err = counter["n"], counter["hit"], counter["err"]
     ok = n - err
     pct = hit / ok * 100 if ok else 0.0
-    print(f"DONE  probed={n:,}  resolved={ok:,}  errors={err:,}  "
-          f"has_2023={hit:,} ({pct:.1f}% of resolved)  -> {args.output}", flush=True)
+    print(
+        f"DONE  probed={n:,}  resolved={ok:,}  errors={err:,}  "
+        f"has_2023={hit:,} ({pct:.1f}% of resolved)  -> {args.output}",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
