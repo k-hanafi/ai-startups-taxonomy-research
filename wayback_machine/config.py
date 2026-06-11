@@ -19,6 +19,17 @@ TARGET_DATE = "20230314"          # GPT-4 launch, the anchor for "March 2023"
 WINDOW_FROM = "20221201"
 WINDOW_TO = "20230630"
 
+# CDX Server API rate limits (Internet Archive staff, wayback-py #137):
+#   /cdx/* hard cap ≈ 60 requests/minute (averaged over 5 minutes).
+#   Exceeding → HTTP 429; ignoring 429s >1 min → IP firewall block (1h, doubles).
+#   Recommended client default: 80% of hard cap = 48/min.
+CDX_HARD_LIMIT_RPM = 60
+CDX_SAFE_RPM = 48
+CDX_429_MIN_PAUSE_SECONDS = 60.0
+CDX_DEFAULT_RETRIES = 8
+CDX_DEFAULT_TIMEOUT_SECONDS = 60.0
+CDX_DEFAULT_CONCURRENCY = 1
+
 # Cohort existence cutoff: only study companies that existed at GPT-4 launch.
 # founded_date is YYYY-MM in our data; inclusive of March 2023. A company founded
 # after this could still have a (later) capture in the probe window, so this is a
