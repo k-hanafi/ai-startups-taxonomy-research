@@ -66,8 +66,14 @@ DEFAULT_HEARTBEAT_EVERY = 100
 # Budget control (call-count based — extract returns no usage field)
 # ---------------------------------------------------------------------------
 
-# Basic extraction bills 1 API credit per 5 successful extractions.
-EXTRACTIONS_PER_CREDIT = 5
+# Tavily bills extract in blocks of 5 successful URL extractions (failed rows free).
+# Basic: 1 credit / 5 successes. Advanced: 2 credits / 5 successes.
+# https://docs.tavily.com/documentation/api-credits
+EXTRACTIONS_PER_CREDIT_BLOCK = 5
+CREDITS_PER_BLOCK_BASIC = 1
+CREDITS_PER_BLOCK_ADVANCED = 2
+# Back-compat alias used in comments elsewhere.
+EXTRACTIONS_PER_CREDIT = EXTRACTIONS_PER_CREDIT_BLOCK
 # Generous ceiling: ~16k retrievable companies ≈ ~3,200 credits. The cap is a
 # guardrail against a runaway loop, not an expected limit.
 DEFAULT_BUDGET_CREDITS = 50_000.0
@@ -101,8 +107,11 @@ class ExtractConfig:
         }
 
 
-def estimate_credits(successful_extractions: int) -> float:
-    """Estimate API credits spent for N successful basic extractions."""
+def estimate_credits(successful_extractions: int, *, extract_depth: str = "basic") -> float:
+    """Estimate API credits spent for N successful extractions at the given depth."""
     if successful_extractions <= 0:
         return 0.0
-    return successful_extractions / float(EXTRACTIONS_PER_CREDIT)
+    credits_per_block = (
+        CREDITS_PER_BLOCK_ADVANCED if extract_depth == "advanced" else CREDITS_PER_BLOCK_BASIC
+    )
+    return successful_extractions * credits_per_block / float(EXTRACTIONS_PER_CREDIT_BLOCK)
