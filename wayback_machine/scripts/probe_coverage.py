@@ -173,6 +173,15 @@ def probe_one(row: dict[str, str]) -> dict[str, str]:
                 continue
             if best_days is None or days < best_days:
                 best_days, best_ts = days, ts
+        if not best_ts:
+            result.update(
+                has_2023="",
+                closest_ts="",
+                days_from_target="",
+                has_any_ever="",
+                status="error:bad_timestamp",
+            )
+            return result
         result.update(
             has_2023="True",
             closest_ts=best_ts,
