@@ -61,7 +61,13 @@ from .paths import (
     SCRAPE_TARGETS_CSV,
     SNAPSHOTS_JSONL,
 )
-from .state import ExtractState, completed_ids_from_jsonl, heal_jsonl_tail
+from .state import (
+    ExtractState,
+    completed_ids_from_jsonl,
+    heal_jsonl_tail,
+    processed_ids_from_csv,
+    reconcile_extract_state,
+)
 
 PROCESSED_FIELDS = [
     "org_uuid", "name", "homepage_url", "snapshot_ts",
@@ -431,7 +437,59 @@ def _emit_heartbeat(
             fh.write(line1 + "\n" + line2 + "\n")
 
 
-def _append_processed_row(processed_csv: Path, row: dict[str, Any]) -> None:
+def processed_row_from_snapshot_record(record: dict[str, Any]) -> dict[str, str] | None:
+    """Build a scrape_processed.csv row from one successful JSONL snapshot record."""
+    if record.get("ok") is not True or record.get("status") != "success":
+        return None
+    response = record.get("response")
+    if not isinstance(response, dict):
+        return None
+    homepage_url = str(record.get("homepage_url", ""))
+    pages_used, evidence = _evidence_from_response(response, homepage_url)
+    if not evidence.strip():
+        return None
+    return {
+        "org_uuid": str(record.get("org_uuid", "")).strip(),
+        "name": str(record.get("name", "")),
+        "homepage_url": homepage_url,
+        "snapshot_ts": str(record.get("snapshot_ts", "")),
+        "website_pages_used": pages_used,
+        "website_evidence": evidence,
+    }
+
+
+def backfill_processed_csv(jsonl_path: Path, processed_csv: Path) -> int:
+    """Append success rows from JSONL that are missing from the processed CSV."""
+    existing = processed_ids_from_csv(processed_csv)
+    to_add: list[dict[str, str]] = []
+    if not jsonl_path.exists():
+        return 0
+
+    with jsonl_path.open(encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            row = processed_row_from_snapshot_record(record)
+            if row is None:
+                continue
+            org_uuid = row["org_uuid"]
+            if not org_uuid or org_uuid in existing:
+                continue
+            to_add.append(row)
+            existing.add(org_uuid)
+
+    for row in to_add:
+        _append_processed_row(processed_csv, row, fsync=True)
+    return len(to_add)
+
+
+def _append_processed_row(
+    processed_csv: Path, row: dict[str, Any], *, fsync: bool = False,
+) -> None:
     processed_csv.parent.mkdir(parents=True, exist_ok=True)
     write_header = not processed_csv.exists() or processed_csv.stat().st_size == 0
     with processed_csv.open("a", encoding="utf-8", newline="") as fh:
@@ -439,6 +497,9 @@ def _append_processed_row(processed_csv: Path, row: dict[str, Any]) -> None:
         if write_header:
             writer.writeheader()
         writer.writerow({k: row.get(k, "") for k in PROCESSED_FIELDS})
+        if fsync:
+            fh.flush()
+            os.fsync(fh.fileno())
 
 
 def _append_run_manifest(manifest_csv: Path, row: dict[str, Any]) -> None:
@@ -538,6 +599,15 @@ def run_extract(
         print(f"[extract] healed {healed} trailing bytes from {out_path}", file=sys.stderr, flush=True)
 
     state = ExtractState.load(state_path)
+    reconcile_extract_state(state, out_path)
+    state.save(state_path)
+    backfilled = backfill_processed_csv(out_path, processed_path)
+    if backfilled:
+        print(
+            f"[extract] backfilled {backfilled} row(s) into {processed_path}",
+            file=sys.stderr,
+            flush=True,
+        )
     completed_ids = completed_ids_from_jsonl(out_path)
 
     pending: list[dict[str, str]] = []
@@ -571,7 +641,7 @@ def run_extract(
     succeeded_run = 0
     empty_run = 0
     failed_run = 0
-    credits_start = estimate_credits(state.successful)
+    credits_start = estimate_credits(state.successful, extract_depth=cfg.extract_depth)
     budget_reached = False
     exit_reason = "completed"
     errors: Counter[str] = Counter()
@@ -604,11 +674,6 @@ def run_extract(
             if not outcome.retryable:
                 completed_ids.add(org_uuid)
 
-        out.write(json.dumps(outcome.record, ensure_ascii=False) + "\n")
-        out.flush()
-        os.fsync(out.fileno())
-        state.save(state_path)
-
         if outcome.status == "success":
             _append_processed_row(processed_path, {
                 "org_uuid": org_uuid,
@@ -617,7 +682,12 @@ def run_extract(
                 "snapshot_ts": outcome.record.get("snapshot_ts", ""),
                 "website_pages_used": outcome.pages_used,
                 "website_evidence": outcome.evidence,
-            })
+            }, fsync=True)
+
+        out.write(json.dumps(outcome.record, ensure_ascii=False) + "\n")
+        out.flush()
+        os.fsync(out.fileno())
+        state.save(state_path)
 
         rows_written[0] += 1
         if heartbeat_every > 0 and rows_written[0] % heartbeat_every == 0:
@@ -625,7 +695,10 @@ def run_extract(
                 log_path=heartbeat_path,
                 processed=rows_written[0] + skipped_existing,
                 total=heartbeat_total, succeeded=succeeded_run, empty=empty_run,
-                failed=failed_run, est_credits=estimate_credits(state.successful) - credits_start,
+                failed=failed_run,
+                est_credits=estimate_credits(
+                    state.successful, extract_depth=cfg.extract_depth,
+                ) - credits_start,
                 elapsed_seconds=time.monotonic() - started, last_org_uuid=state.last_org_uuid,
             )
 
@@ -634,22 +707,31 @@ def run_extract(
         write_lock = threading.Lock()
         rows_deque: deque[dict[str, str]] = deque(pending)
         worker_errors: list[BaseException] = []
+        in_flight_rows = 0
+
+        def _estimated_credits() -> float:
+            return estimate_credits(
+                state.successful + in_flight_rows,
+                extract_depth=cfg.extract_depth,
+            )
 
         def run_worker() -> None:
-            nonlocal attempted, budget_reached, exit_reason
+            nonlocal attempted, budget_reached, exit_reason, in_flight_rows
             try:
                 while True:
                     if stop.stop_requested:
                         return
+                    target: dict[str, str] | None = None
                     with deque_lock:
                         if not rows_deque:
                             return
-                        if estimate_credits(state.successful) >= budget_credits:
+                        if _estimated_credits() >= budget_credits:
                             budget_reached = True
                             exit_reason = "budget_reached"
                             return
                         target = rows_deque.popleft()
                         attempted += 1
+                        in_flight_rows += 1
                     try:
                         outcome = _run_row_with_outage(
                             target=target, cfg=cfg, api_key=api_key, rate_limiter=rate_limiter,
@@ -661,12 +743,17 @@ def run_extract(
                         with deque_lock:
                             rows_deque.appendleft(target)
                             attempted -= 1
+                            in_flight_rows -= 1
                         return
                     except Exception as exc:
+                        with deque_lock:
+                            in_flight_rows -= 1
                         worker_errors.append(exc)
                         return
                     with write_lock:
                         persist(out, outcome)
+                    with deque_lock:
+                        in_flight_rows -= 1
                     if stop.stop_requested:
                         exit_reason = "user_interrupt"
                         return
@@ -692,7 +779,8 @@ def run_extract(
     report = ExtractRunReport(
         attempted=attempted, succeeded=succeeded_run, empty=empty_run, failed=failed_run,
         skipped_existing=skipped_existing,
-        est_credits=estimate_credits(state.successful) - credits_start,
+        est_credits=estimate_credits(state.successful, extract_depth=cfg.extract_depth)
+        - credits_start,
         budget_reached=budget_reached, errors_by_status=dict(errors), exit_reason=exit_reason,
     )
     with suppress(OSError):
