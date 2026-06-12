@@ -90,14 +90,18 @@ def main() -> None:
     n = len(targets)
     elapsed = time.monotonic() - started
     avg_chars = sum(char_lengths) / len(char_lengths) if char_lengths else 0
-    cph = estimate_credits(ok) / ok if ok else 0.0
+    cph = estimate_credits(ok, extract_depth=cfg.extract_depth) / ok if ok else 0.0
     print("\n=== SPIKE SUMMARY ===", file=sys.stderr)
     print(f"  sampled:        {n}", file=sys.stderr)
     print(f"  ok:             {ok} ({ok / n * 100:.0f}%)", file=sys.stderr)
     print(f"  empty/thin:     {empty}", file=sys.stderr)
     print(f"  failed:         {failed}", file=sys.stderr)
     print(f"  avg evidence:   {avg_chars:,.0f} chars", file=sys.stderr)
-    print(f"  est credits:    {estimate_credits(ok):.1f} ({cph:.2f}/company)", file=sys.stderr)
+    print(
+        f"  est credits:    {estimate_credits(ok, extract_depth=cfg.extract_depth):.1f} "
+        f"({cph:.2f}/company)",
+        file=sys.stderr,
+    )
     print(f"  elapsed:        {elapsed:.0f}s ({n / elapsed * 60:.0f}/min)", file=sys.stderr)
     print(f"  raw -> {args.output}", file=sys.stderr)
 

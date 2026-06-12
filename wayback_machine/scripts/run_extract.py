@@ -37,6 +37,13 @@ def main() -> None:
                         help="Override RPM cap. 0 disables the limiter.")
     args = parser.parse_args()
 
+    if args.extract_depth == "advanced":
+        print(
+            "[extract] advanced depth bills 2 credits per 5 successes "
+            "(basic is 1 per 5); budget estimates use the advanced rate.",
+            file=sys.stderr,
+        )
+
     report = run_extract(
         targets_csv=args.targets,
         config=ExtractConfig(extract_depth=args.extract_depth),
