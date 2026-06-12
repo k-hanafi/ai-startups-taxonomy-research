@@ -6,8 +6,9 @@ Three things make a multi-hour paid run safe to interrupt and resume:
    ``os.replace``) so a crash mid-write can never corrupt it.
 2. ``heal_jsonl_tail`` — on startup, repair a half-flushed final line in the
    append-only raw log left by a power loss between ``write`` and ``fsync``.
-3. ``completed_ids_from_jsonl`` — read which companies are already done so a
-   resumed run skips them and never pays twice.
+3. ``completed_ids_from_jsonl`` + ``reconcile_extract_state`` — read which
+   companies are already done and rebuild counters from JSONL so budget state
+   cannot drift from the append-only log.
 
 Adapted from the proven helpers in ``src/tavily_crawl.py``.
 """
@@ -16,7 +17,8 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass
+import csv
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -98,6 +100,75 @@ def heal_jsonl_tail(path: str | Path) -> int:
     with p.open("ab") as fh:
         fh.write(b"\n")
     return 0
+
+
+@dataclass
+class OutcomeTally:
+    """Aggregate counters derived from the append-only snapshots JSONL."""
+
+    successful: int = 0
+    empty: int = 0
+    failed: int = 0
+    completed_ids: set[str] = field(default_factory=set)
+
+
+def tally_outcomes_from_jsonl(path: str | Path) -> OutcomeTally:
+    """Single pass over JSONL to rebuild counters and the completed-id set."""
+    p = Path(path)
+    tally = OutcomeTally()
+    if not p.exists():
+        return tally
+
+    with p.open(encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            org_uuid = str(obj.get("org_uuid", "")).strip()
+            ok = obj.get("ok")
+            retryable = obj.get("retryable")
+            status = str(obj.get("status", ""))
+
+            if org_uuid and (ok is True or retryable is False):
+                tally.completed_ids.add(org_uuid)
+
+            if ok is True:
+                if status == "success":
+                    tally.successful += 1
+                elif status in ("empty_results", "thin_evidence"):
+                    tally.empty += 1
+            elif ok is False:
+                tally.failed += 1
+
+    return tally
+
+
+def reconcile_extract_state(state: ExtractState, jsonl_path: str | Path) -> OutcomeTally:
+    """Overwrite counter fields from JSONL so resume state cannot drift."""
+    tally = tally_outcomes_from_jsonl(jsonl_path)
+    state.successful = tally.successful
+    state.empty = tally.empty
+    state.failed = tally.failed
+    return tally
+
+
+def processed_ids_from_csv(path: str | Path) -> set[str]:
+    """Return org_uuids already present in the processed evidence CSV."""
+    p = Path(path)
+    if not p.exists() or p.stat().st_size == 0:
+        return set()
+
+    ids: set[str] = set()
+    with p.open(encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            org_uuid = str(row.get("org_uuid", "")).strip()
+            if org_uuid:
+                ids.add(org_uuid)
+    return ids
 
 
 def completed_ids_from_jsonl(path: str | Path) -> set[str]:
