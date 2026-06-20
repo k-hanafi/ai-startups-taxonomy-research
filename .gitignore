@@ -24,3 +24,5 @@ outputs/
 # Local
 coding_instructions.md
 src/ai_native_startup_classification.egg-info/
+src/ai_startups_taxonomy_research.egg-info/
+*.egg-info/
