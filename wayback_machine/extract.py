@@ -709,11 +709,11 @@ def run_extract(
         worker_errors: list[BaseException] = []
         in_flight_rows = 0
 
-        def _estimated_credits() -> float:
+        def _estimated_run_credits() -> float:
             return estimate_credits(
                 state.successful + in_flight_rows,
                 extract_depth=cfg.extract_depth,
-            )
+            ) - credits_start
 
         def run_worker() -> None:
             nonlocal attempted, budget_reached, exit_reason, in_flight_rows
@@ -725,7 +725,7 @@ def run_extract(
                     with deque_lock:
                         if not rows_deque:
                             return
-                        if _estimated_credits() >= budget_credits:
+                        if _estimated_run_credits() >= budget_credits:
                             budget_reached = True
                             exit_reason = "budget_reached"
                             return
