@@ -1,0 +1,9 @@
+# Frozen inputs and generated artifacts stay local (also covered by repo root).
+data/
+outputs/
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
