@@ -46,7 +46,10 @@ taxonomy never change. The only thing that differs across strands is the evidenc
 
 Authoritative plans (read when resuming a strand):
 - `plans/PLAN.md` — historical/wayback master plan.
-- `plans/survivorship_bias_wayback_*.plan.md` — the active survivorship strand.
+- `plans/survivorship_bias_wayback_*.plan.md` — death-anchored CDX probe (active survivorship strand).
+- `plans/survivorship_tavily_pipeline_*.plan.md` — post-probe Tavily extract + classify pipeline.
+
+All plans live in **`plans/` at repo root** (never `.cursor/plans/`). Repo agent skills live in **`.cursor/skills/`** (committed to git for cloud agents).
 
 ## Tech stack
 
@@ -87,6 +90,8 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `README.md` | Public-facing writeup (taxonomy + pipeline narrative + mermaid diagrams) |
 | `pyproject.toml` | Dependencies + pytest config |
 | `AGENTS.md` | This file |
+| `plans/` | **Canonical** project plans (committed; cloud agents read from GitHub) |
+| `.cursor/skills/` | Repo-level agent skills (`SKILL.md` per skill; committed; `.cursor/rules/` stays local) |
 
 ### `src/` — live classification pipeline
 | File | Responsibility |
