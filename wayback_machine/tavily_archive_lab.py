@@ -430,7 +430,10 @@ class ArchiveLab:
             pages_used, evidence = clean_evidence(response)
             classifier_input = self._format_input(company.org_uuid, pages_used, evidence)
             if classify and evidence:
-                verdict = self._classify(classifier_input)
+                try:
+                    verdict = self._classify(classifier_input)
+                except Exception as exc:  # noqa: BLE001 — paid Tavily step already succeeded
+                    error = f"Classifier: {type(exc).__name__}: {exc}"
 
         result = ScrapeResult(
             company=company,
@@ -449,7 +452,8 @@ class ArchiveLab:
             fallback_used=fallback_used,
             error=error,
         )
-        self._cache[key] = result
+        if error is None:
+            self._cache[key] = result
         return result
 
     # -- Tavily callers (reuse the exact live functions) -------------------
