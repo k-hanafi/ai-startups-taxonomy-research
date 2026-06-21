@@ -50,10 +50,28 @@ def load(path: Path) -> pd.DataFrame:
     return df
 
 
-def cohort_size(path: Path) -> int:
+def load_cohort(path: Path) -> pd.DataFrame:
     if not path.exists():
-        return 0
-    return len(pd.read_csv(path, usecols=[0], dtype=str))
+        return pd.DataFrame(columns=["org_uuid", "founded_date", "website_alive"])
+    return pd.read_csv(path, dtype=str, keep_default_na=False)
+
+
+def cohort_composition(cohort_df: pd.DataFrame) -> dict:
+    """Founded-year and website-alive breakdown for the full lost cohort."""
+    cohort_n = len(cohort_df)
+    years = pd.to_numeric(cohort_df.get("founded_date", pd.Series(dtype=str)).str[:4], errors="coerce")
+    fb = years.apply(founded_bucket).value_counts().to_dict()
+    founded = [{"label": b, "count": int(fb[b])} for b in FOUNDED_ORDER if fb.get(b, 0)]
+    wa = cohort_df.get("website_alive", pd.Series(dtype=str)).str.lower()
+    alive_n = int((wa == "true").sum())
+    dead_n = int((wa == "false").sum())
+    unknown_n = cohort_n - alive_n - dead_n
+    website = [seg for seg in (
+        {"label": "flagged alive", "count": alive_n},
+        {"label": "flagged dead", "count": dead_n},
+        {"label": "unknown", "count": unknown_n},
+    ) if seg["count"]]
+    return {"founded_year": founded, "website_alive": website}
 
 
 def bucketize(series: pd.Series, buckets: list[tuple[str, int, int]]) -> list[dict]:
@@ -111,7 +129,8 @@ def dedupe_probes(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop_duplicates(subset=["org_uuid"], keep="last").reset_index(drop=True)
 
 
-def summarize(df: pd.DataFrame, cohort_n: int) -> dict:
+def summarize(df: pd.DataFrame, cohort_df: pd.DataFrame) -> dict:
+    cohort_n = len(cohort_df)
     status = df["status"]
     ok = status == "ok"
     has_pre = ok & (df["has_pre_death_snapshot"] == "True")
@@ -126,20 +145,6 @@ def summarize(df: pd.DataFrame, cohort_n: int) -> dict:
     closest_pre = df.loc[has_pre, "closest_ts"].dropna()
     pre_genai = int((closest_pre < GPT4_LAUNCH).sum())
     post_genai = int((closest_pre >= GPT4_LAUNCH).sum())
-
-    years = pd.to_numeric(df["founded_date"].str[:4], errors="coerce")
-    fb = years.apply(founded_bucket).value_counts().to_dict()
-    founded = [{"label": b, "count": int(fb[b])} for b in FOUNDED_ORDER if fb.get(b, 0)]
-
-    wa = df["website_alive"].str.lower()
-    alive_n = int((wa == "true").sum())
-    dead_n = int((wa == "false").sum())
-    unknown_n = probed_n - alive_n - dead_n
-    website = [seg for seg in (
-        {"label": "flagged alive", "count": alive_n},
-        {"label": "flagged dead", "count": dead_n},
-        {"label": "unknown", "count": unknown_n},
-    ) if seg["count"]]
 
     pre_df = df[has_pre]
     best = pre_df.sort_values("days_from_target").head(6)
@@ -187,7 +192,7 @@ def summarize(df: pd.DataFrame, cohort_n: int) -> dict:
             "closest_post_genai": post_genai,
             "window_start": TEMPORAL_START.strftime("%Y-%m"),
         },
-        "composition": {"founded_year": founded, "website_alive": website},
+        "composition": cohort_composition(cohort_df),
         "examples": examples,
     }
 
@@ -200,7 +205,8 @@ def main() -> None:
     args = parser.parse_args()
 
     df = dedupe_probes(load(args.input))
-    out = summarize(df, cohort_size(args.cohort))
+    cohort_df = load_cohort(args.cohort)
+    out = summarize(df, cohort_df)
     blob = json.dumps(out, indent=2, ensure_ascii=False)
     if args.out:
         args.out.write_text(blob + "\n", encoding="utf-8")

@@ -714,8 +714,9 @@ def main() -> None:
         sys.exit(1)
 
     print(f"Reading {input_path} ...")
-    df = sdc.load(input_path)
-    summary = sdc.summarize(df, sdc.cohort_size(cohort_path))
+    df = sdc.dedupe_probes(sdc.load(input_path))
+    cohort_df = sdc.load_cohort(cohort_path)
+    summary = sdc.summarize(df, cohort_df)
     print(f"  {summary['meta']['probed_n']:,} probed / {summary['meta']['cohort_n']:,} cohort")
 
     print("Building HTML ...")
