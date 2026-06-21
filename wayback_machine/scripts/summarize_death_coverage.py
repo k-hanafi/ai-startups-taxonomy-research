@@ -104,6 +104,13 @@ def example_row(r: pd.Series, thin: bool) -> dict:
     }
 
 
+def dedupe_probes(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep one row per company; the probe appends retries without removing errors."""
+    if "org_uuid" not in df.columns or df.empty:
+        return df
+    return df.drop_duplicates(subset=["org_uuid"], keep="last").reset_index(drop=True)
+
+
 def summarize(df: pd.DataFrame, cohort_n: int) -> dict:
     status = df["status"]
     ok = status == "ok"
@@ -192,7 +199,7 @@ def main() -> None:
     parser.add_argument("--out", type=Path, default=None, help="Also write JSON here.")
     args = parser.parse_args()
 
-    df = load(args.input)
+    df = dedupe_probes(load(args.input))
     out = summarize(df, cohort_size(args.cohort))
     blob = json.dumps(out, indent=2, ensure_ascii=False)
     if args.out:

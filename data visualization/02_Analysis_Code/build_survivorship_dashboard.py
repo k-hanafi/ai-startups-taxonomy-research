@@ -76,6 +76,7 @@ def shape_metrics(summary: dict) -> dict:
             "preDeath": rec["pre_death"],
             "thin": rec["thin"],
             "noSnapshots": rec["no_snapshots"],
+            "noHost": rec["no_host"],
             "error": rec["error"],
             "ok": rec["ok"],
             "recoveryPct": rec["recovery_pct"],
@@ -289,7 +290,8 @@ function renderRecovery() {
     {name: 'Thin history', val: r.thin, color: C.cyan},
     {name: 'Errors (retryable)', val: r.error, color: C.amber},
     {name: 'Never archived', val: r.noSnapshots, color: C.gray},
-  ];
+    {name: 'Invalid homepage', val: r.noHost, color: C.rose},
+  ].filter(s => s.val > 0);
   const traces = segs.map(s => ({
     type: 'bar', orientation: 'h', name: s.name,
     y: ['Probed'], x: [s.val], marker: {color: s.color},
