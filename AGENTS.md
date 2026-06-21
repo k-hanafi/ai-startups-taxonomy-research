@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-06-20 · Active branch: `feat/removing-survivorship-bias`
+Last updated: 2026-06-21 · Active branch: `feat/removing-survivorship-bias`
 
 ---
 
@@ -151,6 +151,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `build_not_found_cohort.py` | **(survivorship)** Build `not_found_cohort.csv` from empty-evidence rows |
 | `probe_death_coverage.py` | **(survivorship, active)** Death-anchored CDX probe → `death_coverage.csv` |
 | `run_probe_recovery.sh` | Shell helper to resume the recovery probe |
+| `summarize_death_coverage.py` | **(survivorship)** Aggregate `death_coverage.csv` → compact JSON shared by the findings canvas + `build_survivorship_dashboard.py` |
 
 ### Other
 | Path | Purpose |
