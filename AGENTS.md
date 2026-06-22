@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-06-21 · Active branch: `feat/removing-survivorship-bias`
+Last updated: 2026-06-21 · Active branch: `main`
 
 ---
 
@@ -28,7 +28,7 @@ feeding the *same* classifier:
 2. **Historical / wayback** (built; paused awaiting recovery probe): re-run the
    *unchanged* classifier on each company's **March-2023 (GPT-4 launch)** homepage
    from the Internet Archive, to measure how AI messaging shifted.
-3. **Survivorship-bias** (ACTIVE, this branch): recover **pre-death** snapshots for
+3. **Survivorship-bias** (merged to `main`): recover **pre-death** snapshots for
    the ~22k companies Tavily couldn't extract, classify them, and merge back so the
    dataset isn't biased toward survivors.
 
