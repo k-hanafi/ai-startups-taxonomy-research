@@ -30,6 +30,18 @@ CDX_DEFAULT_RETRIES = 8
 CDX_DEFAULT_TIMEOUT_SECONDS = 60.0
 CDX_DEFAULT_CONCURRENCY = 1
 
+# Death-anchored discovery (survivorship-bias cohort): for each company we scrape
+# ~6 months before its LAST archived capture (its "death"), skipping the parked/
+# dead tail a final snapshot usually contains. One CDX call per company lets us
+# run just under the 60/min cap with a few workers to absorb request latency.
+DEATH_LOOKBACK_DAYS = 182
+CDX_FAST_RPM = 58
+# CDX requests are latency-heavy (often 5-25s of server-side index scan), so we
+# run many workers behind the shared rate limiter: the limiter still caps the
+# aggregate at CDX_FAST_RPM, while extra workers keep enough requests in flight
+# to actually reach that ceiling. Sized for ~20-25s latency at 58/min.
+CDX_DEATH_CONCURRENCY = 24
+
 # Cohort existence cutoff: only study companies that existed at GPT-4 launch.
 # founded_date is YYYY-MM in our data; inclusive of March 2023. A company founded
 # after this could still have a (later) capture in the probe window, so this is a
