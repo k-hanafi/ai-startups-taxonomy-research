@@ -391,6 +391,21 @@ def build_html(summary: dict) -> str:
     rows_html = examples_rows_html(m["examples"])
     script = SCRIPT_TEMPLATE.replace("__M_JSON__", json.dumps(m)).replace("__PALETTE__", json.dumps(PALETTE))
 
+    if probed_pct is not None and probed_pct >= 100:
+        overview_insight = f"""
+  <div class="insight insight-blue">
+    <p><strong>Complete snapshot.</strong> The death-anchored CDX sweep has probed the full
+    {cohort:,}-company cohort ({probed_pct}%). Re-run the summarizer after recovery retries to
+    refresh error and recovery counts.</p>
+  </div>"""
+    else:
+        overview_insight = f"""
+  <div class="insight insight-blue">
+    <p><strong>In-progress snapshot.</strong> The overnight CDX sweep is still running ({probed_pct}% of the
+    {cohort:,}-company cohort probed). These are point-in-time numbers; re-running the aggregator refreshes the
+    dashboard once the full run completes.</p>
+  </div>"""
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -474,12 +489,7 @@ def build_html(summary: dict) -> str:
       <div class="mc-ctx">transient, re-probe recovers</div>
     </div>
   </div>
-
-  <div class="insight insight-blue">
-    <p><strong>In-progress snapshot.</strong> The overnight CDX sweep is still running ({probed_pct}% of the
-    {cohort:,}-company cohort probed). These are point-in-time numbers; re-running the aggregator refreshes the
-    dashboard once the full run completes.</p>
-  </div>
+{overview_insight}
 </section>
 
 <section id="recovery">

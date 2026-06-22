@@ -122,11 +122,37 @@ def example_row(r: pd.Series, thin: bool) -> dict:
     }
 
 
+RESOLVED_PROBE_STATUSES = {"ok", "no_snapshots", "no_host"}
+
+
+def _probe_rank(status: str) -> int:
+    if status == "ok":
+        return 2
+    if status in RESOLVED_PROBE_STATUSES:
+        return 1
+    return 0
+
+
 def dedupe_probes(df: pd.DataFrame) -> pd.DataFrame:
-    """Keep one row per company; the probe appends retries without removing errors."""
+    """Keep one row per company; prefer resolved successes over later error retries."""
     if "org_uuid" not in df.columns or df.empty:
         return df
-    return df.drop_duplicates(subset=["org_uuid"], keep="last").reset_index(drop=True)
+    best: dict[str, pd.Series] = {}
+    for _, row in df.iterrows():
+        oid = str(row.get("org_uuid", "")).strip()
+        if not oid:
+            continue
+        prev = best.get(oid)
+        if prev is None:
+            best[oid] = row
+            continue
+        status = str(row.get("status", ""))
+        prev_status = str(prev.get("status", ""))
+        new_rank = _probe_rank(status)
+        prev_rank = _probe_rank(prev_status)
+        if new_rank > prev_rank or (new_rank == prev_rank and new_rank == 0):
+            best[oid] = row
+    return pd.DataFrame(list(best.values())).reset_index(drop=True)
 
 
 def summarize(df: pd.DataFrame, cohort_df: pd.DataFrame) -> dict:
