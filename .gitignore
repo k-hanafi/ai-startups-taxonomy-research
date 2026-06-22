@@ -27,4 +27,4 @@ outputs/
 
 # Local
 coding_instructions.md
-src/ai_native_startup_classification.egg-info/
+*.egg-info/

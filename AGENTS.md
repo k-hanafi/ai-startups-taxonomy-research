@@ -185,6 +185,15 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 
 ## Development commands
 
+**`OPENAI_API_KEY` is required at import time.** `src/config.py` reads
+`os.environ["OPENAI_API_KEY"]` when imported; `tests/test_tokens.py` pulls that
+in, so **`pytest` fails to collect if the variable is unset**. A placeholder
+(e.g. `OPENAI_API_KEY=placeholder`) is enough for the full test suite and offline
+stages (`prepare`, `prepare --dry-run`, `status`, `merge`) — no API calls.
+Real keys are only needed for paid stages (`submit`, `run`, `download`, `retry`,
+`test`) and Tavily enrichment. Keys load from `keys/openai.env` / `keys/tavily.env`
+when present; env vars take precedence.
+
 ```bash
 pip install -e ".[dev]"            # install with dev (pytest) extras
 pytest                             # live-pipeline tests
