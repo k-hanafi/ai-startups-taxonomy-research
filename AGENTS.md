@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-06-21 · Active branch: `main`
+Last updated: 2026-06-28 · Active branch: `main`
 
 ---
 
@@ -42,7 +42,7 @@ taxonomy never change. The only thing that differs across strands is the evidenc
 |--------|-------|--------|
 | Live | crawl → classify → merge | DONE — 44,387 companies classified (`production_classifications.csv`) |
 | Historical (wayback) | coverage probe done; infra built | PAUSED — GO verdict (~16k retrievable at Mar-2023); awaiting recovery probe before paid extract |
-| Survivorship-bias | death-anchored CDX probe | IN PROGRESS — cohort + probe built & smoke-tested; full overnight CDX sweep is the next manual run |
+| Survivorship-bias | probe done → crawl → classify → merge | IN PROGRESS — death probe complete (19,044 `ok` targets); GO crawl pipeline built (`*_dead` stages + namespaced classify). Next manual run: paid `run_crawl_dead.py` |
 
 Authoritative plans (read when resuming a strand):
 - `plans/PLAN.md` — historical/wayback master plan.
@@ -71,10 +71,14 @@ coverage_full.csv ──build_targets.py──▶ scrape_targets.csv
         └──run_extract.py (Tavily /extract on archive URLs)──▶ outputs/raw/snapshots.jsonl
                 └──build_classifier_input_2023.py──▶ classifier_input_2023.csv ──▶ classify.py
 
-SURVIVORSHIP strand (active)
+SURVIVORSHIP strand (active; GO = archive crawl matching the live cohort)
 classifier_input.csv (empty-evidence rows) ──build_not_found_cohort.py──▶ not_found_cohort.csv
-        └──probe_death_coverage.py (death-anchored CDX)──▶ death_coverage.csv
-                └──(tomorrow) targets → run_extract.py → classifier_input_dead.csv → classify.py → merge
+ └──probe_death_coverage.py (death-anchored CDX)──▶ death_coverage.csv
+ └──build_targets_dead.py──▶ scrape_targets_dead.csv (if_ crawl URL + per-company scope)
+ └──run_crawl_dead.py (Tavily /crawl on pre-death snapshot)──▶ scrape_processed_dead.csv
+ └──build_classifier_input_dead.py──▶ classifier_input_dead.csv
+ └──classify_dead.py run (classify.py under CLASSIFY_NS=wayback_dead)──▶ outputs/wayback_dead/wayback_dead_classifications.csv
+ └──merge_survivorship.py──▶ outputs/wayback_dead/survivorship_corrected.csv
 ```
 
 `classify.py` itself is a state machine: `prepare → submit → download` (or `run`
@@ -97,7 +101,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | File | Responsibility |
 |------|----------------|
 | `config.py` | **Single source of truth** for tunables: `DEFAULT_MODEL` (`gpt-5.4-nano`), Tier-5 rate limits, batch sizing, token/cost constants. No magic numbers elsewhere. |
-| `paths.py` | All filesystem paths for generated artifacts |
+| `paths.py` | All filesystem paths for generated artifacts. `CLASSIFY_NS` env (set before import) reroutes batch state + output CSV under `outputs/<ns>/` for isolated runs (e.g. survivorship) |
 | `master_csv.py` | Column contracts (`MASTER_CSV_COLUMNS`, `CLASSIFIER_INPUT_COLUMNS`); URL-validity + tavily-eligible row mask |
 | `schema.py` | `ClassificationResult` Pydantic model (11 fields); auto-generates the JSON schema injected into every request |
 | `formatter.py` | Maps a CSV row → user message; builds `custom_id` |
@@ -136,7 +140,9 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `state.py` | `ExtractState` resume + JSONL tail-healing + completed-ids reconciliation |
 | `extract.py` | Resumable, budget-capped Tavily `/extract` engine (historical analogue of `tavily_crawl.py`) |
 | `targets.py` | Stage B: `coverage_full.csv` → `scrape_targets.csv` |
-| `classifier_input.py` | Stage D: master metadata + 2023 evidence → `classifier_input_2023.csv` |
+| `targets_dead.py` | **(survivorship)** Stage B: `death_coverage.csv` → `scrape_targets_dead.csv` (emits `if_` crawl URL + per-company `select_paths` scope; no founded cutoff) |
+| `crawl_dead.py` | **(survivorship)** Stage C: resumable, budget-capped Tavily `/crawl` over pre-death `if_` snapshots; reuses live crawl primitives + harness scope/cleaner + extract reliability helpers |
+| `classifier_input.py` | Stage D: master metadata + 2023 evidence → `classifier_input_2023.csv` (reused by the dead strand) |
 
 ### `wayback_machine/scripts/` — thin CLIs
 | File | Purpose |
@@ -152,6 +158,11 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `probe_death_coverage.py` | **(survivorship, active)** Death-anchored CDX probe → `death_coverage.csv` |
 | `run_probe_recovery.sh` | Shell helper to resume the recovery probe |
 | `summarize_death_coverage.py` | **(survivorship)** Aggregate `death_coverage.csv` → compact JSON shared by the findings canvas + `build_survivorship_dashboard.py` |
+| `build_targets_dead.py` | **(survivorship)** CLI for `targets_dead.py` |
+| `run_crawl_dead.py` | **(survivorship, paid)** CLI for the dead-cohort crawl engine (`crawl_dead.run_crawl_dead`); wrap in `caffeinate -ims` outside the sandbox |
+| `build_classifier_input_dead.py` | **(survivorship)** CLI: dead evidence → `classifier_input_dead.csv` |
+| `classify_dead.py` | **(survivorship)** Sets `CLASSIFY_NS=wayback_dead` then delegates to `classify.main()` — runs the unchanged classifier in an isolated workspace |
+| `merge_survivorship.py` | **(survivorship)** Stage F: overlay dead verdicts onto `production_classifications.csv`, tag `evidence_source`, write `survivorship_corrected.csv` + before/after summary |
 
 ### Other
 | Path | Purpose |
@@ -173,7 +184,9 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `outputs/batch_data/state.json` | classify resume checkpoint |
 | `wayback_machine/data/coverage_full.csv` | Mar-2023 coverage probe over the 22,032 survivors |
 | `wayback_machine/data/not_found_cohort.csv` | ~22,002 companies Tavily couldn't extract (survivorship target) |
-| `wayback_machine/data/death_coverage.csv` | Death-anchored probe output (being filled by the overnight run) |
+| `wayback_machine/data/death_coverage.csv` | Death-anchored probe output (complete: 22,002 rows, 19,044 `ok`) |
+| `wayback_machine/data/scrape_targets_dead.csv` | 19,044 dead-cohort crawl targets (`if_` URL + scope); the frozen Stage-C work list |
+| `outputs/wayback_dead/survivorship_corrected.csv` | Stage F output: modern dataset with dead verdicts overlaid (survivorship-corrected) |
 
 ## Domain model
 
@@ -233,6 +246,7 @@ python scripts/run_tavily_crawl.py             # live homepage crawl
 | Live website scraping behavior | `src/tavily_crawl.py` |
 | Historical archive scraping | `wayback_machine/extract.py` + `scripts/run_extract.py` |
 | Survivorship death probe | `wayback_machine/scripts/probe_death_coverage.py` + `wayback_machine/cdx.py` |
+| Survivorship crawl→classify→merge | `wayback_machine/crawl_dead.py` + `scripts/{build_targets_dead,run_crawl_dead,build_classifier_input_dead,classify_dead,merge_survivorship}.py` |
 | Dashboards | `data visualization/02_Analysis_Code/` |
 
 ## Maintaining this file
