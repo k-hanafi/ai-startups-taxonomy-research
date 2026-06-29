@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-06-28 · Active branch: `main`
+Last updated: 2026-06-29 · Active branch: `main`
 
 ---
 
@@ -42,21 +42,23 @@ taxonomy never change. The only thing that differs across strands is the evidenc
 |--------|-------|--------|
 | Live | crawl → classify → merge | DONE — 44,387 companies classified (`production_classifications.csv`) |
 | Historical (wayback) | coverage probe done; infra built | PAUSED — GO verdict (~16k retrievable at Mar-2023); awaiting recovery probe before paid extract |
-| Survivorship-bias | probe done → crawl → classify → merge | IN PROGRESS — death probe complete (19,044 `ok` targets); GO crawl pipeline built (`*_dead` stages + namespaced classify). Next manual run: paid `run_crawl_dead.py` |
+| Survivorship-bias | probe done → crawl → classify → merge | IN PROGRESS — death probe complete (19,044 `ok` targets); GO crawl pipeline built (`*_dead` stages + namespaced classify); survivorship-insights dashboard built (PREVIEW until classify-dead lands). Next manual run: paid `run_crawl_dead.py` |
 
 Authoritative plans (read when resuming a strand):
 - `plans/PLAN.md` — historical/wayback master plan.
 - `plans/survivorship_bias_wayback_*.plan.md` — death-anchored CDX probe (active survivorship strand).
 - `plans/survivorship_tavily_pipeline_*.plan.md` — post-probe Tavily extract + classify pipeline.
 
-All plans live in **`plans/` at repo root** (never `.cursor/plans/`). Repo agent skills live in **`.cursor/skills/`** (committed to git for cloud agents).
+Plans live in two places on purpose: the Cursor plans dir (`~/.cursor/plans/`) is canonical for Cursor agents, and a committed **duplicate** in **`plans/` at repo root** serves humans and non-Cursor agents (read from GitHub). Repo agent skills live in **`.cursor/skills/`** (committed to git for cloud agents).
 
 ## Tech stack
 
 Python ≥3.11 · `openai` (Responses + Batch API) · `pandas` · `pydantic` (structured
 output) · `tiktoken` (pre-flight cost) · `tenacity` (retries) · `rich` (terminal
 UI) · `python-dotenv`. Tavily HTTP API for web crawl/extract (stdlib `urllib`).
-Internet Archive CDX API for snapshot discovery. Tests: `pytest`.
+Internet Archive CDX API for snapshot discovery. Tests: `pytest`. The
+survivorship-insights dashboard adds `statsmodels` (logistic regression),
+installed via the `analysis` extra.
 
 ## Architecture & data flow
 
@@ -79,6 +81,7 @@ classifier_input.csv (empty-evidence rows) ──build_not_found_cohort.py──
  └──build_classifier_input_dead.py──▶ classifier_input_dead.csv
  └──classify_dead.py run (classify.py under CLASSIFY_NS=wayback_dead)──▶ outputs/wayback_dead/wayback_dead_classifications.csv
  └──merge_survivorship.py──▶ outputs/wayback_dead/survivorship_corrected.csv
+ └──build_survivorship_insights_dashboard.py (survivor-vs-dead + logistic regression)──▶ data visualization/01_Presentation_Materials/survivorship_insights.html
 ```
 
 `classify.py` itself is a state machine: `prepare → submit → download` (or `run`
@@ -94,7 +97,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `README.md` | Public-facing writeup (taxonomy + pipeline narrative + mermaid diagrams) |
 | `pyproject.toml` | Dependencies + pytest config |
 | `AGENTS.md` | This file |
-| `plans/` | **Canonical** project plans (committed; cloud agents read from GitHub) |
+| `plans/` | Committed **duplicate** of the canonical Cursor plans (for humans + non-Cursor agents; read from GitHub) |
 | `.cursor/skills/` | Repo-level agent skills (`SKILL.md` per skill; committed; `.cursor/rules/` stays local) |
 
 ### `src/` — live classification pipeline
@@ -169,6 +172,8 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 |------|---------|
 | `data visualization/01_Presentation_Materials/*.html` | Generated dashboards |
 | `data visualization/02_Analysis_Code/*.py` | Scripts that build those dashboards |
+| `data visualization/02_Analysis_Code/survivorship_analysis.py` | Survivorship findings compute: survivor-vs-dead cohorts + 2 logistic models (pure metrics dict; PREVIEW from production if `survivorship_corrected.csv` absent) |
+| `data visualization/02_Analysis_Code/build_survivorship_insights_dashboard.py` | Renders `survivorship_insights.html` from that compute module (reuses house STYLE) |
 | `tests/` | pytest for the live pipeline (schema, formatter, tokens, enrichment, tavily runner) |
 | `wayback_machine/tests/` | pytest for wayback (golden cleaner, cohort, state, config, budget, probe) |
 | `keys/` | API key env files, e.g. `keys/openai.env` (`OPENAI_API_KEY`). Git-ignored + cursor-ignored. **Never commit.** |
