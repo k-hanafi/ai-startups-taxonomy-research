@@ -31,7 +31,7 @@ from collections import Counter, deque
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -89,12 +89,17 @@ csv.field_size_limit(1_000_000_000)
 
 
 def _scoped_config(base: TavilyCrawlConfig, select_paths: str) -> TavilyCrawlConfig:
-    """Wrap the live config with this company's archive scope."""
+    """Wrap the base crawl config with this company's archive scope.
+
+    Forwards EVERY field of ``base`` (limit/depth/instructions/exclude_paths/…),
+    not just ``extract_depth``, so a caller-supplied config is honored in full
+    and the request payload stays byte-identical to the live cohort's.
+    """
     paths = (select_paths,) if select_paths.strip() else ()
     return _ScopedCrawlConfig(
+        **asdict(base),
         select_paths=paths,
         select_domains=(_ARCHIVE_DOMAIN,),
-        extract_depth=base.extract_depth,
     )
 
 
