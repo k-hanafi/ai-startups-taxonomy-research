@@ -25,6 +25,11 @@ dev = [
     "jupyter>=1.0.0",
     "ipykernel>=6.29.0",
 ]
+# Stats deps for the survivorship-insights dashboard (logistic regression).
+# Kept out of core so the classification pipeline stays lean.
+analysis = [
+    "statsmodels>=0.14.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
