@@ -100,9 +100,10 @@ def _run_probe(
     }
 
 
-def _resolve_user_message(args: argparse.Namespace) -> tuple[str, str | None]:
+def _resolve_user_message(args: argparse.Namespace) -> tuple[str, str]:
+    system_prompt = load_system_prompt()
     if not args.company_id and not args.company_name:
-        return "Return JSON with x set to hello.", None
+        return "Classify using the company fields in the user message.", system_prompt
 
     import pandas as pd
 
