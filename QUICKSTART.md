@@ -17,8 +17,8 @@ mkdir -p keys
 echo 'OPENAI_API_KEY=your_key_here' > keys/openai.env
 echo 'TAVILY_API_KEY=your_key_here' > keys/tavily.env
 
-# 4. Verify
-pytest
+# 4. Verify (pytest works on a fresh clone; no data files required)
+OPENAI_API_KEY=placeholder pytest
 ```
 
 ## Daily Workflow
@@ -28,9 +28,9 @@ pytest
 cd ai-startups-taxonomy-research
 source .venv/bin/activate
 
-# Sync with cloud agent
+# Sync with remote (updates your current branch)
 git fetch origin
-git pull origin feat/wayback-dead-cohort-pipeline
+git pull origin "$(git branch --show-current)"
 
 # Check status
 git status
@@ -44,7 +44,7 @@ pytest
 # Commit and push
 git add .
 git commit -m "Your descriptive message"
-git push origin feat/wayback-dead-cohort-pipeline
+git push origin "$(git branch --show-current)"
 ```
 
 ## Helper Scripts
@@ -88,7 +88,7 @@ pytest tests/test_schema.py   # Specific test file
 ## Key Files to Read
 
 1. **AGENTS.md** - Project architecture, data flow, commands
-2. **LOCAL_SETUP.md** - This file (detailed setup guide)
+2. **LOCAL_SETUP.md** - Detailed setup guide (this file is the quick reference)
 3. **wayback_machine/README.md** - Survivorship pipeline stages
 4. **plans/** - Detailed project plans
 
@@ -138,4 +138,4 @@ pytest tests/test_schema.py   # Specific test file
 
 ---
 
-**Current Focus:** Survivorship-bias correction pipeline on `feat/wayback-dead-cohort-pipeline` branch
+**Current focus:** `main` — survivorship dead-cohort pipeline is merged; next step is running Stage C crawl (see `wayback_machine/README.md`).
