@@ -55,7 +55,7 @@ echo "To push your local commits:"
 echo "  git push origin \$(git branch --show-current)"
 echo
 
-read -p "Pull latest changes now? (y/N): " -n 1 -r
+read -p "Pull latest changes now? (y/N): " -n 1 -r || true
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     CURRENT_BRANCH=$(git branch --show-current)
