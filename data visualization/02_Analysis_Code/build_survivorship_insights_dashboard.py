@@ -361,7 +361,7 @@ def build_html(m: dict) -> str:
     </ul>
   </div>
   <div class="nav-meta">
-    <p><strong>Cohorts</strong><br>{meta["n_survivor"]:,} survivors<br>{meta["n_dead_full"]:,} dead (recovered)</p>
+    <p><strong>Cohorts</strong><br>{meta["n_survivor"]:,} survivors<br>{meta["n_dead_recovered"]:,} dead (recovered)<br>{meta["n_dead_full"]:,} dead (full proxy)</p>
     <p style="margin-top:0.75rem;"><strong>Outcome</strong><br>Tavily-extractable today<br>vs recovered pre-death</p>
     <p style="margin-top:0.75rem;"><strong>Method</strong><br>Descriptive + logistic<br>regression (odds ratios)</p>
   </div>
@@ -598,7 +598,7 @@ def build_html(m: dict) -> str:
   </div>
   <div class="insight insight-blue">
     <p><strong>Confidence holds.</strong> Recovered-evidence classifications carry a mean confidence of
-    {conf["dead_full"]["mean"]} versus {conf["survivor"]["mean"]} for live survivors, so the dead verdicts
+    {conf["dead_recovered"]["mean"]} versus {conf["survivor"]["mean"]} for live survivors, so the dead verdicts
     are not low-quality guesses. The strict dead subset (n={meta["n_dead_strict"]:,}) shows an AI-native
     rate of {ar["dead_strict"]["rate"]}%, close to the full {ar["dead_full"]["rate"]}%, so the headline is
     robust to how we define death.</p>
