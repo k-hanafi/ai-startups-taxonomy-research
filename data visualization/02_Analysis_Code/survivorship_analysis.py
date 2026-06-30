@@ -167,7 +167,7 @@ def _derive(df: pd.DataFrame) -> pd.DataFrame:
     thin = df["thin_history"].astype(str).str.lower().isin(["true", "1"])
     website_dead = df["website_alive"].astype(str).str.lower().eq("false")
 
-    df["is_dead_full"] = df["evidence_source"].eq("wayback_dead")
+    df["is_dead_full"] = df["evidence_source"].isin(["wayback_dead", "dead_metadata"])
     df["is_survivor"] = df["evidence_source"].eq("live") & df["has_live_evidence"]
     df["is_excluded"] = df["evidence_source"].eq("live") & ~df["has_live_evidence"]
     df["is_dead_strict"] = df["is_dead_full"] & website_dead & ~thin
@@ -343,7 +343,8 @@ def _regression(f: pd.DataFrame) -> dict:
     try:
         import statsmodels.formula.api as smf
     except Exception as exc:  # statsmodels missing
-        return {"available": False, "error": f"statsmodels unavailable: {exc}"}
+        unavailable = {"available": False, "error": f"statsmodels unavailable: {exc}"}
+        return {"model1": unavailable, "model2": unavailable}
 
     base = f[f["is_dead_full"] | f["is_survivor"]].copy()
     base["died"] = base["is_dead_full"].astype(int)
