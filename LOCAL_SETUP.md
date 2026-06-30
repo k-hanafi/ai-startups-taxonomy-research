@@ -17,8 +17,9 @@ This guide helps you set up this repository on your local machine to work alongs
 git clone https://github.com/k-hanafi/ai-startups-taxonomy-research.git
 cd ai-startups-taxonomy-research
 
-# Check out the current working branch
-git checkout feat/wayback-dead-cohort-pipeline
+# Start on main (default branch)
+git checkout main
+git pull origin main
 ```
 
 ### 2. Set Up Python Environment
@@ -56,11 +57,13 @@ echo 'TAVILY_API_KEY=your_tavily_key_here' > keys/tavily.env
 ### 4. Verify Setup
 
 ```bash
-# Run tests to verify everything works
-pytest
+# Run tests to verify everything works (no data files required)
+OPENAI_API_KEY=placeholder pytest
+OPENAI_API_KEY=placeholder PYTHONPATH=. pytest wayback_machine/tests
 
-# Check that classification pipeline can be prepared (no API calls)
-OPENAI_API_KEY=placeholder python classify.py prepare --dry-run
+# Optional: cost estimate once classifier input exists locally
+# OPENAI_API_KEY=placeholder python classify.py prepare --dry-run
+# (requires outputs/tavilycrawl/processed/classifier_input.csv from a completed crawl)
 ```
 
 ## Working with the Repository
@@ -71,9 +74,9 @@ The repository has three strands, all feeding the same classifier:
 
 1. **Live strand** (DONE): Classifies companies based on current websites
 2. **Historical strand** (PAUSED): Re-classifies using March 2023 Internet Archive snapshots
-3. **Survivorship strand** (IN PROGRESS): Recovers pre-death snapshots for companies Tavily couldn't extract
+3. **Survivorship strand** (IN PROGRESS): Dead-cohort pipeline merged to `main`; Stage C crawl is the next manual run
 
-**Current focus:** The survivorship-bias correction pipeline (`feat/wayback-dead-cohort-pipeline` branch)
+**Current focus:** Run the survivorship dead-cohort crawl on `main` (see `plans/tavily_runner_workflow.md`)
 
 ### Key Commands
 
@@ -120,8 +123,8 @@ python wayback_machine/scripts/run_crawl_dead.py
 # Fetch all branches from remote
 git fetch origin
 
-# Pull current branch
-git pull origin feat/wayback-dead-cohort-pipeline
+# Pull your current branch
+git pull origin "$(git branch --show-current)"
 
 # See what branches the cloud agent has created
 git branch -r | grep cursor/
@@ -137,15 +140,15 @@ git log --oneline -10
 git show <commit-hash>
 
 # Compare your local changes with remote
-git diff origin/feat/wayback-dead-cohort-pipeline
+git diff "origin/$(git branch --show-current)"
 ```
 
 ### Working in Parallel
 
 **Recommended workflow:**
 
-1. Cloud agent works on the remote branch
-2. You pull changes regularly: `git pull origin feat/wayback-dead-cohort-pipeline`
+1. Cloud agent works on a feature branch (often `cursor/*`)
+2. You pull your branch regularly: `git pull origin "$(git branch --show-current)"`
 3. Make your own changes in a separate branch if needed:
    ```bash
    git checkout -b feature/my-local-work
