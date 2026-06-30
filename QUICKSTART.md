@@ -71,7 +71,7 @@ python classify.py run                # Full run
 
 ### Survivorship Pipeline
 ```bash
-# See wayback_machine/README.md for full details
+# See plans/tavily_runner_workflow.md for Stage C–F run order
 python wayback_machine/scripts/probe_death_coverage.py
 python wayback_machine/scripts/build_targets_dead.py
 python wayback_machine/scripts/run_crawl_dead.py
