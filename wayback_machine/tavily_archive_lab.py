@@ -87,6 +87,41 @@ _SHARED_HOST_SUFFIXES = (
 )
 
 _ARCHIVE_PREFIX_RE = re.compile(r"^https?://web\.archive\.org/web/\d+[a-z_]*/")
+# Non-anchored variant for stripping archive prefixes from inline links in content.
+_INLINE_ARCHIVE_RE = re.compile(r"https?://web\.archive\.org/web/\d+[a-z_]*/")
+
+# Wayback serves if_ (iframe-mode) pages with an injected capture banner that
+# Tavily extracts as text. The live + 2023 cohorts have no such chrome, so we
+# strip it in this archive-only layer to keep recovered evidence comparable.
+# High-precision line matchers (run against each stripped line of raw_content).
+_WB_MONTHS = r"Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec"
+_WAYBACK_CHROME_LINE_RES = (
+    re.compile(r"^\d+\s+captures$", re.I),
+    re.compile(r"^\[\d+\s+captures\]\(.*\)$", re.I),
+    re.compile(r"^about this capture$", re.I),
+    re.compile(r"^collected by$", re.I),
+    re.compile(r"^timestamps$", re.I),
+    re.compile(r"^collection:\s", re.I),
+    re.compile(r"^web crawl data from common crawl\.?$", re.I),
+    re.compile(r"^(?:the\s+)?wayback machine\b.*$", re.I),
+    re.compile(rf"^\d{{1,2}}\s+(?:{_WB_MONTHS})\w*\s+\d{{4}}\s*[-\u2013]\s*"
+               rf"\d{{1,2}}\s+(?:{_WB_MONTHS})\w*\s+\d{{4}}$", re.I),
+    re.compile(r"^\|[\s|]*$"),                                  # empty calendar grid
+    re.compile(r"^\|\s*-{2,}.*$"),                              # md table separator
+    re.compile(rf"^\|(?:\s*(?:{_WB_MONTHS})\s*\|)+$", re.I),    # month row
+    re.compile(r"^\|(?:\s*\d{1,4}\s*\|)+$"),                    # day / year row(s)
+)
+
+
+def _strip_wayback_chrome(text: str) -> str:
+    """Drop Wayback capture-banner lines and rewrite inline archive links to origin."""
+    kept = [
+        line for line in (text or "").split("\n")
+        if not any(rx.match(line.strip()) for rx in _WAYBACK_CHROME_LINE_RES)
+    ]
+    cleaned = _INLINE_ARCHIVE_RE.sub("", "\n".join(kept))
+    # Tavily sometimes normalizes embedded origins as ``https:/host`` (one slash).
+    return re.sub(r"(https?):/([^/])", r"\1://\2", cleaned)
 
 
 def _is_shared_host(host: str) -> bool:
@@ -183,7 +218,11 @@ def _rewrite_to_origin(response: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(pages, list):
         return {"results": []}
     rewritten = [
-        {**p, "url": _unwrap_archive_url(str(p.get("url", "")))}
+        {
+            **p,
+            "url": _unwrap_archive_url(str(p.get("url", ""))),
+            "raw_content": _strip_wayback_chrome(str(p.get("raw_content", ""))),
+        }
         for p in pages
         if isinstance(p, dict)
     ]
