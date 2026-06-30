@@ -189,7 +189,13 @@ def _purge_post_pilot_empties() -> int:
         except json.JSONDecodeError:
             keep.append(line)
             continue
-        if obj.get("status") in ("success", "success_fallback"):
+        status = obj.get("status")
+        if status in ("success", "success_fallback"):
+            keep.append(line)
+            continue
+        # Keep terminal outcomes (thin_evidence, empty_results, permanent errors)
+        # so resume does not re-crawl and double-bill.
+        if obj.get("ok") is True or obj.get("retryable") is False:
             keep.append(line)
             continue
         removed += 1
