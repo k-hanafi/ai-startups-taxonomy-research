@@ -31,8 +31,11 @@ DEFAULT_DEAD_INPUT = (
 
 from classify import main  # noqa: E402
 
+_DATA_COMMANDS = frozenset({"prepare", "submit", "retry", "test", "run"})
+
 if __name__ == "__main__":
-    if "--data" not in sys.argv:
-        insert_at = 2 if len(sys.argv) > 1 else len(sys.argv)
-        sys.argv[insert_at:insert_at] = ["--data", str(DEFAULT_DEAD_INPUT)]
+    subcommand = sys.argv[1] if len(sys.argv) > 1 else None
+    if subcommand in _DATA_COMMANDS and "--data" not in sys.argv:
+        sys.argv.insert(2, str(DEFAULT_DEAD_INPUT))
+        sys.argv.insert(2, "--data")
     main()
