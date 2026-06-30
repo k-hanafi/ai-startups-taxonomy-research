@@ -293,6 +293,8 @@ def build_html(m: dict) -> str:
     commod = sg.get("Commoditizable AI", {}).get("mortality")
     defens = sg.get("Defensible AI", {}).get("mortality")
     today = datetime.date.today().strftime("%b %d, %Y")
+    dead_conf = m["confidence"]["dead_recovered"]["mean"]
+    dead_conf_str = str(dead_conf) if dead_conf is not None else "n/a (preview)"
 
     f1, f2 = _forest(m["regression"]["model1"]), _forest(m["regression"]["model2"])
     script = (SCRIPT_TEMPLATE
@@ -389,7 +391,7 @@ def build_html(m: dict) -> str:
     <div class="metric-card hl">
       <div class="mc-label">Dead cohort</div>
       <div class="mc-val">{meta["n_dead_full"]:,}</div>
-      <div class="mc-ctx">recovered and reclassified</div>
+      <div class="mc-ctx">Tavily-not-found proxy ({meta["n_dead_recovered"]:,} recovered)</div>
     </div>
     <div class="metric-card">
       <div class="mc-label">Survivors</div>
@@ -598,7 +600,7 @@ def build_html(m: dict) -> str:
   </div>
   <div class="insight insight-blue">
     <p><strong>Confidence holds.</strong> Recovered-evidence classifications carry a mean confidence of
-    {conf["dead_recovered"]["mean"]} versus {conf["survivor"]["mean"]} for live survivors, so the dead verdicts
+    {dead_conf_str} versus {conf["survivor"]["mean"]} for live survivors, so the dead verdicts
     are not low-quality guesses. The strict dead subset (n={meta["n_dead_strict"]:,}) shows an AI-native
     rate of {ar["dead_strict"]["rate"]}%, close to the full {ar["dead_full"]["rate"]}%, so the headline is
     robust to how we define death.</p>
