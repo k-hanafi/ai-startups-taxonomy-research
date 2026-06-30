@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-06-29 · Active branch: `main`
+Last updated: 2026-06-30 · Active branch: `main`
 
 ---
 
@@ -42,7 +42,7 @@ taxonomy never change. The only thing that differs across strands is the evidenc
 |--------|-------|--------|
 | Live | crawl → classify → merge | DONE — 44,387 companies classified (`production_classifications.csv`) |
 | Historical (wayback) | coverage probe done; infra built | PAUSED — GO verdict (~16k retrievable at Mar-2023); awaiting recovery probe before paid extract |
-| Survivorship-bias | probe done → crawl → classify → merge | IN PROGRESS — death probe complete (19,044 `ok` targets); GO crawl pipeline built (`*_dead` stages + namespaced classify); survivorship-insights dashboard built (PREVIEW until classify-dead lands). Next manual run: paid `run_crawl_dead.py` |
+| Survivorship-bias | probe done → crawl → classify → merge | IN PROGRESS — pipeline merged to `main` (Stages B–F + insights dashboard); next manual run: paid `run_crawl_dead.py` |
 
 Authoritative plans (read when resuming a strand):
 - `plans/PLAN.md` — historical/wayback master plan.
