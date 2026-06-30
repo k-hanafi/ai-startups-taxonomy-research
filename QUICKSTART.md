@@ -138,4 +138,4 @@ pytest tests/test_schema.py   # Specific test file
 
 ---
 
-**Current focus:** `main` — survivorship dead-cohort pipeline is merged; next step is running Stage C crawl (see `wayback_machine/README.md`).
+**Current focus:** `main` — survivorship dead-cohort pipeline is merged; next step is running Stage C crawl (see `plans/tavily_runner_workflow.md`).
