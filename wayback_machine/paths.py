@@ -50,3 +50,20 @@ SCRAPE_PROCESSED_CSV = PROCESSED_DIR / "scrape_processed.csv"
 CLASSIFIER_INPUT_2023_CSV = PROCESSED_DIR / "classifier_input_2023.csv"
 
 EXTRACT_LOG = LOGS_DIR / "extract.log"
+
+# ---------------------------------------------------------------------------
+# Survivorship dead-cohort strand (GO: archive crawl). Suffixed so the dead run
+# never collides with the historical 2023 extract artifacts above.
+# ---------------------------------------------------------------------------
+
+DEATH_COVERAGE_CSV = DATA_DIR / "death_coverage.csv"
+SCRAPE_TARGETS_DEAD_CSV = DATA_DIR / "scrape_targets_dead.csv"
+
+CRAWL_DEAD_JSONL = RAW_DIR / "crawl_dead.jsonl"
+CRAWL_STATE_DEAD_JSON = RAW_DIR / "crawl_state_dead.json"
+RUN_MANIFEST_DEAD_CSV = RAW_DIR / "run_manifest_dead.csv"
+
+SCRAPE_PROCESSED_DEAD_CSV = PROCESSED_DIR / "scrape_processed_dead.csv"
+CLASSIFIER_INPUT_DEAD_CSV = PROCESSED_DIR / "classifier_input_dead.csv"
+
+CRAWL_DEAD_LOG = LOGS_DIR / "crawl_dead.log"
