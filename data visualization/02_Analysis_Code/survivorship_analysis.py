@@ -102,11 +102,11 @@ def load_frame(paths: Paths) -> tuple[pd.DataFrame, dict]:
                 f"found ({paths.corrected} / {paths.production})."
             )
         base = _read(paths.production)
-        base["evidence_source"] = np.where(base["CompanyID"].isin(dead_ids), "wayback_dead", "live")
+        base["evidence_source"] = np.where(base["CompanyID"].isin(dead_ids), "dead_metadata", "live")
     else:
         base = _read(paths.corrected)
         if "evidence_source" not in base:
-            base["evidence_source"] = np.where(base["CompanyID"].isin(dead_ids), "wayback_dead", "live")
+            base["evidence_source"] = np.where(base["CompanyID"].isin(dead_ids), "dead_metadata", "live")
 
     # Static metadata join (funding, category, founded, liveness).
     meta_cols = ["org_uuid", "founded_date", "employee_count", "total_funding_usd",
