@@ -382,18 +382,14 @@ def run_crawl_dead(
         org_uuid = str(outcome.record.get("org_uuid", "")).strip()
         state.last_org_uuid = org_uuid
         credits_this_run += outcome.credits_added
+        pages_used = ""
+        evidence = ""
         if outcome.ok and outcome.status in ("success", "success_fallback"):
             state.successful += 1
             succeeded_run += 1
             completed_ids.add(org_uuid)
-            _append_processed_row(processed_path, {
-                "org_uuid": org_uuid,
-                "name": outcome.record.get("name", ""),
-                "homepage_url": outcome.record.get("homepage_url", ""),
-                "snapshot_ts": outcome.record.get("snapshot_ts", ""),
-                "website_pages_used": outcome.pages_used,
-                "website_evidence": outcome.evidence,
-            }, fsync=True)
+            pages_used = outcome.pages_used
+            evidence = outcome.evidence
         elif outcome.ok:
             state.empty += 1
             empty_run += 1
@@ -410,6 +406,16 @@ def run_crawl_dead(
         out.flush()
         os.fsync(out.fileno())
         state.save(state_path)
+
+        if pages_used or evidence:
+            _append_processed_row(processed_path, {
+                "org_uuid": org_uuid,
+                "name": outcome.record.get("name", ""),
+                "homepage_url": outcome.record.get("homepage_url", ""),
+                "snapshot_ts": outcome.record.get("snapshot_ts", ""),
+                "website_pages_used": pages_used,
+                "website_evidence": evidence,
+            }, fsync=True)
 
         rows_written[0] += 1
         if heartbeat_every > 0 and rows_written[0] % heartbeat_every == 0:

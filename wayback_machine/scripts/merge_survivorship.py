@@ -82,8 +82,10 @@ def merge(production_csv: Path, dead_csv: Path, targets_csv: Path, output_csv: P
     dead = dead.drop_duplicates(subset="CompanyID", keep="last").set_index("CompanyID")
 
     provenance: dict[str, dict[str, str]] = {}
+    dead_cohort_ids: set[str] = set()
     if targets_csv.exists():
         tgt = pd.read_csv(targets_csv, dtype=str, keep_default_na=False)
+        dead_cohort_ids = {str(r["org_uuid"]).strip() for _, r in tgt.iterrows()}
         provenance = {
             str(r["org_uuid"]): {"snapshot_ts": r.get("closest_ts", ""),
                                  "thin_history": r.get("thin_history", "")}
@@ -100,17 +102,22 @@ def merge(production_csv: Path, dead_csv: Path, targets_csv: Path, output_csv: P
     baseline = corrected[is_dead].copy()  # metadata-only "before" for the recovered set
 
     overlaid = 0
-    for idx in corrected.index[is_dead]:
+    for idx in corrected.index:
         cid = corrected.at[idx, "CompanyID"]
-        drow = dead.loc[cid]
-        for col in VERDICT_COLS:
-            if col in drow:
-                corrected.at[idx, col] = drow[col]
-        corrected.at[idx, "evidence_source"] = "wayback_dead"
+        if cid not in dead_cohort_ids:
+            continue
         prov = provenance.get(cid, {})
         corrected.at[idx, "snapshot_ts"] = prov.get("snapshot_ts", "")
         corrected.at[idx, "thin_history"] = prov.get("thin_history", "")
-        overlaid += 1
+        if cid in dead_ids:
+            drow = dead.loc[cid]
+            for col in VERDICT_COLS:
+                if col in drow:
+                    corrected.at[idx, col] = drow[col]
+            corrected.at[idx, "evidence_source"] = "wayback_dead"
+            overlaid += 1
+        else:
+            corrected.at[idx, "evidence_source"] = "dead_metadata"
 
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     corrected.to_csv(output_csv, index=False)
