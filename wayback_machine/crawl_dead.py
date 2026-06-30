@@ -14,9 +14,10 @@ This is the crawl analogue of ``extract.py``. It reuses, rather than reimplement
 * the reliability harness — graceful stop, heartbeat, manifest, processed-CSV
   append, preflight, JSONL tail-healing, atomic resume state (``extract`` + ``state``).
 
-Resume keys off ``completed_ids`` from the append-only JSONL; the evidence itself
-lives in the fsynced processed CSV (Stage D dedupes on ``org_uuid``), so a crash
-never loses paid work and never double-bills a finished company.
+Resume keys off ``completed_ids`` from the append-only JSONL; compacted evidence is
+stored in both the JSONL row and the processed CSV. Startup backfill heals any
+JSONL rows that landed before a crash interrupted the CSV append, so paid work is
+never lost and finished companies are never double-billed.
 """
 
 from __future__ import annotations
@@ -65,6 +66,7 @@ from .extract import (
     _emit_heartbeat,
     _preflight_checks,
 )
+from .state import processed_ids_from_csv
 from .paths import (
     CRAWL_DEAD_JSONL,
     CRAWL_DEAD_LOG,
@@ -223,8 +225,54 @@ def _process_single_row(
 
     record.update({"ok": True, "status": status, "retryable": False,
                    "usage_credits": credits, "fallback_used": fallback_used,
-                   "website_pages_used": pages_used})
+                   "website_pages_used": pages_used, "website_evidence": evidence})
     return _RowOutcome(record, status, True, False, pages_used, evidence, credits, False)
+
+
+def _processed_row_from_dead_record(record: dict[str, Any]) -> dict[str, str] | None:
+    """Build a scrape_processed_dead.csv row from one successful JSONL record."""
+    if record.get("ok") is not True or record.get("status") not in ("success", "success_fallback"):
+        return None
+    evidence = str(record.get("website_evidence", ""))
+    if not evidence.strip():
+        return None
+    return {
+        "org_uuid": str(record.get("org_uuid", "")).strip(),
+        "name": str(record.get("name", "")),
+        "homepage_url": str(record.get("homepage_url", "")),
+        "snapshot_ts": str(record.get("snapshot_ts", "")),
+        "website_pages_used": str(record.get("website_pages_used", "")),
+        "website_evidence": evidence,
+    }
+
+
+def backfill_processed_dead_csv(jsonl_path: Path, processed_csv: Path) -> int:
+    """Append success rows from JSONL that are missing from the processed CSV."""
+    existing = processed_ids_from_csv(processed_csv)
+    to_add: list[dict[str, str]] = []
+    if not jsonl_path.exists():
+        return 0
+
+    with jsonl_path.open(encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            row = _processed_row_from_dead_record(record)
+            if row is None:
+                continue
+            org_uuid = row["org_uuid"]
+            if not org_uuid or org_uuid in existing:
+                continue
+            to_add.append(row)
+            existing.add(org_uuid)
+
+    for row in to_add:
+        _append_processed_row(processed_csv, row, fsync=True)
+    return len(to_add)
 
 
 def _run_row_with_outage(
@@ -324,6 +372,11 @@ def run_crawl_dead(
     healed = heal_jsonl_tail(out_path)
     if healed:
         print(f"[crawl_dead] healed {healed} trailing bytes from {out_path}",
+              file=sys.stderr, flush=True)
+
+    backfilled = backfill_processed_dead_csv(out_path, processed_path)
+    if backfilled:
+        print(f"[crawl_dead] backfilled {backfilled} rows into {processed_path}",
               file=sys.stderr, flush=True)
 
     scan = _scan_jsonl(out_path)
