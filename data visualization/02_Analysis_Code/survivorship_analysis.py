@@ -138,6 +138,7 @@ def load_frame(paths: Paths) -> tuple[pd.DataFrame, dict]:
         "n_total": int(len(df)),
         "n_survivor": int(df["is_survivor"].sum()),
         "n_dead_full": int(df["is_dead_full"].sum()),
+        "n_dead_recovered": int(df["is_dead_recovered"].sum()),
         "n_dead_strict": int(df["is_dead_strict"].sum()),
         "n_excluded": int(df["is_excluded"].sum()),
     }
@@ -167,6 +168,7 @@ def _derive(df: pd.DataFrame) -> pd.DataFrame:
     thin = df["thin_history"].astype(str).str.lower().isin(["true", "1"])
     website_dead = df["website_alive"].astype(str).str.lower().eq("false")
 
+    df["is_dead_recovered"] = df["evidence_source"].eq("wayback_dead")
     df["is_dead_full"] = df["evidence_source"].isin(["wayback_dead", "dead_metadata"])
     df["is_survivor"] = df["evidence_source"].eq("live") & df["has_live_evidence"]
     df["is_excluded"] = df["evidence_source"].eq("live") & ~df["has_live_evidence"]
@@ -311,7 +313,11 @@ def _confidence(f: pd.DataFrame) -> dict:
         dist = {int(k): int(c) for k, c in v.value_counts().sort_index().items()}
         return {"n": int(len(v)), "mean": round(float(v.mean()), 2) if len(v) else None,
                 "median": float(v.median()) if len(v) else None, "dist": dist}
-    return {"survivor": stats(f["is_survivor"]), "dead_full": stats(f["is_dead_full"])}
+    return {
+        "survivor": stats(f["is_survivor"]),
+        "dead_full": stats(f["is_dead_full"]),
+        "dead_recovered": stats(f["is_dead_recovered"]),
+    }
 
 
 def _flips(f: pd.DataFrame, paths: Paths, preview: bool) -> dict:
@@ -320,7 +326,7 @@ def _flips(f: pd.DataFrame, paths: Paths, preview: bool) -> dict:
     if preview or not paths.production.exists():
         return {"available": False, "reason": "preview" if preview else "no production csv"}
     before = _read(paths.production).set_index("CompanyID")
-    dead = f[f["is_dead_full"]]
+    dead = f[f["is_dead_recovered"]]
     n = int(len(dead))
     out = {"available": True, "n": n}
     for col in ("ai_native", "subclass", "rad_score"):
