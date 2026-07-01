@@ -213,13 +213,18 @@ def _scan_jsonl(path: str | Path) -> _ScanResult:
             org_uuid = str(obj.get("org_uuid", "")).strip()
             ok = obj.get("ok")
             status = str(obj.get("status", ""))
-            if org_uuid and (ok is True or obj.get("retryable") is False):
+            legacy_empty = status == "empty_results" and not str(
+                obj.get("failure_reason", "")
+            ).strip()
+            if org_uuid and not legacy_empty and (ok is True or obj.get("retryable") is False):
                 result.completed_ids.add(org_uuid)
             if ok is True:
                 if status in _SUCCESS_STATUSES:
                     result.successful += 1
-                else:
+                elif not legacy_empty:
                     result.empty += 1
+                    result.failure_reasons[_row_failure_reason(obj)] += 1
+                else:
                     result.failure_reasons[_row_failure_reason(obj)] += 1
             elif ok is False:
                 result.failed += 1
@@ -311,15 +316,9 @@ def _process_single_row(
     # Per successful extraction: 1 credit / 5 (basic) or 2 credits / 5 (advanced).
     credit_per_extract = estimate_credits(1, extract_depth=cfg.extract_depth)
     for url in _extract_candidates(target):
-        if stop_check and stop_check():
-            # Interrupted before this snapshot was tried. Requeue the whole company
-            # (do NOT write a terminal row) so a resume retries it — this is the
-            # documented row-boundary interrupt semantics; a half-tried company must
-            # not be marked done.
-            raise ExtractInterrupted()
         try:
             response = call_tavily_extract(
-                url, cfg, api_key, rate_limiter=rate_limiter, stop_check=stop_check,
+                url, cfg, api_key, rate_limiter=rate_limiter, stop_check=None,
             )
         except ExtractInterrupted:
             raise  # stop hit during a rate-limit wait: requeue, don't record a failure
@@ -618,12 +617,19 @@ def run_extract_dead(
         write_lock = threading.Lock()
         rows_deque: deque[dict[str, str]] = deque(pending)
         worker_errors: list[BaseException] = []
+        in_flight_rows = 0
 
-        def _per_row_estimate() -> float:
-            return credits_this_run / attempted if attempted > 0 else 0.0
+        # Reserve the worst-case paid work for each company: the if_ extract plus
+        # the id_ second chance. This makes the budget gate safe even with many
+        # workers starting rows before earlier rows finish and report actual spend.
+        max_credits_per_row = 2 * estimate_credits(1, extract_depth=cfg.extract_depth)
+
+        def _would_exceed_budget_after_starting_one() -> bool:
+            reserved_in_flight = (in_flight_rows + 1) * max_credits_per_row
+            return credits_start + credits_this_run + reserved_in_flight > budget_credits
 
         def run_worker() -> None:
-            nonlocal attempted, budget_reached, exit_reason
+            nonlocal attempted, budget_reached, exit_reason, in_flight_rows
             try:
                 while True:
                     if stop.stop_requested:
@@ -631,12 +637,13 @@ def run_extract_dead(
                     with deque_lock:
                         if not rows_deque:
                             return
-                        if credits_start + credits_this_run + _per_row_estimate() > budget_credits:
+                        if _would_exceed_budget_after_starting_one():
                             budget_reached = True
                             exit_reason = "budget_reached"
                             return
                         target = rows_deque.popleft()
                         attempted += 1
+                        in_flight_rows += 1
                     try:
                         outcome = _run_row_with_outage(
                             target=target, cfg=cfg, api_key=api_key,
@@ -649,12 +656,17 @@ def run_extract_dead(
                         with deque_lock:
                             rows_deque.appendleft(target)
                             attempted -= 1
+                            in_flight_rows -= 1
                         return
                     except Exception as exc:  # noqa: BLE001 — surface to main thread
+                        with deque_lock:
+                            in_flight_rows -= 1
                         worker_errors.append(exc)
                         return
                     with write_lock:
                         persist(out, outcome)
+                    with deque_lock:
+                        in_flight_rows -= 1
                     if stop.stop_requested:
                         exit_reason = "user_interrupt"
                         return

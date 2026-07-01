@@ -17,7 +17,6 @@ from pathlib import Path
 import pytest
 
 from wayback_machine.config import ExtractConfig
-from wayback_machine.extract import ExtractInterrupted
 from wayback_machine.extract_dead import (
     NETWORK_ERROR,
     NO_ARCHIVE_CONTENT,
@@ -27,8 +26,10 @@ from wayback_machine.extract_dead import (
     _attempt_from_error,
     _classify_failure_reason,
     _process_single_row,
+    _RowOutcome,
     _row_failure_reason,
     _scan_jsonl,
+    run_extract_dead,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -173,12 +174,21 @@ def test_process_row_usable_results_skip_failure_diagnostics(monkeypatch) -> Non
     assert outcome.status in {"success", "empty_results"}
 
 
-def test_process_row_stop_mid_row_requeues_not_terminal(monkeypatch) -> None:
-    # A stop signal before a snapshot is tried must requeue the company (raise
-    # ExtractInterrupted so the worker re-queues it), never write a terminal row
-    # that a resume would skip forever.
-    with pytest.raises(ExtractInterrupted):
-        _run_row(monkeypatch, extract=lambda: {"results": []}, stop_check=lambda: True)
+def test_process_row_stop_signal_finishes_current_row(monkeypatch) -> None:
+    # Once a company starts, finish its snapshot attempts and write one JSONL row.
+    # That row-boundary stop behavior avoids partial paid work with no resume
+    # record, which would double-bill the first snapshot on restart.
+    calls = 0
+
+    def extract():
+        nonlocal calls
+        calls += 1
+        return {"results": []}
+
+    outcome = _run_row(monkeypatch, extract=extract, stop_check=lambda: True)
+    assert calls == 2
+    assert outcome.status == "empty_results"
+    assert outcome.record["usage_credits"] == pytest.approx(0.4)
 
 
 def test_no_archive_content_credits_track_extract_depth(monkeypatch) -> None:
@@ -212,14 +222,71 @@ def test_scan_jsonl_splits_retryable_and_terminal_empties(tmp_path: Path) -> Non
 
     scan = _scan_jsonl(jsonl)
     assert scan.successful == 1
-    assert scan.empty == 2  # no_archive_content + legacy
+    assert scan.empty == 1  # no_archive_content only; legacy crawl empties re-enter pending
     assert scan.failed == 1  # rate_limited
-    # Terminal rows complete; the throttled row stays pending for a resume retry.
-    assert scan.completed_ids == {"done", "gap", "legacy"}
+    # Terminal rows complete; throttled + legacy crawl-empty rows stay pending.
+    assert scan.completed_ids == {"done", "gap"}
     assert "throttled" not in scan.completed_ids
+    assert "legacy" not in scan.completed_ids
     assert scan.failure_reasons[NO_ARCHIVE_CONTENT] == 1
     assert scan.failure_reasons[RATE_LIMITED] == 1
     assert scan.failure_reasons["legacy_empty"] == 1
+
+
+def test_run_extract_dead_reserves_budget_for_concurrent_rows(tmp_path: Path, monkeypatch) -> None:
+    targets = tmp_path / "targets.csv"
+    targets.write_text(
+        "org_uuid,name,homepage_url,snapshot_url,closest_ts,select_paths\n"
+        + "\n".join(
+            f"u{i},Co {i},https://co{i}.example,"
+            f"http://web.archive.org/web/20230314120000if_/https://co{i}.example,"
+            "20230314120000,"
+            for i in range(5)
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("wayback_machine.extract_dead._api_key", lambda: "k")
+    monkeypatch.setattr("wayback_machine.extract_dead._preflight_checks", lambda **_: None)
+
+    def fake_run_row(**kwargs):
+        org_uuid = kwargs["target"]["org_uuid"]
+        return _RowOutcome(
+            record={
+                "org_uuid": org_uuid,
+                "name": kwargs["target"]["name"],
+                "homepage_url": kwargs["target"]["homepage_url"],
+                "snapshot_ts": kwargs["target"]["closest_ts"],
+                "ok": True,
+                "status": "success",
+                "retryable": False,
+            },
+            status="success",
+            ok=True,
+            retryable=False,
+            pages_used=kwargs["target"]["homepage_url"],
+            evidence="homepage evidence",
+            credits_added=0.2,
+            transient_failure=False,
+        )
+
+    monkeypatch.setattr("wayback_machine.extract_dead._run_row_with_outage", fake_run_row)
+
+    report = run_extract_dead(
+        targets_csv=targets,
+        output_jsonl=tmp_path / "crawl_dead.jsonl",
+        state_json=tmp_path / "crawl_state_dead.json",
+        processed_csv=tmp_path / "scrape_processed_dead.csv",
+        heartbeat_log=tmp_path / "crawl_dead.log",
+        manifest_csv=tmp_path / "run_manifest_dead.csv",
+        budget_credits=0.4,
+        max_concurrent_rows=12,
+        heartbeat_every=0,
+    )
+
+    assert report.attempted == 1
+    assert report.budget_reached is True
 
 
 # ---------------------------------------------------------------------------
