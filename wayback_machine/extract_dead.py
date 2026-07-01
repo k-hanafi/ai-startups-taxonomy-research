@@ -94,6 +94,7 @@ _SUCCESS_STATUSES = frozenset({"success", "success_fallback", "success_extract_f
 # can tell a recoverable infrastructure problem (rate limit / outage / network)
 # apart from a permanent property of the company (the Archive simply has nothing).
 RATE_LIMITED = "rate_limited"
+AUTH_ERROR = "auth_error"
 NO_ARCHIVE_CONTENT = "no_archive_content"
 TRANSIENT_ERROR = "transient_error"
 NETWORK_ERROR = "network_error"
@@ -131,13 +132,16 @@ def _attempt_from_error(phase: str, payload: dict[str, Any]) -> dict[str, Any]:
     summary never has to re-parse a large error body.
     """
     text = f"{payload.get('body', '')} {payload.get('message', '')}".lower()
-    rate_limited = payload.get("status") == 429 or any(h in text for h in _RATE_LIMIT_HINTS)
+    status = payload.get("status")
+    rate_limited = status == 429 or (
+        status not in {401, 403} and any(h in text for h in _RATE_LIMIT_HINTS)
+    )
     attempt: dict[str, Any] = {
         "phase": phase,
         "error_type": str(payload.get("type", "") or "error"),
     }
-    if payload.get("status") is not None:
-        attempt["http_status"] = payload["status"]
+    if status is not None:
+        attempt["http_status"] = status
     if rate_limited:
         attempt["rate_limited"] = True
     return attempt
@@ -154,6 +158,8 @@ def _classify_failure_reason(attempts: list[dict[str, Any]]) -> tuple[str, bool]
     errored = [a for a in attempts if a.get("error_type")]
     if any(a.get("rate_limited") or a.get("http_status") == 429 for a in errored):
         return RATE_LIMITED, True
+    if any(a.get("http_status") in {401, 403} for a in errored):
+        return AUTH_ERROR, False
     if any(a.get("error_type") in _NETWORK_ERROR_TYPES for a in errored):
         return NETWORK_ERROR, True
     if any(a.get("http_status") in _TRANSIENT_HTTP_STATUSES for a in errored):
@@ -344,10 +350,19 @@ def _process_single_row(
     # (terminal). ``transient_failure`` also drives the in-run outage-retry loop.
     failure_reason, retryable = _classify_failure_reason(attempts)
     if retryable:
-        record.update({"ok": False, "status": failure_reason, "retryable": True,
+        # Retrying after a paid partial attempt would start from the first snapshot
+        # again and re-bill already-known empty work. Record the root cause, but
+        # make charged infrastructure failures terminal by default; an operator can
+        # still purge/retry them manually if paying for another attempt is worth it.
+        auto_retry = credits <= 0
+        record.update({"ok": False, "status": failure_reason, "retryable": auto_retry,
                        "usage_credits": credits, "failure_reason": failure_reason,
                        "attempts": attempts})
-        return _RowOutcome(record, failure_reason, False, True, "", "", credits, True)
+        if not auto_retry:
+            record["paid_partial"] = True
+        return _RowOutcome(
+            record, failure_reason, False, auto_retry, "", "", credits, auto_retry,
+        )
     record.update({"ok": True, "status": "empty_results", "retryable": False,
                    "usage_credits": credits, "failure_reason": failure_reason,
                    "attempts": attempts})
@@ -443,6 +458,12 @@ def _run_row_with_outage(
             # Once Tavily has billed this company, persist the retryable row before
             # any more retries. That keeps the append-only log and the global
             # budget counter current, even during a long Archive/Tavily outage.
+            # It is terminal for automatic resume because rerunning would re-bill
+            # already-known empty snapshot attempts.
+            outcome.retryable = False
+            outcome.transient_failure = False
+            outcome.record["retryable"] = False
+            outcome.record["paid_partial"] = True
             return _attach_retry_accounting(outcome)
         if time.monotonic() - outage_started >= max_outage_seconds or stop.stop_requested:
             return _attach_retry_accounting(outcome)

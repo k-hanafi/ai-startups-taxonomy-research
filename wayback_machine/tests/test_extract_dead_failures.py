@@ -18,6 +18,7 @@ import pytest
 
 from wayback_machine.config import ExtractConfig
 from wayback_machine.extract_dead import (
+    AUTH_ERROR,
     NETWORK_ERROR,
     NO_ARCHIVE_CONTENT,
     RATE_LIMITED,
@@ -53,9 +54,17 @@ def test_attempt_from_error_flags_429_as_rate_limited() -> None:
 
 def test_attempt_from_error_flags_rate_limit_text_without_429() -> None:
     attempt = _attempt_from_error(
-        "extract", {"type": "HTTPError", "status": 403, "body": "Monthly quota exceeded"},
+        "extract", {"type": "HTTPError", "status": 503, "body": "Rate limit temporarily exceeded"},
     )
     assert attempt["rate_limited"] is True
+
+
+def test_attempt_from_error_does_not_retry_403_quota() -> None:
+    attempt = _attempt_from_error(
+        "extract", {"type": "HTTPError", "status": 403, "body": "Monthly quota exceeded"},
+    )
+    assert "rate_limited" not in attempt
+    assert _classify_failure_reason([attempt]) == (AUTH_ERROR, False)
 
 
 def test_attempt_from_error_network_exception_has_no_status() -> None:
@@ -78,8 +87,11 @@ def test_attempt_from_error_network_exception_has_no_status() -> None:
         # Transient HTTP status → retryable transient_error.
         ([{"phase": "extract", "error_type": "HTTPError", "http_status": 503}],
          (TRANSIENT_ERROR, True)),
-        # Errored but unclassifiable (e.g. auth) → terminal unknown.
+        # Auth/quota style errors are terminal, not retryable rate limits.
         ([{"phase": "extract", "error_type": "HTTPError", "http_status": 403}],
+         (AUTH_ERROR, False)),
+        # Errored but unclassifiable → terminal unknown.
+        ([{"phase": "extract", "error_type": "HTTPError", "http_status": 418}],
          (UNKNOWN_FAILURE, False)),
         # No attempts at all → treated as a content gap.
         ([], (NO_ARCHIVE_CONTENT, False)),
@@ -149,6 +161,25 @@ def test_process_row_extract_rate_limit_is_retryable(monkeypatch) -> None:
     assert outcome.retryable is True
     assert outcome.transient_failure is True
     assert outcome.record["failure_reason"] == RATE_LIMITED
+
+
+def test_process_row_paid_partial_rate_limit_is_terminal_to_avoid_rebill(monkeypatch) -> None:
+    calls = 0
+
+    def extract():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {"results": []}
+        raise _http_error(429, b'{"detail":"rate limit"}')
+
+    outcome = _run_row(monkeypatch, extract=extract)
+    assert outcome.status == RATE_LIMITED
+    assert outcome.ok is False
+    assert outcome.retryable is False
+    assert outcome.transient_failure is False
+    assert outcome.record["paid_partial"] is True
+    assert outcome.record["usage_credits"] == pytest.approx(0.2)
 
 
 def test_process_row_extract_network_error_is_retryable(monkeypatch) -> None:
@@ -340,8 +371,11 @@ def test_outage_loop_persists_charged_transient_failure_immediately(monkeypatch)
 
     assert calls == 1
     assert outcome.status == RATE_LIMITED
+    assert outcome.retryable is False
+    assert outcome.transient_failure is False
     assert outcome.credits_added == pytest.approx(0.4)
     assert outcome.record["usage_credits"] == pytest.approx(0.4)
+    assert outcome.record["paid_partial"] is True
 
 
 # ---------------------------------------------------------------------------
