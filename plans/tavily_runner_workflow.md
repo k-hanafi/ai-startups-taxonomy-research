@@ -1,5 +1,14 @@
 Here is the full path, end to end, in the order you will actually run it.
 
+> **Migration note (2026-06-30):** Stage C moved from multi-page `/crawl` to a
+> single-page `/extract` (`run_extract_dead.py` → `wayback_machine/extract_dead.py`).
+> Reason: Tavily's `/crawl` fights the Internet Archive's per-IP playback limits and
+> returned mostly empty on archived sites; one homepage `/extract` is enough evidence
+> for the classifier. The prose below describing the `/crawl` mechanics is kept for
+> historical context — the current runner does one extract per company (trying the
+> `if_` snapshot, then `id_`), keeps the same resume/JSONL/processed artifacts, and is
+> invoked with `run_extract_dead.py` everywhere this doc says `run_crawl_dead.py`.
+
 ---
 
 ## Big picture
@@ -40,10 +49,10 @@ The runner reads this CSV and does nothing else to discover targets.
 **Command** (run outside Cursor sandbox; `caffeinate` keeps Mac awake):
 
 ```bash
-caffeinate -ims python3 wayback_machine/scripts/run_crawl_dead.py
+caffeinate -ims python3 wayback_machine/scripts/run_extract_dead.py
 ```
 
-That uses production `TavilyCrawlConfig()` (5 pages, same instructions/exclusions as live) plus archive scoping per company.
+That runs one Tavily `/extract` per company on its pre-death archive snapshot (`if_`, then `id_` as a second chance), cleaning the result with the same evidence cleaner the live + 2023 cohorts used.
 
 ### What happens per company (inside the runner)
 
@@ -98,7 +107,7 @@ Each JSONL line is `flush()` + `fsync()`. On startup, `heal_jsonl_tail()` trims 
 Run the **exact same command** again:
 
 ```bash
-caffeinate -ims python3 wayback_machine/scripts/run_crawl_dead.py
+caffeinate -ims python3 wayback_machine/scripts/run_extract_dead.py
 ```
 
 It prints something like `pending=12,345 skipped=6,699` and continues where it left off.
@@ -218,7 +227,7 @@ Overlays dead-cohort verdicts onto `production_classifications.csv` → `survivo
 
 ```mermaid
 flowchart TD
-    A["scrape_targets_dead.csv<br/>(19,044 frozen)"] --> B["run_crawl_dead.py<br/>hours, ~19k credits"]
+    A["scrape_targets_dead.csv<br/>(19,044 frozen)"] --> B["run_extract_dead.py<br/>hours, ~19k credits"]
     B --> C["raw/crawl_dead.jsonl<br/>every attempt"]
     B --> D["processed/scrape_processed_dead.csv<br/>~14k with evidence"]
     D --> E["build_classifier_input_dead.py<br/>seconds, free"]
@@ -231,7 +240,7 @@ flowchart TD
 
 | Step | Command | Resumable? | Paid? |
 |---|---|---|---|
-| Crawl | `caffeinate -ims python3 wayback_machine/scripts/run_crawl_dead.py` | Yes (JSONL) | Yes (~$100–150) |
+| Extract | `caffeinate -ims python3 wayback_machine/scripts/run_extract_dead.py` | Yes (JSONL) | Yes (~$100–150) |
 | Build input | `python3 wayback_machine/scripts/build_classifier_input_dead.py` | N/A (rerun anytime) | No |
 | Classify | `python3 wayback_machine/scripts/classify_dead.py run --data ...` | Yes (state.json) | Yes |
 | Merge | `python3 wayback_machine/scripts/merge_survivorship.py` | N/A | No |

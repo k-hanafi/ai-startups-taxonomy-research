@@ -1,23 +1,28 @@
-"""Resumable, budget-capped Tavily ``/crawl`` runner over dead-cohort snapshots.
+"""Resumable, budget-capped Tavily ``/extract`` runner over dead-cohort snapshots.
 
-The GO methodology: crawl each company's pre-death Wayback ``if_`` snapshot with
-the EXACT live ``TavilyCrawlConfig`` (5 pages, depth 2, same instructions), scoped
-to the company's own archived pages, then rewrite each archived page URL back to
-its origin and clean it with the same evidence cleaner the live cohort used. The
-output is byte-format-identical to the live + 2023 evidence, so only the evidence
-itself differs across cohorts — the whole point of the fair-comparison design.
+Survivorship Stage C. For every company we already know one pre-death Wayback
+snapshot, so a single-page ``/extract`` is all we need for the classifier. The
+live cohort was scraped with a multi-page ``/crawl``, but ``/crawl`` fights the
+Internet Archive's per-IP playback limits (bursts of link-following fetches get
+throttled mid-crawl and come back empty), so on archived sites we drop to one
+homepage extract and note the single-page scope as a methodology limitation.
 
-This is the crawl analogue of ``extract.py``. It reuses, rather than reimplements:
+Per company we fetch the archived homepage, trying the ``if_`` iframe snapshot the
+target list already carries first, then the ``id_`` raw-bytes snapshot as a second
+chance. We strip any residual Wayback chrome, rewrite the archived URL back to the
+origin homepage, and clean it with the SAME vendored evidence cleaner the live +
+2023 cohorts used — so only the evidence itself differs across cohorts (the whole
+point of the fair-comparison design).
 
-* the live crawl call + retry + fallback + usage parsing (``src.tavily_crawl``),
-* the per-company archive scope + origin-rewrite cleaner (``tavily_archive_lab``),
-* the reliability harness — graceful stop, heartbeat, manifest, processed-CSV
-  append, preflight, JSONL tail-healing, atomic resume state (``extract`` + ``state``).
+Reuses the extract engine's reliability harness (``wayback_machine.extract``):
+graceful stop, heartbeat, per-run manifest, atomic resume state, JSONL tail-healing,
+sliding-window rate limiter, and a call-count budget cap. Keeps the failure-reason
+instrumentation (``rate_limited`` vs ``no_archive_content`` vs transient/network) so
+a resumed run re-attempts only the recoverable infrastructure failures.
 
-Resume keys off ``completed_ids`` from the append-only JSONL; compacted evidence is
-stored in both the JSONL row and the processed CSV. Startup backfill heals any
-JSONL rows that landed before a crash interrupted the CSV append, so paid work is
-never lost and finished companies are never double-billed.
+Artifacts intentionally keep their crawl-era names (``crawl_dead.jsonl``,
+``scrape_processed_dead.csv``, ``crawl_state_dead.json``) so the companies already
+scraped resume cleanly and the downstream classifier input is unchanged.
 """
 
 from __future__ import annotations
@@ -32,41 +37,35 @@ from collections import Counter, deque
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from src.tavily_crawl import (
-    DEFAULT_CRAWL_RPM_HEADROOM,
-    TAVILY_CRAWL_RPM_DOCUMENTED,
-    TavilyCrawlConfig,
-    TavilyCrawlInterrupted,
-    _api_key,
-    _call_tavily_crawl_with_retries,
-    _CrawlSlidingWindowLimiter,
-    _error_payload,
-    _error_status,
-    _fallback_config,
-    _has_usable_results,
-    extract_usage_credits,
-)
-
 from .config import (
     DEFAULT_BUDGET_CREDITS,
+    DEFAULT_EXTRACT_RPM_HEADROOM,
     DEFAULT_HEARTBEAT_EVERY,
     DEFAULT_MAX_OUTAGE_SECONDS,
     DEFAULT_OUTAGE_BACKOFF_MAX_SECONDS,
     DEFAULT_OUTAGE_BACKOFF_MIN_SECONDS,
+    TAVILY_EXTRACT_RPM_DOCUMENTED,
+    ExtractConfig,
 )
+from .evidence import compact_tavily_response
 from .extract import (
-    _GracefulStopController,
+    ExtractInterrupted,
+    _api_key,
     _append_processed_row,
     _append_run_manifest,
     _emit_heartbeat,
+    _error_payload,
+    _GracefulStopController,
+    _has_usable_results,
     _preflight_checks,
+    _SlidingWindowLimiter,
+    call_tavily_extract,
 )
-from .state import processed_ids_from_csv
 from .paths import (
     CRAWL_DEAD_JSONL,
     CRAWL_DEAD_LOG,
@@ -75,34 +74,92 @@ from .paths import (
     SCRAPE_PROCESSED_DEAD_CSV,
     SCRAPE_TARGETS_DEAD_CSV,
 )
-from .state import ExtractState, heal_jsonl_tail
-from .tavily_archive_lab import _ScopedCrawlConfig, clean_evidence
+from .state import ExtractState, heal_jsonl_tail, processed_ids_from_csv
+from .tavily_archive_lab import _strip_wayback_chrome, archive_url
 
-# Pin every crawl to the archive host so a scope miss can never escape to the
-# (dead) live domain. Per-company path scope is layered on top when available.
-_ARCHIVE_DOMAIN = r"^web\.archive\.org$"
+# One /extract = one archive page-fetch (a second only when the first snapshot is
+# empty), so this is far less bursty than a 5-page /crawl and the Archive's
+# playback limit (~480 safe req/min per IP) is never the binding constraint.
+# Tavily's extract endpoint (100 RPM) is the real cap, so we can run many more
+# workers than the crawl did (4) and still stay well under both ceilings.
+DEFAULT_EXTRACT_DEAD_CONCURRENCY = 12
 
-# Many dead snapshots are big multi-page crawls, so default to a small worker
-# pool: the binding constraint is the Internet Archive throttling Tavily's
-# fetches, not our own crawl-RPM cap.
-DEFAULT_CRAWL_DEAD_CONCURRENCY = 4
+# New extract rows only ever write "success"; the two legacy labels are kept so a
+# resume over the pre-migration crawl JSONL still tallies those wins correctly.
+_SUCCESS_STATUSES = frozenset({"success", "success_fallback", "success_extract_fallback"})
+
+# Controlled vocabulary for *why* a company yielded no usable evidence. Derived
+# purely from the HTTP status / error type of each extract attempt, so an operator
+# can tell a recoverable infrastructure problem (rate limit / outage / network)
+# apart from a permanent property of the company (the Archive simply has nothing).
+RATE_LIMITED = "rate_limited"
+NO_ARCHIVE_CONTENT = "no_archive_content"
+TRANSIENT_ERROR = "transient_error"
+NETWORK_ERROR = "network_error"
+UNKNOWN_FAILURE = "unknown"
+# Pre-instrumentation rows recorded a bare ``empty_results`` with no attempts; the
+# summary tool shows them under this bucket so old and new runs never blur.
+LEGACY_EMPTY = "legacy_empty"
+
+# Failure reasons that are an infrastructure problem, not a content gap: a resumed
+# run should re-attempt these, so rows carrying them are written ``retryable=True``.
+_RETRYABLE_FAILURE_REASONS = frozenset({RATE_LIMITED, TRANSIENT_ERROR, NETWORK_ERROR})
+
+# Substrings that flag a rate-limit/quota error even when the HTTP status is not a
+# clean 429 (some Tavily/Archive throttles surface as a 200/4xx body message).
+_RATE_LIMIT_HINTS = ("rate limit", "ratelimit", "too many requests", "quota")
+# HTTP statuses treated as transient/retryable.
+_TRANSIENT_HTTP_STATUSES = frozenset({408, 409, 425, 500, 502, 503, 504})
+# Exception type names that mean the request never reached a usable response.
+_NETWORK_ERROR_TYPES = frozenset({"TimeoutError", "URLError", "ConnectionError", "timeout"})
 
 csv.field_size_limit(1_000_000_000)
 
 
-def _scoped_config(base: TavilyCrawlConfig, select_paths: str) -> TavilyCrawlConfig:
-    """Wrap the base crawl config with this company's archive scope.
+def _attempt_ok(phase: str) -> dict[str, Any]:
+    """Compact record of one extract call that returned HTTP 200."""
+    return {"phase": phase, "http_status": 200}
 
-    Forwards EVERY field of ``base`` (limit/depth/instructions/exclude_paths/…),
-    not just ``extract_depth``, so a caller-supplied config is honored in full
-    and the request payload stays byte-identical to the live cohort's.
+
+def _attempt_from_error(phase: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Compact, JSONL-safe record of one FAILED extract call.
+
+    ``payload`` is whatever ``_error_payload`` produced (HTTP status + body, or an
+    exception type + message). We keep only the small, auditable fields and decide
+    the rate-limit flag here (from status 429 or a hint in the body/message) so the
+    summary never has to re-parse a large error body.
     """
-    paths = (select_paths,) if select_paths.strip() else ()
-    return _ScopedCrawlConfig(
-        **asdict(base),
-        select_paths=paths,
-        select_domains=(_ARCHIVE_DOMAIN,),
-    )
+    text = f"{payload.get('body', '')} {payload.get('message', '')}".lower()
+    rate_limited = payload.get("status") == 429 or any(h in text for h in _RATE_LIMIT_HINTS)
+    attempt: dict[str, Any] = {
+        "phase": phase,
+        "error_type": str(payload.get("type", "") or "error"),
+    }
+    if payload.get("status") is not None:
+        attempt["http_status"] = payload["status"]
+    if rate_limited:
+        attempt["rate_limited"] = True
+    return attempt
+
+
+def _classify_failure_reason(attempts: list[dict[str, Any]]) -> tuple[str, bool]:
+    """Derive ``(failure_reason, retryable)`` from the recorded attempts.
+
+    Priority is most-actionable first: an explicit rate limit anywhere wins, then
+    network/transient errors. ``no_archive_content`` is reserved for the case where
+    every call succeeded (HTTP 200) yet produced nothing usable — a genuine gap.
+    Anything errored but unclassifiable is ``unknown`` (terminal).
+    """
+    errored = [a for a in attempts if a.get("error_type")]
+    if any(a.get("rate_limited") or a.get("http_status") == 429 for a in errored):
+        return RATE_LIMITED, True
+    if any(a.get("error_type") in _NETWORK_ERROR_TYPES for a in errored):
+        return NETWORK_ERROR, True
+    if any(a.get("http_status") in _TRANSIENT_HTTP_STATUSES for a in errored):
+        return TRANSIENT_ERROR, True
+    if errored:
+        return UNKNOWN_FAILURE, False
+    return NO_ARCHIVE_CONTENT, False
 
 
 @dataclass
@@ -112,16 +169,35 @@ class _ScanResult:
     empty: int
     failed: int
     credits: float
+    failure_reasons: Counter[str]
+
+
+def _row_failure_reason(obj: dict[str, Any]) -> str:
+    """Best-effort failure bucket for a non-success JSONL row (handles legacy).
+
+    New rows carry an explicit ``failure_reason``. Pre-instrumentation rows only
+    have ``status=="empty_results"`` — surface those as ``legacy_empty`` so the two
+    eras are never silently merged. Any other status falls back to itself.
+    """
+    reason = str(obj.get("failure_reason", "")).strip()
+    if reason:
+        return reason
+    status = str(obj.get("status", "")).strip()
+    if status == "empty_results":
+        return LEGACY_EMPTY
+    return status or UNKNOWN_FAILURE
 
 
 def _scan_jsonl(path: str | Path) -> _ScanResult:
-    """One pass over the crawl JSONL to rebuild resume + budget state.
+    """One pass over the JSONL to rebuild resume + budget state.
 
     ``completed_ids`` = anything terminal (ok, or a non-retryable error), so a
-    resumed run re-crawls only transient failures. Credits are summed from the
-    recorded per-row usage so the budget cap stays cumulative across resumes.
+    resumed run re-extracts only transient failures (rate-limited / outage /
+    network empties, which are written ``ok=False, retryable=True``). Credits are
+    summed from the recorded per-row usage so the budget cap stays cumulative
+    across resumes, and ``failure_reasons`` tallies WHY rows yielded no evidence.
     """
-    result = _ScanResult(set(), 0, 0, 0, 0.0)
+    result = _ScanResult(set(), 0, 0, 0, 0.0, Counter())
     p = Path(path)
     if not p.exists():
         return result
@@ -139,12 +215,14 @@ def _scan_jsonl(path: str | Path) -> _ScanResult:
             if org_uuid and (ok is True or obj.get("retryable") is False):
                 result.completed_ids.add(org_uuid)
             if ok is True:
-                if status in ("success", "success_fallback"):
+                if status in _SUCCESS_STATUSES:
                     result.successful += 1
                 else:
                     result.empty += 1
+                    result.failure_reasons[_row_failure_reason(obj)] += 1
             elif ok is False:
                 result.failed += 1
+                result.failure_reasons[_row_failure_reason(obj)] += 1
             with suppress(TypeError, ValueError):
                 result.credits += float(obj.get("usage_credits", 0.0) or 0.0)
     return result
@@ -162,21 +240,63 @@ class _RowOutcome:
     transient_failure: bool
 
 
+def _evidence_from_extract_response(
+    response: dict[str, Any],
+    homepage_url: str,
+) -> tuple[str, str]:
+    """Clean a single-page extract response to live-cohort evidence format."""
+    results = response.get("results")
+    if not isinstance(results, list):
+        return "", ""
+    normalized = {
+        "results": [
+            {
+                "url": homepage_url,
+                "raw_content": _strip_wayback_chrome(str(r.get("raw_content", ""))),
+            }
+            for r in results
+            if isinstance(r, dict)
+        ]
+    }
+    return compact_tavily_response(normalized)
+
+
+def _extract_candidates(target: dict[str, str]) -> tuple[str, ...]:
+    """Snapshot URLs to try for one company, in order (deduped, non-empty).
+
+    The target list already carries an ``if_`` iframe snapshot (toolbar stripped,
+    the format validated during the crawl-era testing) — try that first, then the
+    ``id_`` raw-bytes snapshot of the same capture as a second chance.
+    """
+    snapshot_url = str(target.get("snapshot_url", "")).strip()
+    homepage_url = str(target.get("homepage_url", "")).strip()
+    snapshot_ts = str(target.get("closest_ts", "")).strip()
+    id_url = (
+        archive_url(homepage_url, snapshot_ts, "id_")
+        if homepage_url and snapshot_ts
+        else ""
+    )
+    ordered: list[str] = []
+    for url in (snapshot_url, id_url):
+        if url and url not in ordered:
+            ordered.append(url)
+    return tuple(ordered)
+
+
 def _process_single_row(
     *,
     target: dict[str, str],
-    base_cfg: TavilyCrawlConfig,
+    cfg: ExtractConfig,
     api_key: str,
-    rate_limiter: _CrawlSlidingWindowLimiter | None,
+    rate_limiter: _SlidingWindowLimiter | None,
     stop_check: Callable[[], bool] | None,
     stop_sleep: Callable[[float], bool] | None,
 ) -> _RowOutcome:
-    """Crawl one company's snapshot (primary, then instructionless fallback)."""
+    """Extract one company's archived homepage (if_ snapshot, then id_)."""
     org_uuid = str(target.get("org_uuid", "")).strip()
     homepage_url = str(target.get("homepage_url", "")).strip()
     snapshot_url = str(target.get("snapshot_url", "")).strip()
     snapshot_ts = str(target.get("closest_ts", "")).strip()
-    cfg = _scoped_config(base_cfg, str(target.get("select_paths", "")))
     record: dict[str, Any] = {
         "org_uuid": org_uuid,
         "name": target.get("name", ""),
@@ -186,52 +306,49 @@ def _process_single_row(
         "requested_at": datetime.now(timezone.utc).isoformat(),
     }
     credits = 0.0
-    try:
-        response = _call_tavily_crawl_with_retries(
-            snapshot_url, cfg, api_key,
-            rate_limiter=rate_limiter, stop_check=stop_check, stop_sleep=stop_sleep,
-        )
-        credits += extract_usage_credits(response)
-        status = "success"
-        fallback_used = False
-        if not _has_usable_results(response):
-            # Same empty-result fallback the live runner uses: drop the LLM
-            # instructions and try once more before giving up on the company.
-            fallback_cfg = _fallback_config(cfg)
-            response = _call_tavily_crawl_with_retries(
-                snapshot_url, fallback_cfg, api_key,
-                rate_limiter=rate_limiter, stop_check=stop_check, stop_sleep=stop_sleep,
+    attempts: list[dict[str, Any]] = []
+    for url in _extract_candidates(target):
+        if stop_check and stop_check():
+            break
+        try:
+            response = call_tavily_extract(
+                url, cfg, api_key, rate_limiter=rate_limiter, stop_check=stop_check,
             )
-            credits += extract_usage_credits(response)
-            fallback_used = True
-            status = "success_fallback"
-    except Exception as exc:  # noqa: BLE001 — normalize any Tavily/network error
-        error = _error_payload(exc)
-        status, retryable = _error_status(error)
-        record.update({"ok": False, "status": status, "retryable": retryable,
-                       "usage_credits": credits, "error": error})
-        return _RowOutcome(record, status, False, retryable, "", "", credits, retryable)
+        except Exception as exc:  # noqa: BLE001 — normalize any Tavily/network error
+            attempts.append(_attempt_from_error("extract", _error_payload(exc)))
+            continue
+        credits += 0.2  # basic extract ≈ 1 credit / 5 successful extractions
+        attempts.append(_attempt_ok("extract"))
+        if not _has_usable_results(response):
+            continue
+        pages_used, evidence = _evidence_from_extract_response(response, homepage_url)
+        if evidence.strip():
+            record.update({
+                "ok": True, "status": "success", "retryable": False,
+                "usage_credits": credits,
+                "website_pages_used": pages_used, "website_evidence": evidence,
+            })
+            return _RowOutcome(record, "success", True, False, pages_used, evidence, credits, False)
 
-    if not _has_usable_results(response):
-        record.update({"ok": True, "status": "empty_results", "retryable": False,
-                       "usage_credits": credits})
-        return _RowOutcome(record, "empty_results", True, False, "", "", credits, False)
-
-    pages_used, evidence = clean_evidence(response)
-    if not evidence.strip():
-        record.update({"ok": True, "status": "thin_evidence", "retryable": False,
-                       "usage_credits": credits})
-        return _RowOutcome(record, "thin_evidence", True, False, "", "", credits, False)
-
-    record.update({"ok": True, "status": status, "retryable": False,
-                   "usage_credits": credits, "fallback_used": fallback_used,
-                   "website_pages_used": pages_used, "website_evidence": evidence})
-    return _RowOutcome(record, status, True, False, pages_used, evidence, credits, False)
+    # No usable evidence from any snapshot. Diagnose WHY from the attempts: a rate
+    # limit / outage / network error is recoverable (retryable; recorded ok=False so
+    # a resume retries it), while a clean-200-but-empty is a genuine content gap
+    # (terminal). ``transient_failure`` also drives the in-run outage-retry loop.
+    failure_reason, retryable = _classify_failure_reason(attempts)
+    if retryable:
+        record.update({"ok": False, "status": failure_reason, "retryable": True,
+                       "usage_credits": credits, "failure_reason": failure_reason,
+                       "attempts": attempts})
+        return _RowOutcome(record, failure_reason, False, True, "", "", credits, True)
+    record.update({"ok": True, "status": "empty_results", "retryable": False,
+                   "usage_credits": credits, "failure_reason": failure_reason,
+                   "attempts": attempts})
+    return _RowOutcome(record, "empty_results", True, False, "", "", credits, False)
 
 
 def _processed_row_from_dead_record(record: dict[str, Any]) -> dict[str, str] | None:
     """Build a scrape_processed_dead.csv row from one successful JSONL record."""
-    if record.get("ok") is not True or record.get("status") not in ("success", "success_fallback"):
+    if record.get("ok") is not True or record.get("status") not in _SUCCESS_STATUSES:
         return None
     evidence = str(record.get("website_evidence", ""))
     if not evidence.strip():
@@ -278,9 +395,9 @@ def backfill_processed_dead_csv(jsonl_path: Path, processed_csv: Path) -> int:
 def _run_row_with_outage(
     *,
     target: dict[str, str],
-    base_cfg: TavilyCrawlConfig,
+    cfg: ExtractConfig,
     api_key: str,
-    rate_limiter: _CrawlSlidingWindowLimiter | None,
+    rate_limiter: _SlidingWindowLimiter | None,
     stop: _GracefulStopController,
     max_outage_seconds: float,
     outage_backoff_min_seconds: float,
@@ -291,7 +408,7 @@ def _run_row_with_outage(
     outage_started = time.monotonic()
     while True:
         outcome = _process_single_row(
-            target=target, base_cfg=base_cfg, api_key=api_key, rate_limiter=rate_limiter,
+            target=target, cfg=cfg, api_key=api_key, rate_limiter=rate_limiter,
             stop_check=lambda: stop.stop_requested, stop_sleep=stop.sleep,
         )
         if not outcome.transient_failure:
@@ -306,7 +423,7 @@ def _run_row_with_outage(
 
 
 @dataclass(frozen=True)
-class CrawlDeadRunReport:
+class ExtractDeadRunReport:
     attempted: int
     succeeded: int
     empty: int
@@ -320,7 +437,7 @@ class CrawlDeadRunReport:
 
     def format_report(self) -> str:
         lines = [
-            "WAYBACK DEAD-COHORT CRAWL REPORT",
+            "WAYBACK DEAD-COHORT EXTRACT REPORT",
             f"  Attempted this run:   {self.attempted:,}",
             f"  Succeeded:            {self.succeeded:,}",
             f"  Empty/thin:           {self.empty:,}",
@@ -338,11 +455,11 @@ class CrawlDeadRunReport:
         return "\n".join(lines)
 
 
-def run_crawl_dead(
+def run_extract_dead(
     targets_csv: str | Path = SCRAPE_TARGETS_DEAD_CSV,
     output_jsonl: str | Path = CRAWL_DEAD_JSONL,
     state_json: str | Path = CRAWL_STATE_DEAD_JSON,
-    config: TavilyCrawlConfig | None = None,
+    config: ExtractConfig | None = None,
     *,
     processed_csv: str | Path = SCRAPE_PROCESSED_DEAD_CSV,
     budget_credits: float = DEFAULT_BUDGET_CREDITS,
@@ -350,16 +467,16 @@ def run_crawl_dead(
     heartbeat_every: int = DEFAULT_HEARTBEAT_EVERY,
     heartbeat_log: str | Path = CRAWL_DEAD_LOG,
     manifest_csv: str | Path = RUN_MANIFEST_DEAD_CSV,
-    max_concurrent_rows: int = DEFAULT_CRAWL_DEAD_CONCURRENCY,
-    crawl_rpm: float | None = None,
-    crawl_rpm_headroom: float = DEFAULT_CRAWL_RPM_HEADROOM,
+    max_concurrent_rows: int = DEFAULT_EXTRACT_DEAD_CONCURRENCY,
+    extract_rpm: float | None = None,
+    extract_rpm_headroom: float = DEFAULT_EXTRACT_RPM_HEADROOM,
     max_outage_seconds: float = DEFAULT_MAX_OUTAGE_SECONDS,
     outage_backoff_min_seconds: float = DEFAULT_OUTAGE_BACKOFF_MIN_SECONDS,
     outage_backoff_max_seconds: float = DEFAULT_OUTAGE_BACKOFF_MAX_SECONDS,
     min_free_disk_gb: float = 0.0,
-) -> CrawlDeadRunReport:
-    """Run a resumable, budget-capped archive crawl over the dead target list."""
-    base_cfg = config or TavilyCrawlConfig()
+) -> ExtractDeadRunReport:
+    """Run a resumable, budget-capped archive extract over the dead target list."""
+    cfg = config or ExtractConfig()
     state_path = Path(state_json)
     out_path = Path(output_jsonl)
     processed_path = Path(processed_csv)
@@ -371,12 +488,12 @@ def run_crawl_dead(
 
     healed = heal_jsonl_tail(out_path)
     if healed:
-        print(f"[crawl_dead] healed {healed} trailing bytes from {out_path}",
+        print(f"[extract_dead] healed {healed} trailing bytes from {out_path}",
               file=sys.stderr, flush=True)
 
     backfilled = backfill_processed_dead_csv(out_path, processed_path)
     if backfilled:
-        print(f"[crawl_dead] backfilled {backfilled} rows into {processed_path}",
+        print(f"[extract_dead] backfilled {backfilled} rows into {processed_path}",
               file=sys.stderr, flush=True)
 
     scan = _scan_jsonl(out_path)
@@ -400,13 +517,13 @@ def run_crawl_dead(
     _preflight_checks(pending_count=len(pending), output_jsonl=out_path,
                       min_free_disk_gb=min_free_disk_gb)
 
-    if crawl_rpm is not None and crawl_rpm <= 0:
+    if extract_rpm is not None and extract_rpm <= 0:
         effective_rpm: float | None = None
-    elif crawl_rpm is not None:
-        effective_rpm = float(crawl_rpm)
+    elif extract_rpm is not None:
+        effective_rpm = float(extract_rpm)
     else:
-        effective_rpm = TAVILY_CRAWL_RPM_DOCUMENTED * float(crawl_rpm_headroom)
-    rate_limiter = _CrawlSlidingWindowLimiter(effective_rpm) if effective_rpm else None
+        effective_rpm = TAVILY_EXTRACT_RPM_DOCUMENTED * float(extract_rpm_headroom)
+    rate_limiter = _SlidingWindowLimiter(effective_rpm) if effective_rpm else None
 
     api_key = _api_key()
     workers = max(1, int(max_concurrent_rows))
@@ -424,9 +541,16 @@ def run_crawl_dead(
     started = time.monotonic()
     started_iso = datetime.now(timezone.utc).isoformat()
 
-    print(f"[crawl_dead] targets={len(all_targets):,} pending={len(pending):,} "
+    print(f"[extract_dead] targets={len(all_targets):,} pending={len(pending):,} "
           f"skipped={skipped_existing:,} workers={workers} "
-          f"crawl_rpm_cap={effective_rpm or 'off'}", file=sys.stderr, flush=True)
+          f"extract_rpm_cap={effective_rpm or 'off'}", file=sys.stderr, flush=True)
+    if scan.failure_reasons:
+        breakdown = "  ".join(
+            f"{reason}={n:,}"
+            for reason, n in sorted(scan.failure_reasons.items(), key=lambda kv: (-kv[1], kv[0]))
+        )
+        print(f"[extract_dead] prior no-evidence rows by reason: {breakdown}",
+              file=sys.stderr, flush=True)
 
     rows_written = [0]
 
@@ -437,7 +561,7 @@ def run_crawl_dead(
         credits_this_run += outcome.credits_added
         pages_used = ""
         evidence = ""
-        if outcome.ok and outcome.status in ("success", "success_fallback"):
+        if outcome.ok and outcome.status in _SUCCESS_STATUSES:
             state.successful += 1
             succeeded_run += 1
             completed_ids.add(org_uuid)
@@ -506,13 +630,13 @@ def run_crawl_dead(
                         attempted += 1
                     try:
                         outcome = _run_row_with_outage(
-                            target=target, base_cfg=base_cfg, api_key=api_key,
+                            target=target, cfg=cfg, api_key=api_key,
                             rate_limiter=rate_limiter, stop=stop,
                             max_outage_seconds=max_outage_seconds,
                             outage_backoff_min_seconds=outage_backoff_min_seconds,
                             outage_backoff_max_seconds=outage_backoff_max_seconds,
                         )
-                    except TavilyCrawlInterrupted:
+                    except ExtractInterrupted:
                         with deque_lock:
                             rows_deque.appendleft(target)
                             attempted -= 1
@@ -525,7 +649,7 @@ def run_crawl_dead(
                     if stop.stop_requested:
                         exit_reason = "user_interrupt"
                         return
-            except TavilyCrawlInterrupted:
+            except ExtractInterrupted:
                 return
             except Exception as exc:  # noqa: BLE001
                 worker_errors.append(exc)
@@ -544,7 +668,7 @@ def run_crawl_dead(
     with suppress(OSError):
         jsonl_mb = out_path.stat().st_size / (1024 * 1024)
 
-    report = CrawlDeadRunReport(
+    report = ExtractDeadRunReport(
         attempted=attempted, succeeded=succeeded_run, empty=empty_run, failed=failed_run,
         skipped_existing=skipped_existing, credits_used_this_run=credits_this_run,
         total_credits=credits_start + credits_this_run, budget_reached=budget_reached,

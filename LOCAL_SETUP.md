@@ -95,7 +95,7 @@ python classify.py status             # Check progress
 # Survivorship pipeline commands (see wayback_machine/README.md)
 python wayback_machine/scripts/probe_death_coverage.py
 python wayback_machine/scripts/build_targets_dead.py
-python wayback_machine/scripts/run_crawl_dead.py
+python wayback_machine/scripts/run_extract_dead.py
 ```
 
 ### Understanding Directory Structure
@@ -194,11 +194,11 @@ du -sh data/ outputs/ wayback_machine/data/ wayback_machine/outputs/
 
 ```bash
 # Prevent your Mac from sleeping during long operations
-caffeinate -ims python wayback_machine/scripts/run_crawl_dead.py
+caffeinate -ims python wayback_machine/scripts/run_extract_dead.py
 
 # Or use tmux for session persistence
 tmux new -s wayback-crawl
-python wayback_machine/scripts/run_crawl_dead.py
+python wayback_machine/scripts/run_extract_dead.py
 # Detach: Ctrl+B, then D
 # Reattach: tmux attach -t wayback-crawl
 ```

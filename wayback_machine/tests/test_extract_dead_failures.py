@@ -1,0 +1,246 @@
+"""Failure root-cause instrumentation for the dead-cohort extract.
+
+Covers the pure classification helpers (synthetic error payloads in, derived
+``failure_reason`` + ``retryable`` out), the end-to-end ``_process_single_row``
+diagnostics with the extract call stubbed, the resume tally in ``_scan_jsonl``,
+and the offline ``summarize_crawl_failures`` report.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import io
+import json
+import urllib.error
+from pathlib import Path
+
+import pytest
+
+from wayback_machine.config import ExtractConfig
+from wayback_machine.extract_dead import (
+    NETWORK_ERROR,
+    NO_ARCHIVE_CONTENT,
+    RATE_LIMITED,
+    TRANSIENT_ERROR,
+    UNKNOWN_FAILURE,
+    _attempt_from_error,
+    _classify_failure_reason,
+    _process_single_row,
+    _row_failure_reason,
+    _scan_jsonl,
+)
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _http_error(code: int, body: bytes = b"") -> urllib.error.HTTPError:
+    return urllib.error.HTTPError("http://x", code, "msg", {}, io.BytesIO(body))
+
+
+# ---------------------------------------------------------------------------
+# Pure classification helpers
+# ---------------------------------------------------------------------------
+
+
+def test_attempt_from_error_flags_429_as_rate_limited() -> None:
+    attempt = _attempt_from_error("extract", {"type": "HTTPError", "status": 429, "body": ""})
+    assert attempt == {"phase": "extract", "error_type": "HTTPError",
+                       "http_status": 429, "rate_limited": True}
+
+
+def test_attempt_from_error_flags_rate_limit_text_without_429() -> None:
+    attempt = _attempt_from_error(
+        "extract", {"type": "HTTPError", "status": 403, "body": "Monthly quota exceeded"},
+    )
+    assert attempt["rate_limited"] is True
+
+
+def test_attempt_from_error_network_exception_has_no_status() -> None:
+    attempt = _attempt_from_error("extract", {"type": "TimeoutError", "message": "timed out"})
+    assert attempt == {"phase": "extract", "error_type": "TimeoutError"}
+
+
+@pytest.mark.parametrize(
+    "attempts, expected",
+    [
+        # Every call returned a clean 200 but no usable content → genuine gap.
+        ([{"phase": "extract", "http_status": 200}, {"phase": "extract", "http_status": 200}],
+         (NO_ARCHIVE_CONTENT, False)),
+        # A 429 anywhere wins, even alongside clean 200s.
+        ([{"phase": "extract", "http_status": 200},
+          {"phase": "extract", "error_type": "HTTPError", "http_status": 429, "rate_limited": True}],
+         (RATE_LIMITED, True)),
+        # Network exception → retryable network_error.
+        ([{"phase": "extract", "error_type": "URLError"}], (NETWORK_ERROR, True)),
+        # Transient HTTP status → retryable transient_error.
+        ([{"phase": "extract", "error_type": "HTTPError", "http_status": 503}],
+         (TRANSIENT_ERROR, True)),
+        # Errored but unclassifiable (e.g. auth) → terminal unknown.
+        ([{"phase": "extract", "error_type": "HTTPError", "http_status": 403}],
+         (UNKNOWN_FAILURE, False)),
+        # No attempts at all → treated as a content gap.
+        ([], (NO_ARCHIVE_CONTENT, False)),
+    ],
+)
+def test_classify_failure_reason(attempts, expected) -> None:
+    assert _classify_failure_reason(attempts) == expected
+
+
+def test_rate_limited_beats_transient_priority() -> None:
+    attempts = [
+        {"phase": "extract", "error_type": "HTTPError", "http_status": 503},
+        {"phase": "extract", "error_type": "HTTPError", "http_status": 429, "rate_limited": True},
+    ]
+    assert _classify_failure_reason(attempts) == (RATE_LIMITED, True)
+
+
+def test_row_failure_reason_legacy_empty() -> None:
+    assert _row_failure_reason({"status": "empty_results"}) == "legacy_empty"
+    assert _row_failure_reason({"status": "empty_results",
+                                "failure_reason": "no_archive_content"}) == "no_archive_content"
+
+
+# ---------------------------------------------------------------------------
+# _process_single_row end-to-end (extract call stubbed)
+# ---------------------------------------------------------------------------
+
+_TARGET = {
+    "org_uuid": "u1",
+    "name": "Co",
+    "homepage_url": "https://co.example",
+    "snapshot_url": "http://web.archive.org/web/20230314120000if_/https://co.example",
+    "closest_ts": "20230314120000",
+    "select_paths": "",
+}
+
+
+def _run_row(monkeypatch, *, extract):
+    """Run _process_single_row with the extract call stubbed."""
+    monkeypatch.setattr("wayback_machine.extract_dead.call_tavily_extract", lambda *a, **k: extract())
+    return _process_single_row(
+        target=dict(_TARGET),
+        cfg=ExtractConfig(),
+        api_key="k",
+        rate_limiter=None,
+        stop_check=None,
+        stop_sleep=None,
+    )
+
+
+def test_process_row_no_archive_content_is_terminal_empty(monkeypatch) -> None:
+    outcome = _run_row(monkeypatch, extract=lambda: {"results": []})
+    assert outcome.status == "empty_results"
+    assert outcome.ok is True
+    assert outcome.retryable is False
+    assert outcome.record["failure_reason"] == NO_ARCHIVE_CONTENT
+    assert outcome.record["attempts"]  # both snapshot candidates recorded
+
+
+def test_process_row_extract_rate_limit_is_retryable(monkeypatch) -> None:
+    def extract():
+        raise _http_error(429, b'{"detail":"rate limit"}')
+
+    outcome = _run_row(monkeypatch, extract=extract)
+    assert outcome.status == RATE_LIMITED
+    assert outcome.ok is False
+    assert outcome.retryable is True
+    assert outcome.transient_failure is True
+    assert outcome.record["failure_reason"] == RATE_LIMITED
+
+
+def test_process_row_extract_network_error_is_retryable(monkeypatch) -> None:
+    def extract():
+        raise TimeoutError("timed out")
+
+    outcome = _run_row(monkeypatch, extract=extract)
+    assert outcome.status == NETWORK_ERROR
+    assert outcome.retryable is True
+    assert outcome.record["failure_reason"] == NETWORK_ERROR
+
+
+def test_process_row_usable_results_skip_failure_diagnostics(monkeypatch) -> None:
+    # An extract with usable raw_content takes the evidence branch, never the
+    # no-evidence branch, so no failure_reason is attached. (The vendored cleaner
+    # needs real Wayback chrome to emit evidence, so this lands on empty_results
+    # for synthetic content — the point is only that a clean 200 is NOT a fetch
+    # failure and the row is terminal, not retryable.)
+    usable = {"results": [{"url": "https://co.example",
+                           "raw_content": "Co builds widgets for teams everywhere."}]}
+    outcome = _run_row(monkeypatch, extract=lambda: usable)
+    assert outcome.ok is True
+    assert outcome.retryable is False
+    assert outcome.status in {"success", "empty_results"}
+
+
+# ---------------------------------------------------------------------------
+# Resume tally: retryable empties stay pending; terminal empties complete
+# ---------------------------------------------------------------------------
+
+
+def test_scan_jsonl_splits_retryable_and_terminal_empties(tmp_path: Path) -> None:
+    rows = [
+        {"org_uuid": "done", "ok": True, "status": "success", "retryable": False,
+         "usage_credits": 1.0},
+        {"org_uuid": "gap", "ok": True, "status": "empty_results", "retryable": False,
+         "failure_reason": NO_ARCHIVE_CONTENT},
+        {"org_uuid": "throttled", "ok": False, "status": RATE_LIMITED, "retryable": True,
+         "failure_reason": RATE_LIMITED},
+        {"org_uuid": "legacy", "ok": True, "status": "empty_results", "retryable": False},
+    ]
+    jsonl = tmp_path / "crawl_dead.jsonl"
+    jsonl.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+    scan = _scan_jsonl(jsonl)
+    assert scan.successful == 1
+    assert scan.empty == 2  # no_archive_content + legacy
+    assert scan.failed == 1  # rate_limited
+    # Terminal rows complete; the throttled row stays pending for a resume retry.
+    assert scan.completed_ids == {"done", "gap", "legacy"}
+    assert "throttled" not in scan.completed_ids
+    assert scan.failure_reasons[NO_ARCHIVE_CONTENT] == 1
+    assert scan.failure_reasons[RATE_LIMITED] == 1
+    assert scan.failure_reasons["legacy_empty"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Offline summary tool
+# ---------------------------------------------------------------------------
+
+
+def _load_summary_module():
+    path = PROJECT_ROOT / "wayback_machine" / "scripts" / "summarize_crawl_failures.py"
+    spec = importlib.util.spec_from_file_location("summarize_crawl_failures", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_summarize_crawl_failures_counts(tmp_path: Path) -> None:
+    mod = _load_summary_module()
+    rows = [
+        {"org_uuid": "a", "status": "success"},
+        {"org_uuid": "b", "status": "success_extract_fallback"},  # legacy crawl-era win
+        {"org_uuid": "c", "status": "empty_results", "failure_reason": NO_ARCHIVE_CONTENT},
+        {"org_uuid": "d", "status": RATE_LIMITED, "failure_reason": RATE_LIMITED,
+         "retryable": True},
+        {"org_uuid": "e", "status": "empty_results"},  # legacy
+        {"org_uuid": "f", "status": "thin_evidence"},
+    ]
+    jsonl = tmp_path / "crawl_dead.jsonl"
+    jsonl.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+    summary = mod.summarize(jsonl)
+    assert summary["total"] == 6
+    assert summary["successes"] == {"success": 1, "success_extract_fallback": 1}
+    assert summary["thin_evidence"] == 1
+    assert summary["failures"] == {NO_ARCHIVE_CONTENT: 1, RATE_LIMITED: 1, "legacy_empty": 1}
+    assert summary["retryable_failures"] == 1
+    report = mod.format_report(summary)
+    assert "FAILURE BREAKDOWN" in report
+    assert RATE_LIMITED in report
+
+
+def test_summarize_missing_file_is_empty(tmp_path: Path) -> None:
+    mod = _load_summary_module()
+    summary = mod.summarize(tmp_path / "nope.jsonl")
+    assert summary["total"] == 0
