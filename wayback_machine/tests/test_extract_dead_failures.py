@@ -290,9 +290,13 @@ def test_run_extract_dead_reserves_budget_for_concurrent_rows(tmp_path: Path, mo
     assert report.budget_reached is True
 
 
-def test_outage_retry_preserves_paid_credits_from_earlier_attempts(monkeypatch) -> None:
-    outcomes = iter([
-        _RowOutcome(
+def test_outage_loop_persists_charged_transient_failure_immediately(monkeypatch) -> None:
+    calls = 0
+
+    def charged_transient_failure(**_kwargs):
+        nonlocal calls
+        calls += 1
+        return _RowOutcome(
             record={
                 "org_uuid": "u1",
                 "ok": False,
@@ -311,21 +315,10 @@ def test_outage_retry_preserves_paid_credits_from_earlier_attempts(monkeypatch) 
             evidence="",
             credits_added=0.4,
             transient_failure=True,
-        ),
-        _RowOutcome(
-            record={"org_uuid": "u1", "ok": True, "status": "success",
-                    "retryable": False, "usage_credits": 0.2},
-            status="success",
-            ok=True,
-            retryable=False,
-            pages_used="https://co.example",
-            evidence="homepage evidence",
-            credits_added=0.2,
-            transient_failure=False,
-        ),
-    ])
+        )
+
     monkeypatch.setattr("wayback_machine.extract_dead._process_single_row",
-                        lambda **_: next(outcomes))
+                        charged_transient_failure)
 
     class Stop:
         stop_requested = False
@@ -345,9 +338,10 @@ def test_outage_retry_preserves_paid_credits_from_earlier_attempts(monkeypatch) 
         outage_backoff_max_seconds=0,
     )
 
-    assert outcome.status == "success"
-    assert outcome.credits_added == pytest.approx(0.6)
-    assert outcome.record["usage_credits"] == pytest.approx(0.6)
+    assert calls == 1
+    assert outcome.status == RATE_LIMITED
+    assert outcome.credits_added == pytest.approx(0.4)
+    assert outcome.record["usage_credits"] == pytest.approx(0.4)
 
 
 # ---------------------------------------------------------------------------

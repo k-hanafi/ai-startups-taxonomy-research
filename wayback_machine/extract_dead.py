@@ -439,6 +439,11 @@ def _run_row_with_outage(
             )
         if not outcome.transient_failure:
             return _attach_retry_accounting(outcome)
+        if credits_across_attempts > 0:
+            # Once Tavily has billed this company, persist the retryable row before
+            # any more retries. That keeps the append-only log and the global
+            # budget counter current, even during a long Archive/Tavily outage.
+            return _attach_retry_accounting(outcome)
         if time.monotonic() - outage_started >= max_outage_seconds or stop.stop_requested:
             return _attach_retry_accounting(outcome)
         sleep_secs = min(outage_backoff_min_seconds * (2 ** outage_attempt),
