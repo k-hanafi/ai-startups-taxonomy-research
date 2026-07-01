@@ -42,7 +42,7 @@ taxonomy never change. The only thing that differs across strands is the evidenc
 |--------|-------|--------|
 | Live | crawl → classify → merge | DONE — 44,387 companies classified (`production_classifications.csv`) |
 | Historical (wayback) | coverage probe done; infra built | PAUSED — GO verdict (~16k retrievable at Mar-2023); awaiting recovery probe before paid extract |
-| Survivorship-bias | probe done → crawl → classify → merge | IN PROGRESS — pipeline merged to `main` (Stages B–F + insights dashboard); next manual run: paid `run_crawl_dead.py` |
+| Survivorship-bias | probe done → extract → classify → merge | IN PROGRESS — Stage C migrated crawl→extract (single-page archive extract; crawl fought Archive playback limits); next manual run: paid `run_extract_dead.py` |
 
 Authoritative plans (read when resuming a strand):
 - `plans/PLAN.md` — historical/wayback master plan.
@@ -76,8 +76,8 @@ coverage_full.csv ──build_targets.py──▶ scrape_targets.csv
 SURVIVORSHIP strand (active; GO = archive crawl matching the live cohort)
 classifier_input.csv (empty-evidence rows) ──build_not_found_cohort.py──▶ not_found_cohort.csv
  └──probe_death_coverage.py (death-anchored CDX)──▶ death_coverage.csv
- └──build_targets_dead.py──▶ scrape_targets_dead.csv (if_ crawl URL + per-company scope)
- └──run_crawl_dead.py (Tavily /crawl on pre-death snapshot)──▶ scrape_processed_dead.csv
+ └──build_targets_dead.py──▶ scrape_targets_dead.csv (if_ snapshot URL + per-company scope)
+ └──run_extract_dead.py (Tavily /extract on pre-death snapshot)──▶ scrape_processed_dead.csv
  └──build_classifier_input_dead.py──▶ classifier_input_dead.csv
  └──classify_dead.py run (classify.py under CLASSIFY_NS=wayback_dead)──▶ outputs/wayback_dead/wayback_dead_classifications.csv
  └──merge_survivorship.py──▶ outputs/wayback_dead/survivorship_corrected.csv
@@ -144,7 +144,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `extract.py` | Resumable, budget-capped Tavily `/extract` engine (historical analogue of `tavily_crawl.py`) |
 | `targets.py` | Stage B: `coverage_full.csv` → `scrape_targets.csv` |
 | `targets_dead.py` | **(survivorship)** Stage B: `death_coverage.csv` → `scrape_targets_dead.csv` (emits `if_` crawl URL + per-company `select_paths` scope; no founded cutoff) |
-| `crawl_dead.py` | **(survivorship)** Stage C: resumable, budget-capped Tavily `/crawl` over pre-death `if_` snapshots; reuses live crawl primitives + harness scope/cleaner + extract reliability helpers |
+| `extract_dead.py` | **(survivorship)** Stage C: resumable, budget-capped Tavily `/extract` over pre-death `if_`/`id_` snapshots; reuses `extract.py`'s reliability harness + failure-reason instrumentation (rate_limited vs no_archive_content); writes to the crawl-era artifact names to preserve resume state |
 | `classifier_input.py` | Stage D: master metadata + 2023 evidence → `classifier_input_2023.csv` (reused by the dead strand) |
 
 ### `wayback_machine/scripts/` — thin CLIs
@@ -162,10 +162,11 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `run_probe_recovery.sh` | Shell helper to resume the recovery probe |
 | `summarize_death_coverage.py` | **(survivorship)** Aggregate `death_coverage.csv` → compact JSON shared by the findings canvas + `build_survivorship_dashboard.py` |
 | `build_targets_dead.py` | **(survivorship)** CLI for `targets_dead.py` |
-| `run_crawl_dead.py` | **(survivorship, paid)** CLI for the dead-cohort crawl engine (`crawl_dead.run_crawl_dead`); wrap in `caffeinate -ims` outside the sandbox |
+| `run_extract_dead.py` | **(survivorship, paid)** CLI for the dead-cohort extract engine (`extract_dead.run_extract_dead`); wrap in `caffeinate -ims` outside the sandbox |
 | `build_classifier_input_dead.py` | **(survivorship)** CLI: dead evidence → `classifier_input_dead.csv` |
 | `classify_dead.py` | **(survivorship)** Sets `CLASSIFY_NS=wayback_dead` then delegates to `classify.main()` — runs the unchanged classifier in an isolated workspace |
 | `merge_survivorship.py` | **(survivorship)** Stage F: overlay dead verdicts onto `production_classifications.csv`, tag `evidence_source`, write `survivorship_corrected.csv` + before/after summary |
+| `summarize_crawl_failures.py` | **(survivorship)** Offline (stdlib-only, no keys) breakdown of `crawl_dead.jsonl` by `failure_reason` (rate_limited / no_archive_content / transient / network / legacy_empty) |
 
 ### Other
 | Path | Purpose |
@@ -190,7 +191,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `wayback_machine/data/coverage_full.csv` | Mar-2023 coverage probe over the 22,032 survivors |
 | `wayback_machine/data/not_found_cohort.csv` | ~22,002 companies Tavily couldn't extract (survivorship target) |
 | `wayback_machine/data/death_coverage.csv` | Death-anchored probe output (complete: 22,002 rows, 19,044 `ok`) |
-| `wayback_machine/data/scrape_targets_dead.csv` | 19,044 dead-cohort crawl targets (`if_` URL + scope); the frozen Stage-C work list |
+| `wayback_machine/data/scrape_targets_dead.csv` | 19,044 dead-cohort extract targets (`if_` snapshot URL + scope); the frozen Stage-C work list |
 | `outputs/wayback_dead/survivorship_corrected.csv` | Stage F output: modern dataset with dead verdicts overlaid (survivorship-corrected) |
 
 ## Domain model
@@ -251,7 +252,7 @@ python scripts/run_tavily_crawl.py             # live homepage crawl
 | Live website scraping behavior | `src/tavily_crawl.py` |
 | Historical archive scraping | `wayback_machine/extract.py` + `scripts/run_extract.py` |
 | Survivorship death probe | `wayback_machine/scripts/probe_death_coverage.py` + `wayback_machine/cdx.py` |
-| Survivorship crawl→classify→merge | `wayback_machine/crawl_dead.py` + `scripts/{build_targets_dead,run_crawl_dead,build_classifier_input_dead,classify_dead,merge_survivorship}.py` |
+| Survivorship extract→classify→merge | `wayback_machine/extract_dead.py` + `scripts/{build_targets_dead,run_extract_dead,build_classifier_input_dead,classify_dead,merge_survivorship}.py` |
 | Dashboards | `data visualization/02_Analysis_Code/` |
 
 ## Maintaining this file

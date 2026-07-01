@@ -74,7 +74,7 @@ python classify.py run                # Full run
 # See plans/tavily_runner_workflow.md for Stage C–F run order
 python wayback_machine/scripts/probe_death_coverage.py
 python wayback_machine/scripts/build_targets_dead.py
-python wayback_machine/scripts/run_crawl_dead.py
+python wayback_machine/scripts/run_extract_dead.py
 ```
 
 ### Testing
