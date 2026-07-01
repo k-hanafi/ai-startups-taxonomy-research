@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from wayback_machine.config import ExtractConfig
+from wayback_machine.extract import ExtractInterrupted
 from wayback_machine.extract_dead import (
     NETWORK_ERROR,
     NO_ARCHIVE_CONTENT,
@@ -114,15 +115,15 @@ _TARGET = {
 }
 
 
-def _run_row(monkeypatch, *, extract):
+def _run_row(monkeypatch, *, extract, cfg=None, stop_check=None):
     """Run _process_single_row with the extract call stubbed."""
     monkeypatch.setattr("wayback_machine.extract_dead.call_tavily_extract", lambda *a, **k: extract())
     return _process_single_row(
         target=dict(_TARGET),
-        cfg=ExtractConfig(),
+        cfg=cfg or ExtractConfig(),
         api_key="k",
         rate_limiter=None,
-        stop_check=None,
+        stop_check=stop_check,
         stop_sleep=None,
     )
 
@@ -170,6 +171,25 @@ def test_process_row_usable_results_skip_failure_diagnostics(monkeypatch) -> Non
     assert outcome.ok is True
     assert outcome.retryable is False
     assert outcome.status in {"success", "empty_results"}
+
+
+def test_process_row_stop_mid_row_requeues_not_terminal(monkeypatch) -> None:
+    # A stop signal before a snapshot is tried must requeue the company (raise
+    # ExtractInterrupted so the worker re-queues it), never write a terminal row
+    # that a resume would skip forever.
+    with pytest.raises(ExtractInterrupted):
+        _run_row(monkeypatch, extract=lambda: {"results": []}, stop_check=lambda: True)
+
+
+def test_no_archive_content_credits_track_extract_depth(monkeypatch) -> None:
+    # Two 200-but-empty snapshots billed at the depth's per-extraction rate:
+    # basic = 0.2 each, advanced = 0.4 each (2 credits per 5 extractions).
+    basic = _run_row(monkeypatch, extract=lambda: {"results": []},
+                     cfg=ExtractConfig(extract_depth="basic"))
+    advanced = _run_row(monkeypatch, extract=lambda: {"results": []},
+                        cfg=ExtractConfig(extract_depth="advanced"))
+    assert basic.record["usage_credits"] == pytest.approx(0.4)
+    assert advanced.record["usage_credits"] == pytest.approx(0.8)
 
 
 # ---------------------------------------------------------------------------

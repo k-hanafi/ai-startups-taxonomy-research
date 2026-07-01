@@ -51,6 +51,7 @@ from .config import (
     DEFAULT_OUTAGE_BACKOFF_MIN_SECONDS,
     TAVILY_EXTRACT_RPM_DOCUMENTED,
     ExtractConfig,
+    estimate_credits,
 )
 from .evidence import compact_tavily_response
 from .extract import (
@@ -307,17 +308,25 @@ def _process_single_row(
     }
     credits = 0.0
     attempts: list[dict[str, Any]] = []
+    # Per successful extraction: 1 credit / 5 (basic) or 2 credits / 5 (advanced).
+    credit_per_extract = estimate_credits(1, extract_depth=cfg.extract_depth)
     for url in _extract_candidates(target):
         if stop_check and stop_check():
-            break
+            # Interrupted before this snapshot was tried. Requeue the whole company
+            # (do NOT write a terminal row) so a resume retries it — this is the
+            # documented row-boundary interrupt semantics; a half-tried company must
+            # not be marked done.
+            raise ExtractInterrupted()
         try:
             response = call_tavily_extract(
                 url, cfg, api_key, rate_limiter=rate_limiter, stop_check=stop_check,
             )
+        except ExtractInterrupted:
+            raise  # stop hit during a rate-limit wait: requeue, don't record a failure
         except Exception as exc:  # noqa: BLE001 — normalize any Tavily/network error
             attempts.append(_attempt_from_error("extract", _error_payload(exc)))
             continue
-        credits += 0.2  # basic extract ≈ 1 credit / 5 successful extractions
+        credits += credit_per_extract
         attempts.append(_attempt_ok("extract"))
         if not _has_usable_results(response):
             continue
