@@ -414,19 +414,37 @@ def _run_row_with_outage(
     """Retry a row through multi-minute Tavily/Archive outages, honoring stop."""
     outage_attempt = 0
     outage_started = time.monotonic()
+    credits_across_attempts = 0.0
+    attempts_across_attempts: list[dict[str, Any]] = []
+
+    def _attach_retry_accounting(outcome: _RowOutcome) -> _RowOutcome:
+        """Carry paid work from earlier outage attempts into the final record."""
+        if credits_across_attempts:
+            outcome.credits_added = credits_across_attempts
+            outcome.record["usage_credits"] = credits_across_attempts
+        if attempts_across_attempts and "attempts" in outcome.record:
+            outcome.record["attempts"] = attempts_across_attempts
+        return outcome
+
     while True:
         outcome = _process_single_row(
             target=target, cfg=cfg, api_key=api_key, rate_limiter=rate_limiter,
             stop_check=lambda: stop.stop_requested, stop_sleep=stop.sleep,
         )
+        credits_across_attempts += outcome.credits_added
+        attempts = outcome.record.get("attempts")
+        if isinstance(attempts, list):
+            attempts_across_attempts.extend(
+                attempt for attempt in attempts if isinstance(attempt, dict)
+            )
         if not outcome.transient_failure:
-            return outcome
+            return _attach_retry_accounting(outcome)
         if time.monotonic() - outage_started >= max_outage_seconds or stop.stop_requested:
-            return outcome
+            return _attach_retry_accounting(outcome)
         sleep_secs = min(outage_backoff_min_seconds * (2 ** outage_attempt),
                          outage_backoff_max_seconds)
         if not stop.sleep(sleep_secs):
-            return outcome
+            return _attach_retry_accounting(outcome)
         outage_attempt += 1
 
 
