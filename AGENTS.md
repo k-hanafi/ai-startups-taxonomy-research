@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-06-30 · Active branch: `main`
+Last updated: 2026-07-04 · Active branch: `main`
 
 ---
 
@@ -44,12 +44,13 @@ taxonomy never change. The only thing that differs across strands is the evidenc
 | Historical (wayback) | coverage probe done; infra built | PAUSED — GO verdict (~16k retrievable at Mar-2023); awaiting recovery probe before paid extract |
 | Survivorship-bias | probe done → extract → classify → merge | IN PROGRESS — Stage C migrated crawl→extract (single-page archive extract; crawl fought Archive playback limits); next manual run: paid `run_extract_dead.py` |
 
-Authoritative plans (read when resuming a strand):
-- `plans/PLAN.md` — historical/wayback master plan.
-- `plans/survivorship_bias_wayback_*.plan.md` — death-anchored CDX probe (active survivorship strand).
-- `plans/survivorship_tavily_pipeline_*.plan.md` — post-probe Tavily extract + classify pipeline.
+Authoritative plans (read when resuming a strand; committed under **`.cursor/plans/`**):
+- `.cursor/plans/PLAN.md` — historical/wayback master plan.
+- `.cursor/plans/survivorship_bias_wayback_*.plan.md` — death-anchored CDX probe (active survivorship strand).
+- `.cursor/plans/survivorship_tavily_pipeline_*.plan.md` — post-probe Tavily extract + classify pipeline.
+- `.cursor/plans/logprob_confidence_classifier_*.plan.md` — logprob-based confidence methodology (active).
 
-Plans live in two places on purpose: the Cursor plans dir (`~/.cursor/plans/`) is canonical for Cursor agents, and a committed **duplicate** in **`plans/` at repo root** serves humans and non-Cursor agents (read from GitHub). Repo agent skills live in **`.cursor/skills/`** (committed to git for cloud agents).
+Cursor writes new plans to `~/.cursor/plans/` by default; copy or sync them into **`.cursor/plans/`** in this repo so they are version-controlled. Legacy copies may still exist in **`plans/`** at repo root. Repo agent skills live in **`.cursor/skills/`** (committed; **`.cursor/rules/`** stays local).
 
 ## Tech stack
 
@@ -97,8 +98,9 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `README.md` | Public-facing writeup (taxonomy + pipeline narrative + mermaid diagrams) |
 | `pyproject.toml` | Dependencies + pytest config |
 | `AGENTS.md` | This file |
-| `plans/` | Committed **duplicate** of the canonical Cursor plans (for humans + non-Cursor agents; read from GitHub) |
+| `.cursor/plans/` | Committed Cursor plans (sync from `~/.cursor/plans/` after planning sessions) |
 | `.cursor/skills/` | Repo-level agent skills (`SKILL.md` per skill; committed; `.cursor/rules/` stays local) |
+| `plans/` | Legacy plan copies (prefer `.cursor/plans/` for new work) |
 
 ### `src/` — live classification pipeline
 | File | Responsibility |
