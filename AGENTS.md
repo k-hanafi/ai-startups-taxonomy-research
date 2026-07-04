@@ -50,7 +50,7 @@ Authoritative plans (read when resuming a strand; committed under **`.cursor/pla
 - `.cursor/plans/survivorship_tavily_pipeline_*.plan.md` — post-probe Tavily extract + classify pipeline.
 - `.cursor/plans/logprob_confidence_classifier_*.plan.md` — logprob-based confidence methodology (active).
 
-Cursor writes new plans to `~/.cursor/plans/` by default; copy or sync them into **`.cursor/plans/`** in this repo so they are version-controlled. Legacy copies may still exist in **`plans/`** at repo root. Repo agent skills live in **`.cursor/skills/`** (committed; **`.cursor/rules/`** stays local).
+Cursor writes new plans to `~/.cursor/plans/` by default; copy or sync them into **`.cursor/plans/`** in this repo so they are version-controlled. Legacy copies may still exist in **`plans/`** at repo root. Repo agent skills (committed): **`portfolio-git-messages`**, **`git-commit-batch-plan`**, **`code-structure`**, **`clean-my-repo`** under **`.cursor/skills/`**. **`.cursor/rules/`** stays local.
 
 ## Tech stack
 
@@ -99,7 +99,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `pyproject.toml` | Dependencies + pytest config |
 | `AGENTS.md` | This file |
 | `.cursor/plans/` | Committed Cursor plans (sync from `~/.cursor/plans/` after planning sessions) |
-| `.cursor/skills/` | Repo-level agent skills (`SKILL.md` per skill; committed; `.cursor/rules/` stays local) |
+| `.cursor/skills/` | Four committed repo skills: `portfolio-git-messages`, `git-commit-batch-plan`, `code-structure`, `clean-my-repo` |
 | `plans/` | Legacy plan copies (prefer `.cursor/plans/` for new work) |
 
 ### `src/` — live classification pipeline
