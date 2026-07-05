@@ -25,3 +25,7 @@ EVALS_DIR = PROJECT_ROOT / "evals"
 GOLDEN_DIR = EVALS_DIR / "golden"
 GOLDEN_SET_CSV = GOLDEN_DIR / "golden_set.csv"          # committed (no evidence text)
 RUNS_DIR = EVALS_DIR / "runs"                            # runs/<run_id>/raw/ git-ignored
+
+# Stage 2 labeling artifacts (git-ignored: both embed scraped evidence text).
+LABELING_WORKSPACE_DIR = GOLDEN_DIR / "workspace"
+REVIEW_PAGE_HTML = GOLDEN_DIR / "review_page.html"
