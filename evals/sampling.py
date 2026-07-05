@@ -17,6 +17,8 @@ import logging
 
 import pandas as pd
 
+from src.formatter import _clean as _clean_prompt_value
+
 from evals.config import (
     EVIDENCE_TERCILE_LABELS,
     GOLDEN_SET_SIZE,
@@ -75,7 +77,8 @@ def sample_golden_set(
         right_on="org_uuid",
         how="inner",
     )
-    pool["evidence_chars"] = pool["website_evidence"].fillna("").str.len()
+    pool["website_evidence"] = pool["website_evidence"].map(_clean_prompt_value)
+    pool["evidence_chars"] = pool["website_evidence"].str.len()
     pool = pool[pool["evidence_chars"] > 0]
     pool = _dedupe_company_pool(pool)
 
@@ -174,8 +177,32 @@ def _sample_stratum(stratum: pd.DataFrame, quota: int, seed: int) -> pd.DataFram
     return pd.concat(taken, ignore_index=True)
 
 
+def _assert_safe_to_overwrite_golden_set(path) -> None:
+    """Avoid clobbering human review work after Stage 2 labeling begins."""
+    if not path.exists() or path.stat().st_size == 0:
+        return
+
+    existing = pd.read_csv(path, dtype=str, keep_default_na=False)
+    human_columns = [
+        col
+        for col in GOLDEN_SET_COLUMNS
+        if col.startswith("draft_") or col.startswith("gold_") or col == "ambiguity_flag"
+    ]
+    present_columns = [col for col in human_columns if col in existing.columns]
+    if not present_columns:
+        return
+
+    has_human_labels = existing[present_columns].map(_clean_prompt_value).ne("").any().any()
+    if has_human_labels:
+        raise RuntimeError(
+            f"Refusing to overwrite {path}: draft/gold label columns already contain values."
+        )
+
+
 def build_golden_set() -> pd.DataFrame:
     """I/O wrapper: read production artifacts, write evals/golden/golden_set.csv."""
+    _assert_safe_to_overwrite_golden_set(GOLDEN_SET_CSV)
+
     predictions = pd.read_csv(PRODUCTION_CLASSIFICATIONS_CSV)
     classifier_input = pd.read_csv(CLASSIFIER_INPUT_CSV)
 
