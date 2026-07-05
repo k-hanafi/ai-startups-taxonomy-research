@@ -96,6 +96,48 @@ def test_undersized_stratum_raises():
         sample_golden_set(predictions, classifier_input, quotas=quotas, seed=1)
 
 
+def test_duplicate_predictions_do_not_satisfy_quota():
+    predictions = pd.DataFrame(
+        {
+            "CompanyID": ["dup", "dup", "other"],
+            "CompanyName": ["Dup Co", "Dup Co", "Other Co"],
+            "ai_native": [1, 1, 1],
+            "subclass": ["1A", "1A", "1A"],
+            "rad_score": ["RAD-M", "RAD-M", "RAD-M"],
+        }
+    )
+    classifier_input = pd.DataFrame(
+        {
+            "org_uuid": ["dup", "other"],
+            "name": ["Dup Co", "Other Co"],
+            "website_evidence": ["x" * 10, "x" * 100],
+        }
+    )
+    with pytest.raises(ValueError, match="2 unique evidence-bearing companies"):
+        sample_golden_set(predictions, classifier_input, quotas={"1A": 3}, seed=1)
+
+
+def test_duplicate_predictions_are_collapsed():
+    predictions, classifier_input = _synthetic_pool(rows_per_subclass=10)
+    duplicate = predictions[predictions["subclass"] == "1A"].iloc[[0]]
+    predictions = pd.concat([predictions, duplicate, duplicate], ignore_index=True)
+
+    golden = sample_golden_set(predictions, classifier_input, quotas={"1A": 5}, seed=1)
+
+    assert len(golden) == 5
+    assert golden["org_uuid"].is_unique
+
+
+def test_conflicting_duplicate_predictions_raise():
+    predictions, classifier_input = _synthetic_pool(rows_per_subclass=10)
+    duplicate = predictions[predictions["subclass"] == "1A"].iloc[[0]].copy()
+    duplicate["subclass"] = "1B"
+    predictions = pd.concat([predictions, duplicate], ignore_index=True)
+
+    with pytest.raises(ValueError, match="disagree on sampling fields"):
+        sample_golden_set(predictions, classifier_input, quotas={"1A": 5}, seed=1)
+
+
 def test_terciles_spread_within_stratum():
     predictions, classifier_input = _synthetic_pool(rows_per_subclass=60)
     quotas = {"1E": 9}

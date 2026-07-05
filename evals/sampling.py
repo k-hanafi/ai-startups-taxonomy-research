@@ -77,6 +77,7 @@ def sample_golden_set(
     )
     pool["evidence_chars"] = pool["website_evidence"].fillna("").str.len()
     pool = pool[pool["evidence_chars"] > 0]
+    pool = _dedupe_company_pool(pool)
 
     # Global terciles over the evidence-bearing pool, so "short" means the
     # same thing in every stratum.
@@ -90,7 +91,7 @@ def sample_golden_set(
         stratum = pool[pool["subclass"] == subclass]
         if len(stratum) < quota:
             raise ValueError(
-                f"Stratum {subclass!r} has {len(stratum)} evidence-bearing rows, "
+                f"Stratum {subclass!r} has {len(stratum)} unique evidence-bearing companies, "
                 f"quota is {quota}. Adjust SUBCLASS_QUOTAS."
             )
         sampled_parts.append(_sample_stratum(stratum, quota, seed))
@@ -111,6 +112,8 @@ def sample_golden_set(
     total = sum(quotas.values())
     if len(golden) != total:
         raise AssertionError(f"Sampled {len(golden)} rows, expected {total}")
+    if golden["org_uuid"].duplicated().any():
+        raise AssertionError("Golden set contains duplicate org_uuid values")
     return golden
 
 
@@ -120,6 +123,24 @@ def _tercile(chars: int, edges: list[float]) -> str:
     if chars <= edges[1]:
         return EVIDENCE_TERCILE_LABELS[1]
     return EVIDENCE_TERCILE_LABELS[2]
+
+
+def _dedupe_company_pool(pool: pd.DataFrame) -> pd.DataFrame:
+    """Collapse repeated joined rows so each company can enter one stratum."""
+    sample_fields = ["name", "website_evidence", "ai_native", "subclass", "rad_score"]
+    conflicts = (
+        pool.groupby("org_uuid")[sample_fields]
+        .nunique(dropna=False)
+        .gt(1)
+        .any(axis=1)
+    )
+    if conflicts.any():
+        examples = ", ".join(sorted(map(str, conflicts[conflicts].index))[:5])
+        raise ValueError(
+            "Duplicate rows for the same org_uuid disagree on sampling fields: "
+            f"{examples}"
+        )
+    return pool.sort_values("org_uuid").drop_duplicates("org_uuid", keep="first")
 
 
 def _sample_stratum(stratum: pd.DataFrame, quota: int, seed: int) -> pd.DataFrame:
