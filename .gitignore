@@ -24,6 +24,10 @@ outputs/
 # Eval harness: raw API responses are large and may embed evidence text.
 # Run configs, predictions, and scored summaries stay committed.
 evals/runs/*/raw/
+# Stage 2 labeling artifacts embed scraped website text (public repo policy).
+evals/golden/workspace/
+evals/golden/review_page.html
+evals/golden/drafts_*.json
 
 # IDE / editor (local-only; repo skills + plans live in .cursor/)
 .cursor/rules/
