@@ -4,38 +4,61 @@ overview: Build a standalone 100-company golden-dataset evaluation harness (eval
 todos:
   - id: stage0-scaffolding
     content: Branch eval-harness; scaffold evals/ package (config.py, paths.py, CLI with sample/run/score/report); gitignore evals/runs/*/raw/
-    status: pending
+    status: completed
   - id: stage1-sampling
     content: "evals/sampling.py: stratified 100-row golden set from production predictions x evidence terciles -> evals/golden/golden_set.csv"
-    status: pending
+    status: completed
   - id: stage2-gold-labeling
-    content: Fable drafts labels + rationale + ambiguity flags; render HTML review page; user records gold verdicts in CSV
-    status: pending
+    content: Fable drafts labels + rationale + ambiguity flags; render HTML review page; user records gold verdicts in CSV (drafts merged; human verdict pass still outstanding)
+    status: completed
   - id: stage3-runner
-    content: "evals/runner.py: sync Responses API runner with logprob params, config snapshot (prompt/schema hashes), run dirs"
+    content: "evals/runner.py: sync Responses API runner with logprob params, config snapshot (prompt/schema hashes), run dirs (PR #13 open)"
+    status: completed
+  - id: stage4-prompts
+    content: "Stage 4 (branch two-pass/stage-1-prompts, PR 4): decompose the monolith prompt into binary_gate_prompt.txt (Pass A) + family-parameterized subclass_rad_prompt.txt (Pass B); 3-5 row live format smoke; user reviews prompt text before merge"
     status: pending
-  - id: stage4-logprob-extract
-    content: "evals/logprob_extract.py: byte-reconstruction, decision-token location, renormalized metrics; pin tokenization + capture fixtures (gate Q2/Q3/Q5)"
+  - id: stage5-twopass-impl
+    content: "Stage 5 (branch two-pass/stage-2-implementation, PR 5): BinaryResult + family-constrained SubclassResult schemas (boundary_disagreement flag), two-pass runner in evals/, cohort computed in code, offline tests"
     status: pending
-  - id: stage5-batch-parity
-    content: "10-row Batch API parity smoke: logprob shape + parameter honoring vs sync (gate Q4)"
+  - id: stage6-logprob-extract
+    content: "Stage 6 (PR 6): evals/logprob_extract.py targeting Pass A binary-only output: byte-reconstruction, decision-token metrics, fixtures (gate Q2/Q3/Q5)"
     status: pending
-  - id: stage6-scorer
-    content: "evals/scoring.py: per-axis accuracy, macro-F1, confusion, bootstrap CIs, cost, calibration; reasoning-token sizing (gate Q6); writes scored.json"
+  - id: stage7-parity-scorer
+    content: "Stage 7 (PR 7): 10-row Batch API parity smoke on Pass A requests (gate Q4) + evals/scoring.py: accuracy, macro-F1, confusion, bootstrap CIs, cost, calibration on Pass A binary confidence, reasoning-token sizing (gate Q6)"
     status: pending
-  - id: stage7-experiments
-    content: "Paid runs: 4-model screen at medium, none-vs-medium A/B on frontier models (gate Q1), 3 repeats on finalists"
+  - id: stage8-experiments
+    content: "Stage 8 (PR 8, paid): two-pass over the golden set vs banked single-pass baselines (nano none/medium/high in evals/runs/); repeats on finalists; go/no-go on the two-pass design"
     status: pending
-  - id: stage8-dashboard
-    content: "House-style static HTML dashboard: Pareto, per-axis metrics + CIs, confusion, calibration, disagreement browser"
+  - id: stage9-dashboard
+    content: "Stage 9 (PR 9): house-style static HTML dashboard: Pareto, per-axis metrics + CIs, confusion, calibration, disagreement browser"
     status: pending
-  - id: stage9-wrapup
-    content: evals/tests/, AGENTS.md updates, written gate report answering six gate questions + model recommendation
+  - id: stage10-wrapup
+    content: "Stage 10 (PR 10): evals/tests/, AGENTS.md updates, written gate report answering the gate questions + model recommendation"
     status: pending
 isProject: false
 ---
 
 # Golden-Set Evaluation Harness
+
+## Course correction (2026-07-06): findings redirected stages 4-7
+
+Stages 0-3 are DONE (PR 1 #11, PR 2 #12 merged; PR 3 #13 open). The Stage 3
+runs answered gate questions early and **invalidated the single-call design**
+the later stages assumed: reasoning models reject `temperature`, and logprobs
+return only at `reasoning.effort=none` (Q1 answered: reasoning doesn't collapse
+the spread — it forbids logprobs entirely). Binary ai_native survives without
+reasoning (93% vs Fable at none AND high); 10-way subclass does not (41% vs
+66%). The replacement architecture is the two-pass classifier
+([two_pass_split_reasoning_classifier_9c1f4e20.plan.md](two_pass_split_reasoning_classifier_9c1f4e20.plan.md)):
+Pass A binary at effort=none with logprobs, Pass B family-constrained
+subclass+RAD at effort=high. Consequences for this plan:
+
+The stages are renumbered below: the two-pass prompt and implementation work
+become **Stage 4** and **Stage 5** of this plan (detailed in the two-pass plan),
+and the original stages 4-9 shift to 6-10. Logprob extraction now targets Pass
+A's binary-only output (near-single-token JSON) instead of locating decision
+tokens inside the full 11-field blob. Experiments compare two-pass vs the
+banked single-pass baselines instead of the original 4-model x effort matrix.
 
 ## Purpose
 
@@ -81,17 +104,19 @@ flowchart TD
 
 **Stage 3 — Runner** (`evals/runner.py`). Byte-identical production request (imported prompt/schema/formatter) + experimental params (`include=["message.output_text.logprobs"]`, `top_logprobs=15`, `reasoning={"effort":...}`, `temperature=0`). Tenacity retries. Writes run dir with config snapshot (model, effort, prompt/schema SHA-256, git commit, timestamp).
 
-**Stage 4 — Logprob extraction** (`evals/logprob_extract.py`). Byte-reconstruction with char spans, structural JSON location of decision tokens, renormalization, top1/margin/entropy per the locked schema in the logprob plan. Pins real tokenization (gate Q2), captures 2-3 anonymized fixtures (gate Q5), records `valid_mass` (gate Q3). This module is the prototype later promoted to `src/logprobs.py`.
+**Stage 4 — Two-pass prompts** (branch `two-pass/stage-1-prompts`). Decompose `prompts/system_classifier_prompt.txt` into `binary_gate_prompt.txt` (Pass A: binary-only few-shots, collapsed decision procedure) and family-parameterized `subclass_rad_prompt.txt` (Pass B: `{family_block}` for 1A-1G vs 0A-0C). Prose-only PR so the user reviews the taxonomy text itself; includes a 3-5 row live format smoke. Full mapping table in the [two-pass plan](two_pass_split_reasoning_classifier_9c1f4e20.plan.md).
 
-**Stage 5 — Batch parity smoke** (gate Q4). 10 rows via Batch API with identical params; assert logprob array shape parity and parameter honoring (usage/reasoning tokens, extraction results) vs the same rows run sync.
+**Stage 5 — Two-pass implementation** (branch `two-pass/stage-2-implementation`). `BinaryResult` + family-constrained `SubclassResult` schemas (with `boundary_disagreement`), the two-pass runner in `evals/`, cohort computed in code, offline tests. Depends on Stage 4's merged prompts and PR 3's run-dir conventions.
 
-**Stage 6 — Scorer** (`evals/scoring.py`, offline). All v1 metrics above; reasoning-token usage per effort sizes `MAX_OUTPUT_TOKENS` and the cost model (gate Q6). Writes `scored.json`; re-runnable without API calls.
+**Stage 6 — Logprob extraction** (`evals/logprob_extract.py`). Targets Pass A's binary-only output: byte-reconstruction with char spans, decision-token location, renormalization, top1/margin/entropy. Pins real tokenization (gate Q2), captures anonymized fixtures (gate Q5), records `valid_mass` (gate Q3). Prototype later promoted to `src/logprobs.py`.
 
-**Stage 7 — Experiments** (paid, outside sandbox, `keys/openai.env`). (a) Screen 4 models at medium. (b) Effort sweep incl. none-vs-medium A/B on frontier models — answers gate Q1 with logprob-spread distributions. (c) 3 repeats on finalists. Ballpark < $30 total; dry-run cost printed before each paid step.
+**Stage 7 — Batch parity + scorer.** (a) 10 Pass-A rows via Batch API with identical params; assert logprob shape parity and parameter honoring vs sync (gate Q4). (b) `evals/scoring.py` (offline): all v1 metrics; calibration applies to Pass A binary confidence; reasoning-token usage sizes `MAX_OUTPUT_TOKENS` and the cost model (gate Q6). Writes `scored.json`.
 
-**Stage 8 — Dashboard.** House-style static HTML: cost-vs-accuracy Pareto, per-axis metrics with CIs, confusion matrices, calibration plots, disagreement browser (evidence + gold + each model's answer/rationale).
+**Stage 8 — Experiments** (paid, outside sandbox, `keys/openai.env`). Two-pass over the golden set vs the banked single-pass baselines (nano none/medium/high already in `evals/runs/`); repeats on finalists for determinism variance; go/no-go on the two-pass design per the validation gate in the two-pass plan.
 
-**Stage 9 — Wrap-up.** `evals/tests/` (sampler determinism, extraction golden fixtures, scorer on synthetic data), AGENTS.md updates, and a written gate report answering the six gate questions + the model recommendation — the artifact that unblocks the logprob pipeline plan.
+**Stage 9 — Dashboard.** House-style static HTML: cost-vs-accuracy Pareto, per-axis metrics with CIs, confusion matrices, calibration plots, disagreement browser (evidence + gold + each model's answer/rationale).
+
+**Stage 10 — Wrap-up.** `evals/tests/` completeness, AGENTS.md updates, and a written gate report answering the gate questions + the model recommendation — the artifact that unblocks the production promotion.
 
 ## Execution workflow: sequential stage PRs to main + Bugbot (locked 2026-07-04)
 
@@ -106,14 +131,16 @@ Per-stage loop:
 6. Squash-merge, delete branch, pull main, cut next stage branch (sequencing enforced by construction).
 
 Stage-to-PR mapping (grouped by risk):
-- PR 1 — Stage 0 + 1: scaffolding, config, CLI, sampler (+ tests)
-- PR 2 — Stage 2: review-page generator + signed golden labels CSV
-- PR 3 — Stage 3: sync runner + run records
-- PR 4 — Stage 4: logprob extraction + fixtures + tests (own PR: subtlest code, silent-failure risk)
-- PR 5 — Stage 5 + 6: batch parity smoke + scorer
-- PR 6 — Stage 7: experiment artifacts (scored summaries) + fixes exposed by real runs
-- PR 7 — Stage 8: HTML dashboard
-- PR 8 — Stage 9: gate report + AGENTS.md
+- PR 1 — Stage 0 + 1: scaffolding, config, CLI, sampler (+ tests) — MERGED #11
+- PR 2 — Stage 2: review-page generator + signed golden labels CSV — MERGED #12
+- PR 3 — Stage 3: sync runner + run records — OPEN #13
+- PR 4 — Stage 4: two-pass prompts (prose-only; user reviews taxonomy text)
+- PR 5 — Stage 5: two-pass schemas + runner + tests
+- PR 6 — Stage 6: logprob extraction + fixtures + tests (own PR: subtlest code, silent-failure risk)
+- PR 7 — Stage 7: batch parity smoke + scorer
+- PR 8 — Stage 8: experiment artifacts (scored summaries) + fixes exposed by real runs
+- PR 9 — Stage 9: HTML dashboard
+- PR 10 — Stage 10: gate report + AGENTS.md
 
 ## Success criteria
 

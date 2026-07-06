@@ -62,9 +62,18 @@ Too many unvalidated assumptions remain to touch the production pipeline safely.
 
 The rest of this plan is the post-gate implementation reference.
 
-## Locked config (user-confirmed by research, 2026-07-03)
+## Locked config (user-confirmed by research, 2026-07-03) — INVALIDATED 2026-07-06
 
-User research confirmed `temperature=0` does NOT require reasoning off, and logprobs are exposed with reasoning on for the 5.4 family.
+> **SUPERSEDED.** The eval harness disproved this section's premises live
+> (gpt-5.4-nano, 400 errors captured): reasoning models REJECT `temperature`,
+> and logprobs are returned ONLY at `reasoning.effort=none` — never with
+> reasoning on. The single-call design below is impossible. The replacement
+> architecture is [two_pass_split_reasoning_classifier_9c1f4e20.plan.md](two_pass_split_reasoning_classifier_9c1f4e20.plan.md)
+> (Pass A binary at effort=none with logprobs; Pass B subclass+RAD at
+> effort=high without). The schema-naming and downstream-consumer work below
+> remains valid for the production promotion.
+
+Original (disproven) basis: user research suggested `temperature=0` does NOT require reasoning off, and logprobs are exposed with reasoning on for the 5.4 family.
 
 - Model: **`gpt-5.4-mini`** default (better judgment/calibration than nano). One-line change in [src/config.py](src/config.py); revisit freely.
 - **`reasoning = {"effort": "medium"}`** — keep deliberation for the nuanced 10-subclass taxonomy.
