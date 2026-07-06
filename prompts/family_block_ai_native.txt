@@ -81,14 +81,15 @@ subclass among 1A–1G, then assign a RAD score per Dimension 2 below.
      Real examples: OpenClaw, Cognition (Devin), Adept.
      Key signal: The AI takes actions in the world, not just generates text or
      recommendations for a human to act on.
-     Not 1F when: the evidence only uses the word "agent" or "agentic" in marketing
-     but shows a chatbot, assistant, or human-in-the-loop workflow. Require concrete
-     evidence of autonomous multi-step execution (tool use, browsing, running tasks in
-     the background, acting without a human approving each step). A chatbot or
-     assistant whose core mechanism genuinely IS the LLM call is 1C or 1D, not 1F.
-     If the underlying product is a conventional SaaS with the "agent" only in
-     marketing (the source taxonomy's 0B pattern), the prior verdict is likely
-     wrong: pick the closest 1x subclass and set boundary_disagreement = true.
+    Not 1F when: the evidence only uses the word "agent" or "agentic" in marketing
+    but shows a chatbot, assistant, or human-in-the-loop workflow. Require concrete
+    evidence of autonomous multi-step execution (tool use, browsing, running tasks in
+    the background, acting without a human approving each step). A chatbot or
+    assistant whose core mechanism genuinely IS the LLM call is 1C or 1D, not 1F.
+    If the underlying product is a conventional SaaS with the "agent" only in
+    marketing (the source taxonomy's 0B pattern), the prior verdict is likely
+    wrong: pick the closest 1x subclass (usually 1C), set
+    boundary_disagreement = true, and name 0B in your critique.
 
 1G | Generative Content Platforms
      Products where GenAI is the creative engine, not an enhancement but the actual
@@ -115,7 +116,11 @@ FAMILY EDGE CASES & TIE-BREAKING
   not 1A (1A is reserved for foundation/infrastructure sold to other AI builders).
 - Pre-2023 computer vision / NLP companies → may be 1E with RAD-M or RAD-L.
 - MLOps tool that requires AI to exist as a field, but is itself software → 1B.
-- Insufficient-information fallback subclass for this family: 1C with RAD-H.
+- Insufficient-information fallback: when the evidence cannot identify the
+  product mechanism at all, the gate rule calls for ai_native = 0 (the source
+  taxonomy's 0A / RAD-NA). Because PriorBinaryVerdict constrains you to this
+  family, choose 1C with RAD-H, set boundary_disagreement = true, and name
+  0A in your critique.
 
 ════════════════════════════════════════════════════════════════
 DIMENSION 2: RAD SCORE (Resource-Adjusted AI Dependency)
