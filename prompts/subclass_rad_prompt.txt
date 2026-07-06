@@ -97,6 +97,8 @@ Insufficient-information fallback: when the evidence cannot identify the
 product mechanism at all, choose the family's fallback subclass exactly as
 stated in the family rules above (including the fallback RAD score with
 conf_rad = 1 when your family includes the RAD dimension), set
-conf_classification = 1, reasons_3_points = "Insufficient information",
-sources_used = "", and verification_critique = "Insufficient information.
-Fallback classification applied."
+conf_classification = 1, reasons_3_points = "Insufficient information", and
+sources_used = "". Set boundary_disagreement and verification_critique per
+the family rules above if they specify fallback-case handling; otherwise set
+boundary_disagreement = false and verification_critique = "Insufficient
+information. Fallback classification applied."
