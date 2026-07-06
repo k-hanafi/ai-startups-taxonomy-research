@@ -51,6 +51,33 @@ removing the LLM API call breaks the product. The wrapper IS the product mechani
 Wrapper depth governs which AI-native subclass applies (1C vs 1D), not whether the 
 company is AI-native.
 
+CRITICAL GUARDRAIL — marketing vs mechanism. The word "AI", an "AI-powered" 
+tagline, an "AI-native" slogan, or an "AI" keyword is NOT evidence of AI-native 
+status. Classify on the product MECHANISM shown in the evidence, never on branding. 
+If the evidence only asserts AI in slogans but shows a conventional product 
+mechanism (dashboards, analytics, no-code codegen, CRM, marketplace, staffing, 
+booking, payments), the company is 0A/0B/0C, not AI-native. A shipped AI feature 
+inside an otherwise-conventional product is 0B, not an AI-native subclass. Demand 
+evidence of the AI capability actually operating as the core mechanism before 
+assigning ai_native = 1.
+
+──────────────────────────────────────────
+DECISION PROCEDURE (run in order)
+──────────────────────────────────────────
+Step 1 — Is there a real product mechanism at all? Physical goods, retail, or a
+  services business delivered through a website with no software product → 0C.
+Step 2 — Is the company selling software / a technology product? If it sells
+  services or physical goods (staffing, consulting, wealth management, lending,
+  clinics, distribution) even with a polished website → 0C, not 0A. 0A is for
+  companies whose product IS software.
+Step 3 — Apply the counterfactual: remove all AI from the product. If the core
+  value proposition is unchanged → 0A (software) or 0C (non-software). If AI is a
+  genuine, shipped feature that improves but is not the product → 0B.
+Step 4 — Only if AI is the core mechanism (removing it breaks the product) is the
+  company ai_native = 1. Then pick the subclass (1A–1G) below.
+When ai_native = 1 vs 0 is genuinely a coin flip on the evidence, choose 0 and
+lower conf_classification.
+
 ──────────────────────────────────────────
 AI-NATIVE SUBCLASSES (ai_native = 1)
 ──────────────────────────────────────────
@@ -70,9 +97,13 @@ AI-NATIVE SUBCLASSES (ai_native = 1)
      widespread development target. Includes evaluation frameworks, fine-tuning 
      platforms, AI observability, prompt management, synthetic data generation, 
      AI safety tooling, and LLMOps platforms.
-     Real examples: Weights & Biases, Scale AI, Braintrust, Humanloop, Arize AI.
+     Real examples: Scale AI, Braintrust, Humanloop, Arize AI.
      Key signal: Their customer is an AI developer or AI team, not an end user 
      in a vertical domain.
+     Not 1B when: a conventional SaaS product (database, iPaaS, security, dev 
+     platform) has merely added an "for AI agents" or MCP feature to existing 
+     go-to-market. Requires the product's PRIMARY purpose to be serving AI builders, 
+     not a bolt-on agent feature on a pre-AI product (that is 0B).
 
 1C | Thin LLM Wrapper
      Company has built atop LLM APIs with minimal proprietary layer. The underlying 
@@ -110,7 +141,7 @@ AI-NATIVE SUBCLASSES (ai_native = 1)
      product could not exist in a meaningfully similar form without AI, not just a 
      worse version, but a categorically different and inferior one.
      Real examples: Abridge (clinical documentation), Harvey (legal AI), 
-     Glean (enterprise search), DeepScribe (medical scribe), POCUS Systems (diagnostics).
+     Glean (enterprise search), DeepScribe (medical scribe).
      Key signal: Vertical-specific AI that replaces or fundamentally transforms a 
      domain workflow, not just augments it. Distinguished from 1D by depth of 
      proprietary AI investment beyond LLM API consumption.
@@ -120,9 +151,14 @@ AI-NATIVE SUBCLASSES (ai_native = 1)
      operating software, managing complex workflows with minimal human-in-the-loop. 
      Categorically distinct from chatbots (which respond) and from AI-augmented tools 
      (which assist). These systems plan, decide, and act.
-     Real examples: OpenClaw, Cognition (Devin), Adept, Dust, Browser Use, MultiOn.
+     Real examples: OpenClaw, Cognition (Devin), Adept.
      Key signal: The AI takes actions in the world, not just generates text or 
      recommendations for a human to act on.
+     Not 1F when: the evidence only uses the word "agent" or "agentic" in marketing 
+     but shows a chatbot, assistant, or human-in-the-loop workflow. Require concrete 
+     evidence of autonomous multi-step execution (tool use, browsing, running tasks in 
+     the background, acting without a human approving each step). Marketing that says 
+     "agent" over a conventional SaaS product is 0B.
 
 1G | Generative Content Platforms
      Products where GenAI is the creative engine, not an enhancement but the actual 
@@ -131,33 +167,49 @@ AI-NATIVE SUBCLASSES (ai_native = 1)
      Real examples: Midjourney, ElevenLabs, Runway, Suno, Stability AI, HeyGen.
      Key signal: The deliverable to the customer is generated content (image, audio, 
      video, 3D) that could not be produced by the system without generative models.
+     1G vs 1C: a product that generates media by calling third-party generative APIs 
+     (voices, images, video) with a thin proprietary layer is still 1G — the subclass 
+     is set by WHAT is produced (generated media), not by wrapper depth. Wrapper depth 
+     drives the RAD score instead (thin generative-media wrappers are RAD-H).
 
 ──────────────────────────────────────────
 NOT AI-NATIVE SUBCLASSES (ai_native = 0)
 ──────────────────────────────────────────
 
 0A | Traditional Tech / SaaS
-     Conventional software with no meaningful AI angle. Pure logistics platforms, CRMs, 
-     ERPs, marketplace businesses, fintech infrastructure. AI may appear in marketing 
-     language but plays no structural role in the product or value proposition.
+     The company SELLS SOFTWARE, and that software has no meaningful AI angle. Pure 
+     logistics platforms, CRMs, ERPs, marketplaces, fintech infrastructure, no-code 
+     builders, dev tools. AI may appear in marketing language but plays no structural 
+     role in the product.
      Real examples: Shopify (pre-AI), Stripe, classic Salesforce CRM, Shipsi.
-     Key signal: Remove all AI references. The product description still makes 
-     complete sense and the value proposition is unchanged.
+     Key signal: The deliverable is a software product, and removing every AI 
+     reference leaves the product description and value proposition unchanged.
 
 0B | AI-Augmented
-     Traditional product category where AI genuinely improves the product but is 
-     not what the company sells. The core value proposition predates and survives 
-     without AI. AI is a meaningful feature, not the engine.
+     A software product whose core value predates and survives without AI, but which 
+     ships a GENUINE, VISIBLE AI feature that improves it. AI is a meaningful feature, 
+     not the engine — remove the AI and customers still buy the product for its 
+     non-AI core. This is the correct home for the common "conventional SaaS + an AI 
+     assistant/copilot bolted on" pattern; do NOT promote such companies to 1B/1C/1D/1F 
+     just because their marketing leads with agents or "AI-native".
      Real examples: Notion with AI writing assist, Grammarly post-LLM version,
      human-in-the-loop labeling platforms with AI-assisted annotation, HubSpot 
      with AI recommendations.
+     Key signal: Point to the pre-AI product. It exists, it is what the company sells, 
+     and the AI is an add-on layer on top of it — not the mechanism that produces the 
+     core value.
 
 0C | Non-Tech
-     Physical products, retail, traditional services, manufacturing with no meaningful 
-     technology angle. AI plays no role in the product, operations, or value proposition.
-     Real examples: Easy Access Limousine, Futuremood (sunglasses), 
-     food and beverage manufacturers, traditional professional services firms.
-     Key signal: No technology in the core product at all.
+     The company does NOT sell software. Physical products, retail, manufacturing, or 
+     a SERVICES business (staffing, consulting, wealth management, lending, clinics, 
+     education, distribution, agencies) that is delivered through an ordinary website 
+     but has no software product of its own. A website, online booking, or generic 
+     business tools do not make a services/physical company "tech".
+     Real examples: Easy Access Limousine, Futuremood (sunglasses), staffing agencies, 
+     wealth managers, food and beverage manufacturers, traditional professional 
+     services firms.
+     Key signal: The company sells services or physical goods, not a software product. 
+     If it sold software it would be 0A; if it sold no software and no AI it is 0C.
 
 ════════════════════════════════════════════════════════════════
 DIMENSION 2: RAD SCORE (Resource-Adjusted AI Dependency)
@@ -171,8 +223,10 @@ adjusted for the company's apparent resources and scale.
 Core counterfactual: "If this company had $500M in funding and 5 years, could they 
 build a competitive product without relying on third-party GenAI APIs?"
 
-This dimension is independent from ai_native subclass but is fully determined by the 
-ai_native flag itself. RAD is a meaningful question only for AI-native companies.
+Whether RAD applies at all is set by the ai_native flag: it is a meaningful question 
+only for AI-native companies (ai_native = 1). Within those companies, the specific 
+RAD level (H/M/L) is a separate judgment from the subclass, decided on the evidence 
+of proprietary depth below.
 
 ──────────────────────────────────────────
 RAD SCORE VALUES
@@ -215,7 +269,7 @@ RAD-NA | Not Applicable
 RAD ASSIGNMENT RULES
 ──────────────────────────────────────────
 
-The RAD dimension is fully determined by the ai_native flag:
+Whether RAD applies is set by the ai_native flag; the level is set by the evidence:
 
 - ai_native = 1 companies (1A, 1B, 1C, 1D, 1E, 1F, 1G):
   always receive RAD-H, RAD-M, or RAD-L. Never RAD-NA.
@@ -237,10 +291,13 @@ Within ai_native = 1, choose the RAD level based on evidence:
   remains material despite some proprietary depth.
 - 1A, 1B, 1E, 1F, 1G: RAD-H, RAD-M, or RAD-L depending on evidence of 
   proprietary model development versus API consumption.
-- When RAD evidence is ambiguous for a March-2023-or-later ai_native = 1 company:
-  default to RAD-H.
-- When RAD evidence is ambiguous for a pre-March-2023 ai_native = 1 company with
-  AI keywords: default to RAD-M.
+- Before defaulting, scan the evidence for proprietary-depth signals: own/trained/
+  fine-tuned models, in-house research team, proprietary dataset or data flywheel,
+  pre-2023 classical ML/CV/NLP, or scale large enough to plausibly go independent.
+  If any are present, prefer RAD-M (or RAD-L when strong) over RAD-H — do not collapse
+  to RAD-H just because the evidence is incomplete.
+- Only when no such depth signal is visible: for a March-2023-or-later company default
+  to RAD-H; for a pre-March-2023 company with AI keywords default to RAD-M.
 
 ════════════════════════════════════════════════════════════════
 TEMPORAL COHORT
@@ -317,10 +374,19 @@ EDGE CASES & TIE-BREAKING
 ════════════════════════════════════════════════════════════════
 
 - ai_native = 1 vs 0 equally plausible → classify 0, lower conf_classification, note in critique
+- Website Evidence and Crunchbase describe different products (a pivot or rebrand) →
+  classify the product shown in the Website Evidence; it is the current mechanism. Note
+  the mismatch in the critique.
+- Services or physical-goods business with a polished website → 0C, not 0A. 0A requires
+  the company to sell a software product.
+- Conventional SaaS + a bolted-on AI assistant / copilot / "agent" feature → 0B, not
+  1B/1C/1D/1F. Promote to an AI-native subclass only if AI is the core mechanism.
 - LLM API wrappers → always 1C (thin) or 1D (thick), never 1E, regardless of domain sophistication
-- "AI-powered" in marketing copy alone, absent from product mechanism or meaningful AI feature → 0A not 1C
+- "AI-powered" in marketing copy alone, absent from product mechanism or meaningful AI feature → 0A/0C not 1C
 - Vertical AI with own proprietary models → 1E with RAD-L or RAD-M
 - Vertical AI built on third-party LLMs → 1E or 1D depending on depth of proprietary investment
+- Company trains its own foundation models but for one vertical domain → 1E, not 1A
+  (1A is reserved for foundation/infrastructure sold to other AI builders)
 - Pre-2023 computer vision / NLP companies → may be 1E with RAD-M or RAD-L
 - MLOps tool that requires AI to exist as a field, but is itself software → 1B
 - Pure manual data labeling → 0A not 1B. Human-in-the-loop labeling with AI-assisted 
@@ -333,6 +399,11 @@ EDGE CASES & TIE-BREAKING
 ════════════════════════════════════════════════════════════════
 FEW-SHOT EXAMPLES
 ════════════════════════════════════════════════════════════════
+
+Note on format: the "Evidence summary" line in each example is a compressed stand-in 
+for the actual input fields you receive (Short Description, Long Description, Keywords, 
+Resource Context, Website Evidence). Reason over whatever real fields are present the 
+same way.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EXAMPLE 1 | 1A: Foundation Layer, PRE-GENAI
