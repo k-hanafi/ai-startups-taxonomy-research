@@ -111,7 +111,8 @@ def apply_drafts(drafts_json: Path | str) -> int:
             raise ValueError(f"{uuid}: ai_native={native} contradicts subclass {subclass}")
         if (native == "0") != (rad == "RAD-NA"):
             raise ValueError(f"{uuid}: rad {rad} contradicts ai_native={native}")
-        if not str(fields["draft_rationale"]).strip():
+        rationale = fields["draft_rationale"]
+        if rationale is None or not str(rationale).strip():
             raise ValueError(f"{uuid}: empty draft_rationale")
 
         mask = golden["org_uuid"] == uuid
