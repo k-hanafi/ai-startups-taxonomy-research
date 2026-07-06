@@ -157,12 +157,12 @@ RAD-M | Medium / Transitional Dependency
      pre-March-2023 AI technology, large funding rounds with technical hiring signals.
 
 RAD-L | Low Structural Dependency
-     AI is either peripheral (could be removed without killing the product) or the
-     company demonstrably builds and trains proprietary AI at the core. A shutdown of
-     all third-party AI APIs would not materially affect the product. This includes
-     companies with deeply proprietary AI that predates the GenAI wave.
+     The company demonstrably builds and trains proprietary AI at the core. A shutdown
+     of all third-party AI APIs would not materially affect the product. This includes
+     companies with deeply proprietary AI that predates the GenAI wave or companies
+     with sufficient proprietary depth that foundation-model provider dependence is minimal.
      Signals: trains own models, own research lab, API-independent architecture
-     described, AI is a backend optimization not a customer-facing mechanism.
+     described, maximum proprietary depth and defensibility.
 
 RAD ASSIGNMENT RULES
 - 1C (thin wrappers): always RAD-H or RAD-M. Never RAD-L. By definition
