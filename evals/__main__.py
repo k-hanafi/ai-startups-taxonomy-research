@@ -25,7 +25,15 @@ def main() -> None:
     )
     p_drafts.add_argument("drafts_json", help="Path to a drafts JSON batch")
     subs.add_parser("review-page", help="Render the human-review HTML page (Stage 2)")
-    subs.add_parser("run", help="Run one model config against the golden set (Stage 3)")
+    p_run = subs.add_parser(
+        "run", help="Run one model config against the golden set (Stage 3)"
+    )
+    p_run.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
+    p_run.add_argument("--effort", default=None, help="Reasoning effort (default: screen effort)")
+    p_run.add_argument("--repeat", type=int, default=1, help="Repeat index for the run_id")
+    p_run.add_argument("--run-id", default=None, help="Override run_id to resume a partial run")
+    p_run.add_argument("--limit", type=int, default=None, help="Cap rows (cheap smoke test)")
+    p_run.add_argument("--dry-run", action="store_true", help="Print plan + cost, no API call")
     subs.add_parser("score", help="Score run predictions against gold labels (Stage 6)")
     subs.add_parser("report", help="Build the benchmark dashboard (Stage 8)")
 
@@ -50,6 +58,19 @@ def main() -> None:
         from evals.labeling import render_review_page
 
         render_review_page()
+        return
+    if args.command == "run":
+        from evals import config as cfg
+        from evals.runner import run
+
+        run(
+            model=args.model or cfg.EVAL_MODELS[0],
+            effort=args.effort or cfg.SCREEN_REASONING_EFFORT,
+            repeat=args.repeat,
+            limit=args.limit,
+            dry_run=args.dry_run,
+            run_id=args.run_id,
+        )
         return
 
     # Later stages land in subsequent PRs; fail loudly instead of silently.

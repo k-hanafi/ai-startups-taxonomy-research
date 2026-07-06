@@ -26,6 +26,26 @@ GOLDEN_DIR = EVALS_DIR / "golden"
 GOLDEN_SET_CSV = GOLDEN_DIR / "golden_set.csv"          # committed (no evidence text)
 RUNS_DIR = EVALS_DIR / "runs"                            # runs/<run_id>/raw/ git-ignored
 
+
+def run_dir(run_id: str) -> Path:
+    """Directory holding one model run's artifacts."""
+    return RUNS_DIR / run_id
+
+
+def run_config_path(run_id: str) -> Path:
+    """Config snapshot (model, effort, prompt/schema/formatter hashes, git commit)."""
+    return run_dir(run_id) / "config.json"
+
+
+def run_predictions_path(run_id: str) -> Path:
+    """Label-only predictions, one JSON object per row. Drives resume + scoring."""
+    return run_dir(run_id) / "predictions.jsonl"
+
+
+def run_raw_dir(run_id: str) -> Path:
+    """Full API responses (incl. logprobs). Git-ignored: large + provider-shaped."""
+    return run_dir(run_id) / "raw"
+
 # Stage 2 labeling artifacts (git-ignored: both embed scraped evidence text).
 LABELING_WORKSPACE_DIR = GOLDEN_DIR / "workspace"
 REVIEW_PAGE_HTML = GOLDEN_DIR / "review_page.html"
