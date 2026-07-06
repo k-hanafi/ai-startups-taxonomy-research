@@ -171,7 +171,13 @@ def _completed_custom_ids(predictions_path: Path) -> set[str]:
         if not line:
             continue
         try:
-            done.add(json.loads(line)["custom_id"])
+            rec = json.loads(line)
+            # Only skip rows that completed successfully; incomplete or failed
+            # responses should be retried on resume. Records without a status
+            # field (from older runs) are treated as completed for compatibility.
+            status = rec.get("status")
+            if status is None or status == "completed":
+                done.add(rec["custom_id"])
         except (json.JSONDecodeError, KeyError):
             # A process killed mid-append can leave a truncated final line;
             # that row simply gets re-run. Tolerate it rather than block resume.
@@ -283,7 +289,8 @@ def _create(client: OpenAI, kwargs: dict[str, Any]) -> Any:
 # A resume must reproduce the exact request identity, or the accumulated
 # predictions would mix incompatible configs and corrupt the benchmark.
 _RESUME_INVARIANTS = (
-    "model", "reasoning_effort",
+    "model", "reasoning_effort", "repeat", "n_rows",
+    "max_output_tokens", "temperature", "top_logprobs",
     "prompt_sha256", "schema_sha256", "formatter_sha256",
 )
 
