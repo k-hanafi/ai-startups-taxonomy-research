@@ -49,3 +49,10 @@ def run_raw_dir(run_id: str) -> Path:
 # Stage 2 labeling artifacts (git-ignored: both embed scraped evidence text).
 LABELING_WORKSPACE_DIR = GOLDEN_DIR / "workspace"
 REVIEW_PAGE_HTML = GOLDEN_DIR / "review_page.html"
+
+# Two-pass classifier prompts (committed, reviewed in PR #14).
+PROMPTS_DIR = PROJECT_ROOT / "prompts"
+BINARY_GATE_PROMPT = PROMPTS_DIR / "binary_gate_prompt.txt"
+SUBCLASS_RAD_PROMPT = PROMPTS_DIR / "subclass_rad_prompt.txt"
+FAMILY_BLOCK_AI = PROMPTS_DIR / "family_block_ai_native.txt"
+FAMILY_BLOCK_NOT = PROMPTS_DIR / "family_block_not_ai_native.txt"
