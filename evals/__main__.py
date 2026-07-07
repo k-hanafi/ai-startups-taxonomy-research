@@ -34,6 +34,16 @@ def main() -> None:
     p_run.add_argument("--run-id", default=None, help="Override run_id to resume a partial run")
     p_run.add_argument("--limit", type=int, default=None, help="Cap rows (cheap smoke test)")
     p_run.add_argument("--dry-run", action="store_true", help="Print plan + cost, no API call")
+    p_run2 = subs.add_parser(
+        "run-two-pass",
+        help="Run the two-pass classifier (binary gate + family-constrained subclass) (Stage 5)",
+    )
+    p_run2.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
+    p_run2.add_argument("--effort-b", default=None, help="Pass B reasoning effort (default: high)")
+    p_run2.add_argument("--repeat", type=int, default=1, help="Repeat index for the run_id")
+    p_run2.add_argument("--run-id", default=None, help="Override run_id to resume a partial run")
+    p_run2.add_argument("--limit", type=int, default=None, help="Cap rows (cheap smoke test)")
+    p_run2.add_argument("--dry-run", action="store_true", help="Print plan + cost, no API call")
     subs.add_parser("score", help="Score run predictions against gold labels (Stage 6)")
     subs.add_parser("report", help="Build the benchmark dashboard (Stage 8)")
 
@@ -66,6 +76,19 @@ def main() -> None:
         run(
             model=args.model or cfg.EVAL_MODELS[0],
             effort=args.effort or cfg.SCREEN_REASONING_EFFORT,
+            repeat=args.repeat,
+            limit=args.limit,
+            dry_run=args.dry_run,
+            run_id=args.run_id,
+        )
+        return
+    if args.command == "run-two-pass":
+        from evals import config as cfg
+        from evals.two_pass import run_two_pass
+
+        run_two_pass(
+            model=args.model or cfg.EVAL_MODELS[0],
+            effort_b=args.effort_b or cfg.PASS_B_EFFORT,
             repeat=args.repeat,
             limit=args.limit,
             dry_run=args.dry_run,

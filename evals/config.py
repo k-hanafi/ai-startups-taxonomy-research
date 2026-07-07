@@ -33,6 +33,28 @@ FINALIST_REPEATS: int = 3
 REASONING_OFF: str = "none"
 
 # ---------------------------------------------------------------------------
+# Two-pass classifier (Stage 5): Pass A = binary gate, Pass B = subclass + RAD
+# ---------------------------------------------------------------------------
+
+# Pass A runs with reasoning off (logprobs on); Pass B defaults to maximum
+# reasoning, per the split-reasoning design in the two-pass plan.
+PASS_A_EFFORT: str = REASONING_OFF
+PASS_B_EFFORT: str = "high"
+
+# Pass A emits a single-field JSON (~6 tokens); 500 is generous headroom.
+# Pass B reasons at high effort; observed single-pass high runs peaked at
+# ~1,450 output tokens, so the shared 8,000 cap (MAX_OUTPUT_TOKENS) applies.
+PASS_A_MAX_OUTPUT_TOKENS: int = 500
+
+# Distinct cache keys per pass: each pass has its own stable instruction
+# prefix, and mixing them in one cache route would hurt hit rates.
+PASS_A_CACHE_KEY: str = "two-pass-a-binary-gate"
+PASS_B_CACHE_KEY: str = "two-pass-b-subclass-rad"
+
+# GPT-4 launch month: the cohort boundary (founded 2023-03 or later = GENAI-ERA).
+COHORT_BOUNDARY: tuple[int, int] = (2023, 3)
+
+# ---------------------------------------------------------------------------
 # Request parameters (experimental; production does not send these yet)
 # ---------------------------------------------------------------------------
 
