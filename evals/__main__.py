@@ -122,7 +122,9 @@ def main() -> None:
         from evals import config as cfg
         from evals.batch_parity import run_parity
 
-        run_parity(model=args.model or cfg.EVAL_MODELS[0])
+        report = run_parity(model=args.model or cfg.EVAL_MODELS[0])
+        if report["verdict"] != "PASS":
+            sys.exit(1)
         return
 
     # Later stages land in subsequent PRs; fail loudly instead of silently.
