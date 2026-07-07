@@ -1,0 +1,396 @@
+════════════════════════════════════════════════════════════════
+YOUR FAMILY: AI-NATIVE SUBCLASSES (PriorBinaryVerdict = 1)
+════════════════════════════════════════════════════════════════
+
+The prior analysis found that AI/ML is the core mechanism of this company's
+product: removing the AI would break the product. Choose the single best
+subclass among 1A–1G, then assign a RAD score per Dimension 2 below.
+
+1A | Foundation Layer
+     Companies building the base of the AI stack: training frontier models, developing
+     novel architectures, building ML compute orchestration, vector databases, or
+     conducting core AI research. The artifact they produce IS the model or the
+     infrastructure that other AI products are built on. These are the hardest to
+     replicate and the most defensible positions in the AI ecosystem.
+     Real examples: Anthropic, Mistral, Cohere, Pinecone, Modal, Together AI.
+     Key signal: They are building FOR other AI builders, not for end users.
+
+1B | AI-Native Infrastructure & Tooling
+     Companies building for the AI development lifecycle itself. Their reason for
+     existence is the AI ecosystem. They would have no product without AI being a
+     widespread development target. Includes evaluation frameworks, fine-tuning
+     platforms, AI observability, prompt management, synthetic data generation,
+     AI safety tooling, and LLMOps platforms.
+     Real examples: Scale AI, Braintrust, Humanloop, Arize AI.
+     Key signal: Their customer is an AI developer or AI team, not an end user
+     in a vertical domain.
+     Not 1B when: a conventional SaaS product (database, iPaaS, security, dev
+     platform) has merely added an "for AI agents" or MCP feature to existing
+     go-to-market. Requires the product's PRIMARY purpose to be serving AI builders.
+     In the source taxonomy a bolt-on agent feature on a pre-AI product is 0B —
+     the OTHER family. If the evidence shows that pattern, the prior verdict is
+     wrong: pick the closest 1x subclass (usually 1C), set
+     boundary_disagreement = true, and name 0B in your critique.
+
+1C | Thin LLM Wrapper
+     Company has built atop LLM APIs with minimal proprietary layer. The underlying
+     business problem existed before GenAI and could be addressed with other means,
+     but the company's specific implementation depends entirely on the LLM API call.
+     Thin wrappers have little proprietary data, minimal fine-tuning, and are easily
+     replicable by a small team in weeks. High substitution risk: if the API provider
+     changes pricing or terms, the business model collapses with no fallback.
+     AI-native because the product mechanism IS the LLM call, but with the weakest
+     defensibility profile in the AI-native taxonomy.
+     Real examples: Simple ChatGPT-based writing assistants, basic AI customer service
+     bots with no proprietary training, commodity AI summarization tools.
+     Key signal: A developer could replicate the core product in a weekend using the
+     same APIs. No proprietary data flywheel, no fine-tuning, no unique workflow moat.
+
+1D | Thick LLM Integrator
+     Company has built meaningfully atop LLM APIs with significant proprietary
+     investment: fine-tuned or domain-adapted models, unique datasets, deep workflow
+     integration, strong UX moat, or network effects that create real defensibility.
+     The underlying problem may predate GenAI but they have built genuine competitive
+     advantages on top of the GenAI layer. AI-native because the LLM is structurally
+     embedded in the product, but distinct from 1E (vertical AI with proprietary
+     models) because the core intelligence still flows from third-party APIs.
+     Real examples: Perplexity AI (proprietary search index + UX),
+     Jasper (brand voice + templates + enterprise workflows),
+     Cursor (deep IDE integration + codebase-aware context).
+     Key signal: Replacing the LLM API would be painful and expensive, but the company
+     has built proprietary value on top of the API call.
+
+1E | Applied Vertical AI
+     AI purpose-built for a specific domain where AI IS the product, not a feature.
+     The entire workflow is reimagined around AI capability, and domain expertise is
+     deeply embedded in the model or pipeline — typically via proprietary training
+     data, fine-tuned domain models, or classical ML stacks predating GenAI. The
+     product could not exist in a meaningfully similar form without AI, not just a
+     worse version, but a categorically different and inferior one.
+     Real examples: Abridge (clinical documentation), Harvey (legal AI),
+     Glean (enterprise search), DeepScribe (medical scribe).
+     Key signal: Vertical-specific AI that replaces or fundamentally transforms a
+     domain workflow, not just augments it. Distinguished from 1D by depth of
+     proprietary AI investment beyond LLM API consumption.
+
+1F | Autonomous Agent Systems
+     Core product is AI acting autonomously in the world, executing multi-step tasks,
+     operating software, managing complex workflows with minimal human-in-the-loop.
+     Categorically distinct from chatbots (which respond) and from AI-augmented tools
+     (which assist). These systems plan, decide, and act.
+     Real examples: OpenClaw, Cognition (Devin), Adept.
+     Key signal: The AI takes actions in the world, not just generates text or
+     recommendations for a human to act on.
+    Not 1F when: the evidence only uses the word "agent" or "agentic" in marketing
+    but shows a chatbot, assistant, or human-in-the-loop workflow. Require concrete
+    evidence of autonomous multi-step execution (tool use, browsing, running tasks in
+    the background, acting without a human approving each step). A chatbot or
+    assistant whose core mechanism genuinely IS the LLM call is 1C or 1D, not 1F.
+    If the underlying product is a conventional SaaS with the "agent" only in
+    marketing (the source taxonomy's 0B pattern), the prior verdict is likely
+    wrong: pick the closest 1x subclass (usually 1C), set
+    boundary_disagreement = true, and name 0B in your critique.
+
+1G | Generative Content Platforms
+     Products where GenAI is the creative engine, not an enhancement but the actual
+     output mechanism. The product IS the generation capability applied to a creative
+     domain. Without GenAI, the product does not produce its core output.
+     Real examples: Midjourney, ElevenLabs, Runway, Suno, Stability AI, HeyGen.
+     Key signal: The deliverable to the customer is generated content (image, audio,
+     video, 3D) that could not be produced by the system without generative models.
+     1G vs 1C: a product that generates media by calling third-party generative APIs
+     (voices, images, video) with a thin proprietary layer is still 1G — the subclass
+     is set by WHAT is produced (generated media), not by wrapper depth. Wrapper depth
+     drives the RAD score instead (thin generative-media wrappers are RAD-H).
+
+──────────────────────────────────────────
+FAMILY EDGE CASES & TIE-BREAKING
+──────────────────────────────────────────
+
+- LLM API wrappers → always 1C (thin) or 1D (thick), never 1E, regardless of
+  domain sophistication.
+- Vertical AI with own proprietary models → 1E with RAD-L or RAD-M.
+- Vertical AI built on third-party LLMs → 1E or 1D depending on depth of
+  proprietary investment.
+- Company trains its own foundation models but for one vertical domain → 1E,
+  not 1A (1A is reserved for foundation/infrastructure sold to other AI builders).
+- Pre-2023 computer vision / NLP companies → may be 1E with RAD-M or RAD-L.
+- MLOps tool that requires AI to exist as a field, but is itself software → 1B.
+- Insufficient-information fallback: when the evidence cannot identify the
+  product mechanism at all, the gate rule calls for ai_native = 0 (the source
+  taxonomy's 0A / RAD-NA). Because PriorBinaryVerdict constrains you to this
+  family, choose 1C with RAD-H, set boundary_disagreement = true, and name
+  0A in your critique.
+
+════════════════════════════════════════════════════════════════
+DIMENSION 2: RAD SCORE (Resource-Adjusted AI Dependency)
+════════════════════════════════════════════════════════════════
+
+DEFINITION
+RAD measures how structurally dependent a company is on current third-party GenAI
+infrastructure (APIs, foundation models) versus their own proprietary AI capability,
+adjusted for the company's apparent resources and scale.
+
+Core counterfactual: "If this company had $500M in funding and 5 years, could they
+build a competitive product without relying on third-party GenAI APIs?"
+
+Every company in this family (ai_native = 1) receives RAD-H, RAD-M, or RAD-L.
+Never RAD-NA.
+
+RAD-H | High Structural Dependency
+     Even with substantial resources, the product fundamentally requires current-
+     generation GenAI capabilities that the company could not independently replicate
+     at competitive cost. The product's existence is structurally tied to the 2023+
+     GenAI wave. Pure API businesses at any scale default here unless there is explicit
+     evidence of proprietary model development.
+     Signals: "powered by GPT-4", "using Claude API", no mention of proprietary models,
+     founded March 2023 or later with no research team signals, thin technical moat descriptions.
+
+RAD-M | Medium / Transitional Dependency
+     GenAI-dependent today, but with credible signals of partial independence:
+     (a) proprietary model development or domain fine-tuning underway,
+     (b) sufficient scale that building proprietary AI is plausible and economically
+         rational (Perplexity-tier, large enough to go independent if motivated), or
+     (c) the underlying AI technique predates the 2023 GenAI wave (computer vision,
+         classical NLP, recommendation systems) and was viable pre-ChatGPT.
+     Signals: mentions of proprietary models, fine-tuning, in-house research team,
+     pre-March-2023 AI technology, large funding rounds with technical hiring signals.
+
+RAD-L | Low Structural Dependency
+     The company demonstrably builds and trains proprietary AI at the core. A shutdown
+     of all third-party AI APIs would not materially affect the product. This includes
+     companies with deeply proprietary AI that predates the GenAI wave or companies
+     with sufficient proprietary depth that foundation-model provider dependence is minimal.
+     Signals: trains own models, own research lab, API-independent architecture
+     described, maximum proprietary depth and defensibility.
+
+RAD ASSIGNMENT RULES
+- 1C (thin wrappers): always RAD-H or RAD-M. Never RAD-L. By definition
+  these companies have limited proprietary depth and remain structurally
+  dependent on external AI APIs.
+- 1D (thick integrators): always RAD-M or RAD-L. Never RAD-H. By definition
+  these companies have built meaningful proprietary depth on top of LLMs:
+  workflow integration, proprietary data, domain adaptation, fine-tuning,
+  UX moat, distribution, partnerships, or network effects. Use RAD-L when the
+  evidence shows maximum wrapper thickness, strong defensibility, meaningful
+  proprietary depth, and credible reduced dependence on any single LLM API
+  (Perplexity is the anchor case). Use RAD-M when third-party model dependence
+  remains material despite some proprietary depth.
+- 1A, 1B, 1E, 1F, 1G: RAD-H, RAD-M, or RAD-L depending on evidence of
+  proprietary model development versus API consumption.
+- Before defaulting, scan the evidence for proprietary-depth signals: own/trained/
+  fine-tuned models, in-house research team, proprietary dataset or data flywheel,
+  pre-2023 classical ML/CV/NLP, or scale large enough to plausibly go independent.
+  If any are present, prefer RAD-M (or RAD-L when strong) over RAD-H — do not collapse
+  to RAD-H just because the evidence is incomplete.
+- Only when no such depth signal is visible: for a GENAI-ERA company (see Cohort
+  input) default to RAD-H; for a PRE-GENAI company with AI signals default to RAD-M.
+- Cohort context: PRE-GENAI companies' AI claims predate the GPT-4 inflection
+  point — scrutinize whether they reflect genuine classical ML/NLP (valid, may be
+  RAD-M or RAD-L) or retroactive GenAI rebranding (skeptical, likely 1C or 1D).
+  GENAI-ERA companies had GPT-4-class GenAI available from inception; default
+  RAD assumption is RAD-H unless proprietary model signals are present.
+
+conf_rad: confidence in the RAD score, 1 to 5. Be somewhat lenient: RAD is a
+coarser structural dependency judgment and generally requires less evidence than
+the subclass classification. High confidence does not require an explicit
+statement of proprietary model ownership or API dependency. It is enough that the
+overall evidence gives a coherent, substantial basis for judging structural AI
+dependency using product mechanism, wrapper depth, proprietary data/model signals,
+technical team or research signals, scale, cohort, and subclass constraints. Use
+lower confidence when the evidence is sparse, generic, contradictory, or leaves
+the dependency profile mostly to assumption.
+
+════════════════════════════════════════════════════════════════
+FAMILY EXAMPLES
+════════════════════════════════════════════════════════════════
+
+Note on format: the "Evidence summary" line in each example is a compressed
+stand-in for the actual input fields you receive. Reason over whatever real
+fields are present the same way.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE 1 | 1A: Foundation Layer
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INPUT:
+CompanyName: OpenAI
+Evidence summary: Builds frontier foundation models, publishes model and safety
+research, offers ChatGPT, offers model APIs, and sells access to the core model
+layer used by other AI builders and enterprises. The model family itself is the
+central artifact: GPT-class models, multimodal systems, reasoning models, API
+infrastructure, and deployment tools. Not a vertical app or a wrapper around
+another vendor's AI; one of the foundation providers other products depend on.
+Massive scale, frontier research staff, enterprise distribution.
+FoundedDate: 2015-12-11
+PriorBinaryVerdict: 1
+Cohort: PRE-GENAI
+
+OUTPUT:
+subclass: 1A
+rad_score: RAD-L
+conf_classification: 5
+conf_rad: 5
+reasons_3_points: Core product is the frontier model layer other AI products build on | Evidence shows model research, APIs, and ChatGPT as foundation infrastructure rather than an application wrapper | RAD-L because OpenAI trains and serves its own models rather than depending on third-party GenAI APIs
+sources_used: evidence_summary, website_evidence, product_page, about_page, technical_page, resource_context, founded_date
+verification_critique: Clear 1A. RAD-L reflects ownership of the foundation model layer; the main uncertainty is only how much proprietary infrastructure detail appears in a given crawl.
+boundary_disagreement: false
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE 2 | 1B: AI-Native Infrastructure & Tooling
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INPUT:
+CompanyName: Braintrust
+Evidence summary: Built for teams developing LLM applications: evaluations,
+prompt/version management, tracing, observability, production logs, model
+comparison, datasets, human review, and CI-style quality gates for AI products.
+The buyer is an AI engineering or product team, not an end user in a vertical
+domain. Supports many model providers, so not a wrapper around one model API,
+but structurally tied to the growth of LLM applications.
+FoundedDate: 2023-04-01
+PriorBinaryVerdict: 1
+Cohort: GENAI-ERA
+
+OUTPUT:
+subclass: 1B
+rad_score: RAD-H
+conf_classification: 5
+conf_rad: 4
+reasons_3_points: Product exists to serve AI builders with evals, traces, prompts, and model quality workflows | Customer is the AI development team, distinguishing it from vertical AI applications | RAD-H because the business is structurally tied to LLM application development even if it supports multiple model providers
+sources_used: evidence_summary, website_evidence, product_page, technical_page, keywords, founded_date
+verification_critique: Clear 1B. RAD-H is ecosystem dependency rather than dependence on one vendor API; conf_rad lower than 5 because provider-level architecture may vary.
+boundary_disagreement: false
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE 3 | 1C: Thin LLM Wrapper
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INPUT:
+CompanyName: ChatPDF-style PDF Chat Tool
+Evidence summary: "Upload any PDF and chat with it instantly," "summarize
+documents in seconds." Lightweight self-serve product, free/pro pricing, no
+enterprise workflow depth, no named research team, no model-training claims,
+no proprietary corpus, no integrations beyond upload/share/export, limited
+funding, tiny team. The underlying problem (reading and summarizing documents)
+predates GenAI, but the mechanism is file parsing plus an LLM call. Removing
+frontier LLM API access would collapse the core user experience.
+FoundedDate: 2023-05-01
+PriorBinaryVerdict: 1
+Cohort: GENAI-ERA
+
+OUTPUT:
+subclass: 1C
+rad_score: RAD-H
+conf_classification: 5
+conf_rad: 5
+reasons_3_points: Core product is upload-and-chat document summarization powered by an LLM call | Evidence shows limited team/resources and no proprietary data, fine-tuning, integrations, or enterprise workflow depth | RAD-H because limited proprietary depth and resources leave the product dependent on foundation model APIs
+sources_used: evidence_summary, website_evidence, product_page, resource_context, keywords, founded_date
+verification_critique: Clear 1C. The example represents the commodity thin-wrapper pattern; RAD-H follows from weak proprietary defensibility and dependence on model APIs.
+boundary_disagreement: false
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE 4 | 1D: Thick LLM Integrator
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INPUT:
+CompanyName: Perplexity AI
+Evidence summary: AI answer engine built around real-time search, cited
+answers, conversational retrieval, enterprise products, and broad consumer
+distribution (browser/mobile products, paid plans, partnerships with major
+corporations). Large funding rounds, rapid hiring, and enough scale to
+negotiate model access, build proprietary retrieval infrastructure, and invest
+in an independent technical roadmap. Concrete thickness signals: search/index
+infrastructure, citation workflows, distribution, UX, brand, data flows,
+enterprise workflow depth. The LLM remains the product mechanism, so this is a
+wrapper/integrator rather than foundation-layer or vertical AI — but the
+pinnacle thick wrapper.
+FoundedDate: 2022-01-01
+PriorBinaryVerdict: 1
+Cohort: PRE-GENAI
+
+OUTPUT:
+subclass: 1D
+rad_score: RAD-L
+conf_classification: 5
+conf_rad: 5
+reasons_3_points: LLM answer generation is the product mechanism, but proprietary search, citations, UX, distribution, and partnerships make it a thick integrator | Horizontal answer engine is distinct from vertical AI because it is not built around one domain-specific corpus or workflow | RAD-L because maximum wrapper thickness and defensibility reduce dependence on any single LLM API
+sources_used: evidence_summary, website_evidence, product_page, about_page, resource_context, keywords, founded_date
+verification_critique: Clear 1D. Not 1C because the proprietary layers are substantial; RAD-L reflects maximum thickness, not absence of LLM use.
+boundary_disagreement: false
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE 5 | 1E: Applied Vertical AI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INPUT:
+CompanyName: Harvey AI
+Evidence summary: AI platform for legal work: contract drafting, legal
+research, due diligence, litigation support, document review, and law-firm
+workflows. Mentions legal-domain corpora, legal expert validation, fine-tuning
+or model adaptation, secure enterprise deployment, large law-firm customers,
+and deep integration into attorney workflows. Substantial funding and
+enterprise traction. Not a generic chatbot with legal prompts; purpose built
+for a vertical domain where legal reasoning, documents, workflows, risk, and
+professional constraints define the product context.
+FoundedDate: 2022-01-01
+PriorBinaryVerdict: 1
+Cohort: PRE-GENAI
+
+OUTPUT:
+subclass: 1E
+rad_score: RAD-M
+conf_classification: 5
+conf_rad: 5
+reasons_3_points: Core product is legal-domain AI that transforms contract, research, diligence, and review workflows | Evidence of legal corpora, expert validation, and workflow integration pushes it beyond a generic LLM wrapper | RAD-M because domain adaptation and proprietary workflow depth suggest partial independence while foundation models may still matter
+sources_used: evidence_summary, website_evidence, product_page, about_page, resource_context, keywords, founded_date
+verification_critique: Clear 1E. Main boundary is 1D, but legal-domain workflow and corpus depth make the vertical classification stronger.
+boundary_disagreement: false
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE 6 | 1F: Autonomous Agent Systems
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INPUT:
+CompanyName: OpenClaw
+Evidence summary: Positioned as a persistent AI worker or autonomous assistant
+rather than a simple chatbot: memory across sessions, tool use, web browsing,
+email, code execution, scheduled tasks, background monitoring, omnichannel
+access, and agents that execute multi-step workflows while the user is away
+("runs your business while you sleep," managed agent hosting, skill folders,
+background jobs). The important signal is action: the AI plans, remembers,
+uses tools, and operates software over time. Very popular product with
+millions of users and meaningful resources, but the core mechanism is still
+LLM/foundation-model reasoning and tool use.
+FoundedDate: 2023-07-01
+PriorBinaryVerdict: 1
+Cohort: GENAI-ERA
+
+OUTPUT:
+subclass: 1F
+rad_score: RAD-M
+conf_classification: 5
+conf_rad: 5
+reasons_3_points: Core product is an autonomous agent that plans and executes tasks with tools, memory, and background operation | Popularity, users, and resources reduce dependency relative to low-resource wrappers | RAD-M because foundation-model reasoning remains central and provider pricing or imitation risk still matters
+sources_used: evidence_summary, website_evidence, product_page, technical_page, resource_context, keywords, founded_date
+verification_critique: Clear 1F. RAD-M balances strong adoption/resources against continuing dependence on foundation model reasoning.
+boundary_disagreement: false
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE 7 | 1G: Generative Content Platforms
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INPUT:
+CompanyName: Midjourney
+Evidence summary: Core deliverable is AI-generated visual content. Users
+provide prompts and the system produces images or visual assets; the generated
+media is the product, not a feature inside a broader design suite. Model
+releases, prompting workflows, image galleries, community creation, style
+controls, and subscription access to the generation system. Would not exist in
+a meaningfully similar form without generative models.
+FoundedDate: 2022-01-01
+PriorBinaryVerdict: 1
+Cohort: PRE-GENAI
+
+OUTPUT:
+subclass: 1G
+rad_score: RAD-L
+conf_classification: 5
+conf_rad: 5
+reasons_3_points: Core deliverable is generated visual content, making generation the product mechanism | Evidence shows a standalone image-generation system rather than AI features inside traditional creative software | RAD-L because the platform is identified with proprietary generative model capability rather than third-party API wrapping
+sources_used: evidence_summary, website_evidence, product_page, about_page, keywords, founded_date
+verification_critique: Clear 1G. RAD-L assumes evidence supports proprietary model capability; if a crawl showed only API resale, RAD would need reconsideration.
+boundary_disagreement: false

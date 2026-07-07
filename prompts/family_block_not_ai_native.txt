@@ -1,0 +1,159 @@
+════════════════════════════════════════════════════════════════
+YOUR FAMILY: NOT-AI-NATIVE SUBCLASSES (PriorBinaryVerdict = 0)
+════════════════════════════════════════════════════════════════
+
+The prior analysis found that AI/ML is NOT the core mechanism of this company's
+product: the company would exist in a meaningfully similar form without AI.
+Choose the single best subclass among 0A, 0B, 0C.
+
+RAD (Resource-Adjusted AI Dependency) does not apply to this family. It is
+assigned automatically as RAD-NA outside this analysis, with a null RAD
+confidence; you output neither a rad_score nor a conf_rad field.
+
+──────────────────────────────────────────
+SORTING PROCEDURE (run in order)
+──────────────────────────────────────────
+Step 1 — Does the company sell a software product at all? Physical goods,
+  retail, manufacturing, or a services business delivered through a website
+  with no software product of its own → 0C. A website, online booking, or
+  generic business tools do not make a services/physical company "tech".
+Step 2 — If the company sells software: does it ship a GENUINE, VISIBLE AI
+  feature that improves the product? If yes → 0B. Marketing slogans alone do
+  not count; the feature must be real and shipped.
+Step 3 — Software with no meaningful AI angle → 0A.
+
+0A | Traditional Tech / SaaS
+     The company SELLS SOFTWARE, and that software has no meaningful AI angle. Pure
+     logistics platforms, CRMs, ERPs, marketplaces, fintech infrastructure, no-code
+     builders, dev tools. AI may appear in marketing language but plays no structural
+     role in the product.
+     Real examples: Shopify (pre-AI), Stripe, classic Salesforce CRM, Shipsi.
+     Key signal: The deliverable is a software product, and removing every AI
+     reference leaves the product description and value proposition unchanged.
+
+0B | AI-Augmented
+     A software product whose core value predates and survives without AI, but which
+     ships a GENUINE, VISIBLE AI feature that improves it. AI is a meaningful feature,
+     not the engine — remove the AI and customers still buy the product for its
+     non-AI core. This is the correct home for the common "conventional SaaS + an AI
+     assistant/copilot bolted on" pattern, even when the marketing leads with agents
+     or "AI-native".
+     Real examples: Notion with AI writing assist, Grammarly post-LLM version,
+     human-in-the-loop labeling platforms with AI-assisted annotation, HubSpot
+     with AI recommendations.
+     Key signal: Point to the pre-AI product. It exists, it is what the company sells,
+     and the AI is an add-on layer on top of it — not the mechanism that produces the
+     core value.
+
+0C | Non-Tech
+     The company does NOT sell software. Physical products, retail, manufacturing, or
+     a SERVICES business (staffing, consulting, wealth management, lending, clinics,
+     education, distribution, agencies) that is delivered through an ordinary website
+     but has no software product of its own.
+     Real examples: Easy Access Limousine, Futuremood (sunglasses), staffing agencies,
+     wealth managers, food and beverage manufacturers, traditional professional
+     services firms.
+     Key signal: The company sells services or physical goods, not a software product.
+     If it sold software it would be 0A; if it sold no software and no AI it is 0C.
+
+──────────────────────────────────────────
+FAMILY EDGE CASES & TIE-BREAKING
+──────────────────────────────────────────
+
+- Services or physical-goods business with a polished website → 0C, not 0A.
+  0A requires the company to sell a software product.
+- Pure manual data labeling → 0A, not 0B. Human-in-the-loop labeling with
+  AI-assisted annotation or quality control → 0B, because AI is a meaningful
+  feature but humans remain the core mechanism.
+- "AI-powered" in marketing copy alone, absent from the product mechanism and
+  with no genuine shipped AI feature → 0A (software) or 0C (non-software),
+  not 0B.
+- If the evidence shows AI actually operating as the core product mechanism
+  (the prior verdict looks wrong), you must still stay within this family:
+  apply the sorting procedure to the non-AI remainder of the product to pick
+  the least-wrong 0x subclass, set boundary_disagreement = true, and name the
+  AI-native subclass (1A-1G) the evidence actually suggests in your
+  verification_critique. Do not treat 0B as an automatic home for such cases.
+- Insufficient-information fallback subclass for this family: 0A.
+
+════════════════════════════════════════════════════════════════
+FAMILY EXAMPLES
+════════════════════════════════════════════════════════════════
+
+Note on format: the "Evidence summary" line in each example is a compressed
+stand-in for the actual input fields you receive. Reason over whatever real
+fields are present the same way.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE 1 | 0A: Traditional Tech / SaaS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INPUT:
+CompanyName: Stripe
+Evidence summary: Sells payments infrastructure, billing, checkout, fraud
+tools, financial services APIs, and commerce tooling for businesses. The core
+value proposition is reliable payments and financial infrastructure for
+internet businesses. AI may appear in some fraud, automation, support, or
+analytics features, but the company and its main products existed and created
+value long before modern GenAI. Removing AI references would not change the
+fundamental product mechanism: businesses still use Stripe to accept payments,
+manage billing, and move money.
+FoundedDate: 2010-01-01
+PriorBinaryVerdict: 0
+Cohort: PRE-GENAI
+
+OUTPUT:
+subclass: 0A
+conf_classification: 5
+reasons_3_points: Core product is payments and financial infrastructure, not AI as product mechanism | Any AI references are peripheral to a traditional software/API business that survives without AI | Software deliverable with no structural AI role places it in 0A rather than 0B or 0C
+sources_used: evidence_summary, website_evidence, product_page, technical_page, keywords, founded_date
+verification_critique: Clear 0A. Not 0B unless evidence showed AI as a meaningful product feature rather than peripheral fraud or automation tooling.
+boundary_disagreement: false
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE 2 | 0B: AI-Augmented
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INPUT:
+CompanyName: Notion
+Evidence summary: Connected workspace for documents, wikis, projects, notes,
+databases, and team collaboration. Also shows Notion AI features for drafting,
+summarizing, searching, translating, autofilling, and answering questions over
+workspace content — sold as an add-on or embedded assistant inside a much
+broader workspace, while the main homepage still centers docs, wikis, project
+management, and collaboration. Large pre-existing SaaS business and enterprise
+adoption before the AI feature set. The AI features are meaningful and
+visible, not purely marketing language, but the core value proposition
+predates GenAI and survives without it.
+FoundedDate: 2016-01-01
+PriorBinaryVerdict: 0
+Cohort: PRE-GENAI
+
+OUTPUT:
+subclass: 0B
+conf_classification: 5
+reasons_3_points: Core product is a productivity workspace that predates GenAI and remains valuable without AI | AI writing, summarization, and search are meaningful shipped features that improve the product but are not the product engine | Genuine visible AI features on a surviving non-AI core distinguish 0B from 0A
+sources_used: evidence_summary, website_evidence, product_page, about_page, keywords, founded_date
+verification_critique: Clear 0B not 1C: AI features are embedded in a pre-existing workspace product, not the core mechanism.
+boundary_disagreement: false
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE 3 | 0C: Non-Tech
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INPUT:
+CompanyName: Futuremood
+Evidence summary: Sells physical sunglasses and lens products marketed around
+color, mood, fashion, wellness, or retail lifestyle claims: Halochrome lenses,
+product materials, eyewear design, ecommerce, brand story, physical goods. The
+core product is not software, not a SaaS workflow, and not an AI-enabled
+technology platform. Even if the company uses ecommerce software, marketing
+analytics, or generic business tools, those are not the product mechanism.
+FoundedDate: 2020-01-01
+PriorBinaryVerdict: 0
+Cohort: PRE-GENAI
+
+OUTPUT:
+subclass: 0C
+conf_classification: 5
+reasons_3_points: Core product is physical eyewear, not software or AI | Website evidence points to retail, product design, and ecommerce rather than a technology mechanism | Selling physical goods with no software product places it in 0C rather than 0A
+sources_used: evidence_summary, website_evidence, product_page, about_page, keywords, founded_date
+verification_critique: Clear 0C. Generic ecommerce or wellness claims do not make the company traditional tech or AI-augmented.
+boundary_disagreement: false
