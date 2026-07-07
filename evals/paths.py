@@ -46,6 +46,16 @@ def run_raw_dir(run_id: str) -> Path:
     """Full API responses (incl. logprobs). Git-ignored: large + provider-shaped."""
     return run_dir(run_id) / "raw"
 
+
+def run_scored_path(run_id: str) -> Path:
+    """Offline scoring summary (committed: metrics only, no evidence text)."""
+    return run_dir(run_id) / "scored.json"
+
+
+def parity_report_path(run_id: str) -> Path:
+    """Batch-vs-sync parity smoke report (gate Q4)."""
+    return run_dir(run_id) / "parity_report.json"
+
 # Stage 2 labeling artifacts (git-ignored: both embed scraped evidence text).
 LABELING_WORKSPACE_DIR = GOLDEN_DIR / "workspace"
 REVIEW_PAGE_HTML = GOLDEN_DIR / "review_page.html"
