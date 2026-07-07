@@ -49,7 +49,7 @@ Last updated: **2026-07-07** (pivot 5 recorded: full gold re-draft deferred to e
 | **Last merged** | PR **#15** — Stage 5 two-pass implementation (merged 2026-07-07 22:29 UTC, merge `84a7755`; includes Bugbot fix `705af2c`) |
 | **Open now** | none |
 | **Working branch** | none — `two-pass/stage-2-implementation` deleted (local + origin) after merge; next worker cuts fresh from main |
-| **Next** | Stage 6 / PR 6 — `evals/logprob_extract.py` (Pass A binary-only) — NOT STARTED |
+| **Next** | Stages 6 + 7 running as PARALLEL workers (launched 2026-07-07). Merge order stays 6 → 7. PR 7's calibration hook stays decoupled from PR 6 (confidence passed in as data, no import); wired after both merge. |
 | **Gold labels** | Fable `draft_*` = provisional gold (pivot 4; human review waived, `gold_verdict` stays 0/100 by design). ONE full agent re-draft deferred to end of pipeline, after all design decisions lock (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
 
@@ -65,7 +65,8 @@ Last updated: **2026-07-07** (pivot 5 recorded: full gold re-draft deferred to e
 
 ### In progress
 
-- Nothing. Next worker cuts the Stage 6 branch fresh from `main`.
+- **PR 6 / Stage 6** — worker on `eval-harness/stage-6-logprob-extract`: `evals/logprob_extract.py` + fixtures from the banked `none_r1` raw responses + tests.
+- **PR 7 / Stage 7** — parallel worker on `eval-harness/stage-7-parity-scorer`: `evals/scoring.py` (accuracy, macro-F1, confusion, bootstrap CIs, cost, reasoning-token sizing) + 10-row Batch parity smoke. Calibration consumes a per-row confidence value as plain data, NOT an import of PR 6's module. Workers stop at merge-ready (Bugbot clean); orchestrator sequences merges 6 then 7 (PR 7 rebases over 6's plan-file edits).
 
 ### Pending (in order)
 
