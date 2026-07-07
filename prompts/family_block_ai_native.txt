@@ -143,7 +143,7 @@ RAD-H | High Structural Dependency
      at competitive cost. The product's existence is structurally tied to the 2023+
      GenAI wave. Pure API businesses at any scale default here unless there is explicit
      evidence of proprietary model development.
-     Signals: "powered by GPT-4", "using Claude API", no mention of proprietary models,
+     Signals: "powered by GPT", "using Claude API", no mention of proprietary models,
      founded March 2023 or later with no research team signals, thin technical moat descriptions.
 
 RAD-M | Medium / Transitional Dependency
