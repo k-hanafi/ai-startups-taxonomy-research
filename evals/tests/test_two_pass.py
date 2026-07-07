@@ -173,3 +173,28 @@ def test_assemble_record_parse_failure_never_marked_completed():
     rec2 = two_pass.assemble_record("startup-v", "v", "gpt-5.4-nano", "high",
                                     "PRE-GENAI", ra2, rb2)
     assert rec2["status"] == "parse_failed"
+
+
+def test_resume_config_refuses_repeat_or_row_count_changes(tmp_path, monkeypatch):
+    monkeypatch.setattr(two_pass, "run_config_path",
+                        lambda rid: tmp_path / rid / "config.json")
+    monkeypatch.setattr(two_pass, "identity_hashes", lambda: {
+        "prompt_a_sha256": "pa",
+        "prompt_b_family1_sha256": "pb1",
+        "prompt_b_family0_sha256": "pb0",
+        "schema_a_sha256": "sa",
+        "schema_b1_sha256": "sb1",
+        "schema_b0_sha256": "sb0",
+        "formatter_sha256": "fmt",
+    })
+    monkeypatch.setattr(two_pass, "_git_commit", lambda: "abc123")
+
+    (tmp_path / "repeat-run").mkdir()
+    two_pass._ensure_config("repeat-run", "gpt-5.4-nano", "high", repeat=1, n_rows=10)
+    with pytest.raises(SystemExit, match="repeat"):
+        two_pass._ensure_config("repeat-run", "gpt-5.4-nano", "high", repeat=2, n_rows=10)
+
+    (tmp_path / "limit-run").mkdir()
+    two_pass._ensure_config("limit-run", "gpt-5.4-nano", "high", repeat=1, n_rows=10)
+    with pytest.raises(SystemExit, match="n_rows"):
+        two_pass._ensure_config("limit-run", "gpt-5.4-nano", "high", repeat=1, n_rows=20)

@@ -307,7 +307,7 @@ def _create(client: OpenAI, kwargs: dict[str, Any]) -> Any:
 
 # Resume refuses to mix changed prompts/schemas/model into an existing run.
 _RESUME_INVARIANTS = (
-    "model", "effort_b",
+    "model", "effort_b", "repeat", "n_rows",
     "prompt_a_sha256", "prompt_b_family1_sha256", "prompt_b_family0_sha256",
     "schema_a_sha256", "schema_b1_sha256", "schema_b0_sha256",
     "formatter_sha256",
