@@ -44,7 +44,24 @@ def main() -> None:
     p_run2.add_argument("--run-id", default=None, help="Override run_id to resume a partial run")
     p_run2.add_argument("--limit", type=int, default=None, help="Cap rows (cheap smoke test)")
     p_run2.add_argument("--dry-run", action="store_true", help="Print plan + cost, no API call")
-    subs.add_parser("score", help="Score run predictions against gold labels (Stage 6)")
+    p_score = subs.add_parser(
+        "score", help="Score run predictions against gold labels (Stage 7)"
+    )
+    p_score.add_argument("run_id", help="Run directory name under evals/runs/")
+    p_score.add_argument(
+        "--baseline", default=None,
+        help="Baseline run_id for paired-bootstrap deltas",
+    )
+    p_score.add_argument(
+        "--confidence", default=None,
+        help="Optional JSON file mapping org_uuid/custom_id -> binary "
+             "confidence (enables calibration metrics)",
+    )
+    p_parity = subs.add_parser(
+        "batch-parity",
+        help="PAID: 10-row Batch-vs-sync parity smoke on Pass A (gate Q4, Stage 7)",
+    )
+    p_parity.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
     subs.add_parser("report", help="Build the benchmark dashboard (Stage 8)")
 
     args = parser.parse_args()
@@ -94,6 +111,18 @@ def main() -> None:
             dry_run=args.dry_run,
             run_id=args.run_id,
         )
+        return
+
+    if args.command == "score":
+        from evals.scoring import score_cli
+
+        score_cli(args.run_id, args.baseline, args.confidence)
+        return
+    if args.command == "batch-parity":
+        from evals import config as cfg
+        from evals.batch_parity import run_parity
+
+        run_parity(model=args.model or cfg.EVAL_MODELS[0])
         return
 
     # Later stages land in subsequent PRs; fail loudly instead of silently.
