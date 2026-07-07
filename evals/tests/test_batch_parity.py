@@ -154,6 +154,28 @@ def test_parity_fails_when_batch_truncates_top_logprobs():
     assert "batch_top_logprobs_honored" in failed
 
 
+def test_top_logprobs_check_is_per_token_not_just_max():
+    # One full-depth token must not mask truncation on the others.
+    batch_body = _response_body(n_top=cfg.TOP_LOGPROBS)
+    entries = batch_body["output"][1]["content"][0]["logprobs"]
+    for entry in entries[1:]:
+        entry["top_logprobs"] = entry["top_logprobs"][:3]
+    checks = batch_parity.parity_checks(
+        _request_body(), _response_body(), batch_body
+    )
+    assert "batch_top_logprobs_honored" in {c["name"] for c in checks if not c["ok"]}
+
+
+def test_top_logprobs_tolerates_chosen_token_omission():
+    # Observed live on both sync and batch: a position can return
+    # requested-1 alternatives because the chosen token is omitted from
+    # its own list. That is not a parity failure.
+    body = _response_body(n_top=cfg.TOP_LOGPROBS)
+    body["output"][1]["content"][0]["logprobs"][0]["top_logprobs"].pop()
+    checks = batch_parity.parity_checks(_request_body(), body, body)
+    assert all(c["ok"] for c in checks)
+
+
 def test_parity_fails_when_batch_ignores_reasoning_effort():
     batch_body = _response_body()
     batch_body["reasoning"] = {"effort": "medium"}

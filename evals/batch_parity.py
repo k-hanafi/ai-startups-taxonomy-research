@@ -101,11 +101,16 @@ def _logprob_shape_checks(
         all(top_keys <= set(t) for e in entries for t in e.get("top_logprobs") or []),
         f"expected keys {sorted(top_keys)}",
     ))
-    max_top = max(len(e.get("top_logprobs") or []) for e in entries)
+    # Every token must carry the requested depth. Tolerance of one: the API
+    # omits the chosen token from its own alternatives list on some positions
+    # (observed live on BOTH sync and batch: first token returns 14 of 15).
+    # A payload where only some tokens reach full depth still fails.
+    lengths = [len(e.get("top_logprobs") or []) for e in entries]
     checks.append(_check(
         f"{side}_top_logprobs_honored",
-        max_top == requested_top,
-        f"max alternatives returned {max_top}, requested {requested_top}",
+        max(lengths) == requested_top and min(lengths) >= requested_top - 1,
+        f"per-token alternatives min {min(lengths)} / max {max(lengths)}, "
+        f"requested {requested_top}",
     ))
     return checks
 
