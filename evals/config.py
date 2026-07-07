@@ -23,13 +23,30 @@ SCREEN_REASONING_EFFORT: str = "medium"
 REASONING_EFFORTS: list[str] = ["none", "low", "medium", "high"]
 FINALIST_REPEATS: int = 3
 
+# Empirical finding (2026-07-05, gpt-5.4-nano): logprobs are returned ONLY when
+# reasoning is fully off. reasoning={"effort":"none"} yields reasoning_tokens=0
+# and logprobs; "minimal"/"low"/"medium"/"high" all reject logprobs with a 400
+# ("logprobs are not supported with reasoning models"). So token-level
+# confidence and reasoning are mutually exclusive, and the none-vs-reasoning
+# A/B measures the accuracy cost of getting logprobs. The runner captures
+# logprobs only at this effort.
+REASONING_OFF: str = "none"
+
 # ---------------------------------------------------------------------------
 # Request parameters (experimental; production does not send these yet)
 # ---------------------------------------------------------------------------
 
 TOP_LOGPROBS: int = 15
-DECODING_TEMPERATURE: float = 0.0
 LOGPROB_INCLUDE: list[str] = ["message.output_text.logprobs"]
+
+# Empirical finding (2026-07-05, gpt-5.4-nano): reasoning models reject the
+# `temperature` parameter with a 400 ("not supported with this model"). They
+# decode at a fixed internal setting, so temperature is not a lever here and is
+# omitted. Determinism instead comes from reasoning effort + the model itself,
+# which the finalist-repeat runs measure. Flip SEND_TEMPERATURE only if a
+# benchmarked model is a non-reasoning model that accepts it.
+SEND_TEMPERATURE: bool = False
+DECODING_TEMPERATURE: float = 0.0
 
 # Reasoning tokens count against this cap. Sized ~8x the observed v2 output
 # (~210 tokens) to leave room for reasoning=medium; the harness measures the
