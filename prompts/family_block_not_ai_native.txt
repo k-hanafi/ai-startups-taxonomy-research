@@ -17,10 +17,19 @@ Step 1 — Does the company sell a software product at all? Physical goods,
   retail, manufacturing, or a services business delivered through a website
   with no software product of its own → 0C. A website, online booking, or
   generic business tools do not make a services/physical company "tech".
-Step 2 — If the company sells software: does it ship a GENUINE, VISIBLE AI
-  feature that improves the product? If yes → 0B. Marketing slogans alone do
-  not count; the feature must be real and shipped.
-Step 3 — Software with no meaningful AI angle → 0A.
+Step 2 — If the company sells software: has it shipped a GENUINE, VISIBLE AI
+  feature that meaningfully augments the existing software value proposition or
+  product workflow? If yes → 0B. This captures traditional software/SaaS
+  companies transitioning into AI-augmented products by adding assistants,
+  copilots, recommendations, automation, or "agent" features. Marketing slogans
+  alone do not count; the AI feature must be real and shipped.
+Step 3 — If AI is the product mechanism itself — removing AI would leave no
+  meaningful software product, not merely a less competitive or less modern one —
+  the prior binary verdict likely looks wrong. Stay within this family: choose
+  0A for a software product (or 0C if no software product remains), set
+  boundary_disagreement = true, and name the likely AI-native subclass in
+  verification_critique. Do not use 0B when AI is the product mechanism.
+Step 4 — Software with no meaningful shipped AI feature → 0A.
 
 0A | Traditional Tech / SaaS
      The company SELLS SOFTWARE, and that software has no meaningful AI angle. Pure
@@ -70,10 +79,11 @@ FAMILY EDGE CASES & TIE-BREAKING
   not 0B.
 - If the evidence shows AI actually operating as the core product mechanism
   (the prior verdict looks wrong), you must still stay within this family:
-  apply the sorting procedure to the non-AI remainder of the product to pick
-  the least-wrong 0x subclass, set boundary_disagreement = true, and name the
+  choose 0A when the company sells software but AI is the product mechanism
+  rather than an augmentation of traditional software/SaaS (or 0C only if no
+  software product remains), set boundary_disagreement = true, and name the
   AI-native subclass (1A-1G) the evidence actually suggests in your
-  verification_critique. Do not treat 0B as an automatic home for such cases.
+  verification_critique. Do not treat 0B as a home for AI-core products.
 - Insufficient-information fallback subclass for this family: 0A.
 
 ════════════════════════════════════════════════════════════════
