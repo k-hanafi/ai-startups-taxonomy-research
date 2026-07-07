@@ -48,7 +48,7 @@ Last updated: **2026-07-07** (pivot 4 recorded: human gold review waived). Long 
 |-------|--------|
 | **Last merged** | PR **#15** — Stage 5 two-pass implementation (merged 2026-07-07 22:29 UTC, merge `84a7755`; includes Bugbot fix `705af2c`) |
 | **Open now** | none |
-| **Working branch** | none owned — `two-pass/stage-2-implementation` is fully contained in `origin/main`; next worker cuts fresh from main |
+| **Working branch** | none — `two-pass/stage-2-implementation` deleted (local + origin) after merge; next worker cuts fresh from main |
 | **Next** | Stage 6 / PR 6 — `evals/logprob_extract.py` (Pass A binary-only) — NOT STARTED |
 | **Human blocker** | WAIVED 2026-07-07 (user, pivot 4): Fable `draft_*` labels ARE the provisional gold reference. `gold_verdict` stays 0/100 by design. Open sub-question: refresh zero-family drafts under clarified 0B semantics before Stage 8 scoring. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
@@ -61,7 +61,7 @@ Last updated: **2026-07-07** (pivot 4 recorded: human gold review waived). Long 
 | #12 | 2 gold labeling drafts + review UI | `eval-harness/stage-2-gold-labeling` | Drafts committed; human gold still open |
 | #13 | 3 sync runner + run records | `eval-harness/stage-3-runner` | Merged; banked baseline runs in `evals/runs/` (nano none/medium/high) |
 | #14 | 4 two-pass prompts | `two-pass/stage-1-prompts` | Merged |
-| #15 | 5 two-pass implementation | `two-pass/stage-2-implementation` | Merged 2026-07-07; two `cursor[bot]` resume-invariant comments remain unresolved on the PR but the fix (`705af2c`) is in the merge — no follow-up code needed |
+| #15 | 5 two-pass implementation | `two-pass/stage-2-implementation` (deleted) | Merged 2026-07-07; both `cursor[bot]` resume-invariant threads resolved (fix `705af2c` is in the merge) — no follow-up code needed |
 
 ### In progress
 
