@@ -9,7 +9,7 @@ todos:
     content: "evals/sampling.py: stratified 100-row golden set from production predictions x evidence terciles -> evals/golden/golden_set.csv"
     status: completed
   - id: stage2-gold-labeling
-    content: "Fable drafts done (100/100). PIVOT 2026-07-07: human review WAIVED (user) — Fable drafts promoted to provisional gold. Open: targeted agent re-draft of zero-family rows under the clarified 0B semantics (drafts predate pivot 3)"
+    content: "Fable drafts done (100/100). PIVOT 2026-07-07: human review WAIVED (user) — Fable drafts promoted to provisional gold. Full end-of-pipeline re-draft deferred until all design decisions lock (pivot 5)"
     status: completed
   - id: stage3-runner
     content: "evals/runner.py: sync Responses API runner with logprob params, config snapshot (prompt/schema hashes), run dirs — MERGED #13"
@@ -42,7 +42,7 @@ isProject: false
 
 ## STATUS (source of truth — update after every PR merge / pivot)
 
-Last updated: **2026-07-07** (pivot 4 recorded: human gold review waived). Long implementer chat retired; thin orchestrator + fresh workers own continuity from here.
+Last updated: **2026-07-07** (pivot 5 recorded: full gold re-draft deferred to end of pipeline). Long implementer chat retired; thin orchestrator + fresh workers own continuity from here.
 
 | Field | Value |
 |-------|--------|
@@ -50,7 +50,7 @@ Last updated: **2026-07-07** (pivot 4 recorded: human gold review waived). Long 
 | **Open now** | none |
 | **Working branch** | none — `two-pass/stage-2-implementation` deleted (local + origin) after merge; next worker cuts fresh from main |
 | **Next** | Stage 6 / PR 6 — `evals/logprob_extract.py` (Pass A binary-only) — NOT STARTED |
-| **Human blocker** | WAIVED 2026-07-07 (user, pivot 4): Fable `draft_*` labels ARE the provisional gold reference. `gold_verdict` stays 0/100 by design. Open sub-question: refresh zero-family drafts under clarified 0B semantics before Stage 8 scoring. |
+| **Gold labels** | Fable `draft_*` = provisional gold (pivot 4; human review waived, `gold_verdict` stays 0/100 by design). ONE full agent re-draft deferred to end of pipeline, after all design decisions lock (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
 
 ### Done
@@ -69,14 +69,15 @@ Last updated: **2026-07-07** (pivot 4 recorded: human gold review waived). Long 
 
 ### Pending (in order)
 
-PR 6 logprob extract → PR 7 batch parity + scorer → PR 8 paid two-pass experiments → PR 9 dashboard → PR 10 gate report + `AGENTS.md`.
+PR 6 logprob extract → PR 7 batch parity + scorer → PR 8 paid two-pass experiments (provisionally scored vs current drafts) → **final gold re-draft + offline re-score (pivot 5)** → PR 9 dashboard → PR 10 gate report + `AGENTS.md`.
 
 ### Pivots locked (do not rediscover in chat)
 
 1. **2026-07-06 single-call invalidated.** Reasoning models reject `temperature`; logprobs only at `reasoning.effort=none`. Replacement: [two_pass_split_reasoning_classifier_9c1f4e20.plan.md](two_pass_split_reasoning_classifier_9c1f4e20.plan.md) — Pass A binary @ effort=none + logprobs; Pass B family-constrained subclass+RAD @ effort=high.
 2. **Q1 answered early from Stage 3 banked runs:** deliberation does not "collapse spread" — it forbids logprobs. Binary holds without reasoning (~93% vs Fable at none and high); 10-way subclass does not (~41% vs ~66%).
 3. **Zero-family 0B semantics (user, 2026-07-06):** `0B` = traditional software that ships a meaningful AI feature augmenting the product (Notion-style transition signal). Not "AI-core that survived AI removal." AI-core misrouted via Pass A=0 should surface as `0A` + `boundary_disagreement`, not hide in `0B`.
-4. **2026-07-07 human gold review waived (user).** Fable `draft_*` labels are the gold reference ("provisional gold"). Rationale: human judgment drifts from the prompted taxonomy, so human verdicts would NOT be apples-to-apples with production. Constraint: gold must stay architecture-independent — drafts were made by Fable **as an agent applying the monolith taxonomy** (Stage 2, pre-two-pass), NOT via any pipeline. Never regenerate gold through the two-pass pipeline itself (circular: would bias the benchmark toward the architecture under test and invalidate the banked single-pass baselines). OPEN: drafts predate pivot 3's 0B redefinition — decide whether to agent-re-draft the zero-family rows before Stage 8 scoring.
+4. **2026-07-07 human gold review waived (user).** Fable `draft_*` labels are the gold reference ("provisional gold"). Rationale: human judgment drifts from the prompted taxonomy, so human verdicts would NOT be apples-to-apples with production. Constraint: gold must stay architecture-independent — drafts were made by Fable **as an agent applying the monolith taxonomy** (Stage 2, pre-two-pass), NOT via any pipeline. Never regenerate gold through the two-pass pipeline itself (circular: would bias the benchmark toward the architecture under test and invalidate the banked single-pass baselines).
+5. **2026-07-07 full gold re-draft deferred to end of pipeline (user).** Current Fable drafts stay the provisional reference through Stages 6–8. ONE full re-draft of all 100 rows — Fable as agent, applying the then-final taxonomy text (incl. pivot 3's 0B fix) to the same evidence text the evaluated models receive — happens only after the whole flow is built and every design decision is locked (post Stage 8 go/no-go), then every banked run is re-scored offline (`scoring.py` is re-runnable by design, so late re-scoring is cheap). Rationale: re-drafting is expensive; doing it before the design freezes risks paying twice after another pivot. Supersedes pivot 4's open zero-family-refresh question (folds into the final re-draft). Stage 8's go/no-go is read provisionally against current drafts and confirmed after the re-draft.
 
 ### Agent workflow (how we run PRs 6–10)
 
@@ -236,4 +237,4 @@ Stage-to-PR mapping (grouped by risk; STATUS block above is authoritative):
 
 ## Success criteria
 
-All six gate questions have evidenced answers; every benchmarked model has scored runs with CIs and cost; calibration verdict on `logprob_confidence` is measured; 100 gold rows carry Fable draft labels adopted as provisional gold (human sign-off waived 2026-07-07, pivot 4).
+All six gate questions have evidenced answers; every benchmarked model has scored runs with CIs and cost; calibration verdict on `logprob_confidence` is measured; 100 gold rows carry Fable labels from the final end-of-pipeline re-draft (pivots 4–5; human sign-off waived 2026-07-07).
