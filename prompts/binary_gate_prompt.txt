@@ -19,7 +19,6 @@ Each startup is provided with the following fields:
                     YYYY when only year is known, or Unknown when unavailable.
   Resource Context  Optional scale/context fields: employee count, funding rounds,
                     total funding USD, last funding date, operating status.
-  Website Pages Used Optional URLs selected from the company's homepage crawl.
   Website Evidence  Optional Tavily-extracted website snippets from high-signal
                     pages such as homepage, product, about, careers, technical
                     or research pages.
@@ -101,80 +100,3 @@ Respond with a single JSON object containing exactly one field:
 {"ai_native": 0}   or   {"ai_native": 1}
 
 No other fields. No explanation.
-
-════════════════════════════════════════════════════════════════
-EXAMPLES
-════════════════════════════════════════════════════════════════
-
-Note on format: the "Evidence summary" line in each example is a compressed
-stand-in for the actual input fields you receive. Reason over whatever real
-fields are present the same way.
-
-EXAMPLE 1
-INPUT:
-CompanyName: OpenAI
-Evidence summary: Builds frontier foundation models, publishes model and safety
-research, offers ChatGPT and model APIs, sells access to the core model layer
-used by other AI builders and enterprises. The model family itself is the
-central artifact.
-OUTPUT:
-{"ai_native": 1}
-
-EXAMPLE 2
-INPUT:
-CompanyName: ChatPDF-style PDF Chat Tool
-Evidence summary: "Upload any PDF and chat with it instantly." Lightweight
-self-serve product, free/pro pricing, no proprietary corpus, no model-training
-claims, tiny team. The mechanism is file parsing plus an LLM call; removing
-LLM API access would collapse the core user experience.
-OUTPUT:
-{"ai_native": 1}
-
-EXAMPLE 3
-INPUT:
-CompanyName: OpenClaw
-Evidence summary: Persistent AI worker with memory across sessions, tool use,
-web browsing, email, code execution, scheduled tasks, and agents that execute
-multi-step workflows while the user is away. The AI plans, remembers, and
-operates software over time; that agentic system is the product.
-OUTPUT:
-{"ai_native": 1}
-
-EXAMPLE 4
-INPUT:
-CompanyName: Stripe
-Evidence summary: Sells payments infrastructure, billing, checkout, fraud
-tools, and financial APIs. AI may appear in some fraud or analytics features,
-but businesses use Stripe to accept payments and move money; removing AI
-references leaves the product unchanged.
-OUTPUT:
-{"ai_native": 0}
-
-EXAMPLE 5
-INPUT:
-CompanyName: Notion
-Evidence summary: Connected workspace for docs, wikis, projects, and team
-collaboration, with Notion AI features for drafting, summarizing, and search
-sold as an add-on inside the broader workspace. The core value predates GenAI
-and survives without it; AI improves Notion but is not what Notion sells.
-OUTPUT:
-{"ai_native": 0}
-
-EXAMPLE 6
-INPUT:
-CompanyName: Futuremood
-Evidence summary: Sells physical sunglasses and lens products marketed around
-mood and fashion. Ecommerce site, brand story, physical goods. No software
-product, no AI mechanism.
-OUTPUT:
-{"ai_native": 0}
-
-EXAMPLE 7
-INPUT:
-CompanyName: AI-branded CRM startup
-Evidence summary: Homepage leads with "AI-native revenue platform" but the
-product shown is a sales CRM: pipelines, contact records, dashboards, email
-sequencing, plus an AI assistant that drafts outreach. The CRM works without
-the assistant; the AI is a feature on a conventional mechanism.
-OUTPUT:
-{"ai_native": 0}
