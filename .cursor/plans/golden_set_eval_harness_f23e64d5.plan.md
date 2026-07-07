@@ -9,17 +9,17 @@ todos:
     content: "evals/sampling.py: stratified 100-row golden set from production predictions x evidence terciles -> evals/golden/golden_set.csv"
     status: completed
   - id: stage2-gold-labeling
-    content: Fable drafts labels + rationale + ambiguity flags; render HTML review page; user records gold verdicts in CSV (drafts merged; human verdict pass still outstanding)
+    content: "Fable drafts done (100/100). PIVOT 2026-07-07: human review WAIVED (user) — Fable drafts promoted to provisional gold. Open: targeted agent re-draft of zero-family rows under the clarified 0B semantics (drafts predate pivot 3)"
     status: completed
   - id: stage3-runner
-    content: "evals/runner.py: sync Responses API runner with logprob params, config snapshot (prompt/schema hashes), run dirs (PR #13 open)"
+    content: "evals/runner.py: sync Responses API runner with logprob params, config snapshot (prompt/schema hashes), run dirs — MERGED #13"
     status: completed
   - id: stage4-prompts
-    content: "Stage 4 (branch two-pass/stage-1-prompts, PR 4): decompose the monolith prompt into binary_gate_prompt.txt (Pass A) + family-parameterized subclass_rad_prompt.txt (Pass B); 3-5 row live format smoke; user reviews prompt text before merge"
-    status: pending
+    content: "Stage 4 two-pass prompts (Pass A binary_gate + Pass B family blocks) — MERGED #14"
+    status: completed
   - id: stage5-twopass-impl
-    content: "Stage 5 (branch two-pass/stage-2-implementation, PR 5): BinaryResult + family-constrained SubclassResult schemas (boundary_disagreement flag), two-pass runner in evals/, cohort computed in code, offline tests"
-    status: pending
+    content: "Stage 5 two-pass implementation (BinaryResult + family-constrained SubclassResult, run-two-pass CLI, resume invariants incl. n_rows/repeat) — MERGED #15"
+    status: completed
   - id: stage6-logprob-extract
     content: "Stage 6 (PR 6): evals/logprob_extract.py targeting Pass A binary-only output: byte-reconstruction, decision-token metrics, fixtures (gate Q2/Q3/Q5)"
     status: pending
@@ -40,9 +40,101 @@ isProject: false
 
 # Golden-Set Evaluation Harness
 
+## STATUS (source of truth — update after every PR merge / pivot)
+
+Last updated: **2026-07-07** (pivot 4 recorded: human gold review waived). Long implementer chat retired; thin orchestrator + fresh workers own continuity from here.
+
+| Field | Value |
+|-------|--------|
+| **Last merged** | PR **#15** — Stage 5 two-pass implementation (merged 2026-07-07 22:29 UTC, merge `84a7755`; includes Bugbot fix `705af2c`) |
+| **Open now** | none |
+| **Working branch** | none owned — `two-pass/stage-2-implementation` is fully contained in `origin/main`; next worker cuts fresh from main |
+| **Next** | Stage 6 / PR 6 — `evals/logprob_extract.py` (Pass A binary-only) — NOT STARTED |
+| **Human blocker** | WAIVED 2026-07-07 (user, pivot 4): Fable `draft_*` labels ARE the provisional gold reference. `gold_verdict` stays 0/100 by design. Open sub-question: refresh zero-family drafts under clarified 0B semantics before Stage 8 scoring. |
+| **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
+
+### Done
+
+| PR | Stage | Branch | Notes |
+|----|-------|--------|-------|
+| #11 | 0+1 scaffolding + sampling | `eval-harness/stage-0-scaffolding` | Merged |
+| #12 | 2 gold labeling drafts + review UI | `eval-harness/stage-2-gold-labeling` | Drafts committed; human gold still open |
+| #13 | 3 sync runner + run records | `eval-harness/stage-3-runner` | Merged; banked baseline runs in `evals/runs/` (nano none/medium/high) |
+| #14 | 4 two-pass prompts | `two-pass/stage-1-prompts` | Merged |
+| #15 | 5 two-pass implementation | `two-pass/stage-2-implementation` | Merged 2026-07-07; two `cursor[bot]` resume-invariant comments remain unresolved on the PR but the fix (`705af2c`) is in the merge — no follow-up code needed |
+
+### In progress
+
+- Nothing. Next worker cuts the Stage 6 branch fresh from `main`.
+
+### Pending (in order)
+
+PR 6 logprob extract → PR 7 batch parity + scorer → PR 8 paid two-pass experiments → PR 9 dashboard → PR 10 gate report + `AGENTS.md`.
+
+### Pivots locked (do not rediscover in chat)
+
+1. **2026-07-06 single-call invalidated.** Reasoning models reject `temperature`; logprobs only at `reasoning.effort=none`. Replacement: [two_pass_split_reasoning_classifier_9c1f4e20.plan.md](two_pass_split_reasoning_classifier_9c1f4e20.plan.md) — Pass A binary @ effort=none + logprobs; Pass B family-constrained subclass+RAD @ effort=high.
+2. **Q1 answered early from Stage 3 banked runs:** deliberation does not "collapse spread" — it forbids logprobs. Binary holds without reasoning (~93% vs Fable at none and high); 10-way subclass does not (~41% vs ~66%).
+3. **Zero-family 0B semantics (user, 2026-07-06):** `0B` = traditional software that ships a meaningful AI feature augmenting the product (Notion-style transition signal). Not "AI-core that survived AI removal." AI-core misrouted via Pass A=0 should surface as `0A` + `boundary_disagreement`, not hide in `0B`.
+4. **2026-07-07 human gold review waived (user).** Fable `draft_*` labels are the gold reference ("provisional gold"). Rationale: human judgment drifts from the prompted taxonomy, so human verdicts would NOT be apples-to-apples with production. Constraint: gold must stay architecture-independent — drafts were made by Fable **as an agent applying the monolith taxonomy** (Stage 2, pre-two-pass), NOT via any pipeline. Never regenerate gold through the two-pass pipeline itself (circular: would bias the benchmark toward the architecture under test and invalidate the banked single-pass baselines). OPEN: drafts predate pivot 3's 0B redefinition — decide whether to agent-re-draft the zero-family rows before Stage 8 scoring.
+
+### Agent workflow (how we run PRs 6–10)
+
+- **Source of truth:** this STATUS + plan frontmatter todos + git/PR state. Never chat memory.
+- **Thin orchestrator:** orientation, kickoff prompts, STATUS/todo updates, course corrections written *here*. No full-stage coding.
+- **Fresh worker per PR:** reads this file → implements only that PR's scope → opens/finishes PR → updates this STATUS → stops.
+- **Subagents** for Bugbot / recon; parent keeps conclusions only.
+- After any auto-summarization or drift: retire the chat, spawn fresh from this block.
+
+### Handoff (2026-07-07, leaving long eval chat)
+
+- Code on `two-pass/stage-2-implementation` is ahead of this plan's older "PR #13 open / Stage 4 pending" text; **trust the table above**.
+- Immediate orchestrator job: (1) schedule human gold review, (2) spin a **fresh** Stage-6 worker (PR #15 already merged).
+
+### Final implementer notes (do not undo)
+
+Written 2026-07-07 by the retiring implementer, after verifying against
+`gh pr list`, `git log`, and the golden CSV. Everything below is fact, not plan.
+
+- **PR #15 is MERGED** (2026-07-07 22:29 UTC, merge `84a7755`). The branch is
+  fully contained in `origin/main` (`git diff origin/main HEAD` is empty) and
+  can be deleted. The two unresolved `cursor[bot]` comments on #15 (both
+  "resume invariants omit fields") are already addressed by commit `705af2c`,
+  which IS in the merge — do not re-fix; just resolve/ignore the threads.
+- **This plan file's STATUS block is uncommitted working-tree state** on the
+  (now-merged) Stage 5 branch. It must be committed to main or it dies with a
+  branch cleanup. That commit is the orchestrator's first job.
+- **Banked local runs** (`evals/runs/`, git-ignored, predictions committed
+  nowhere): three complete 100-row single-pass nano baselines —
+  `2026-07-05_..._medium_r1`, `2026-07-06_..._none_r1`, `2026-07-06_..._high_r1`.
+  These are the Stage 8 comparison baselines and exist ONLY on this machine.
+  The `none` run's `raw/` holds the logprob arrays Stage 6 needs for fixtures.
+- **Stage 6 landmines (logprob extract on Pass A):** (a) Pass A output is ~6
+  tokens; the `ai_native` value rides ON the `1` or `0` digit token — but the
+  first token is typically `{"` with near-1.0 prob, so locate the value token
+  structurally (JSON parse + char spans), never by index. (b) top_logprobs
+  lists contain grammar-masked entries at exactly `-100.0` — treat -100 as
+  masked sentinels, not real probabilities, when renormalizing over {0,1}.
+  (c) The chosen token may be absent from its own top_logprobs list; merge
+  `entry.{token,logprob}` into the candidate pool before renormalizing.
+  (d) Use the banked `none_r1/raw/*.json` responses as free fixtures before
+  spending anything.
+- **Two-pass runner API** (merged, `evals/two_pass.py`): `python -m evals
+  run-two-pass [--model --effort-b --repeat --limit --dry-run --run-id]`.
+  Raw responses land as `raw/<cid>_a.json` / `<cid>_b.json` per row. A row is
+  resumable-complete only at `status == "completed"`; parse failures are
+  recorded as `parse_failed` and retried on resume.
+- **Not yet written anywhere else:** the single-pass agreement numbers vs
+  Fable drafts (binary ~93% at both none and high; subclass 41% at none vs
+  66% at high) came from an ad-hoc analysis in the retired chat. The scripts
+  were throwaway; Stage 7's scorer re-derives them properly from the banked
+  runs. Do not hunt for a script.
+
+---
+
 ## Course correction (2026-07-06): findings redirected stages 4-7
 
-Stages 0-3 are DONE (PR 1 #11, PR 2 #12 merged; PR 3 #13 open). The Stage 3
+Stages 0-3 DONE (PR #11, #12, #13 merged); Stage 4 DONE (PR #14). Stage 5 open as PR #15. The Stage 3
 runs answered gate questions early and **invalidated the single-call design**
 the later stages assumed: reasoning models reject `temperature`, and logprobs
 return only at `reasoning.effort=none` (Q1 answered: reasoning doesn't collapse
@@ -130,12 +222,12 @@ Per-stage loop:
 5. GitHub Bugbot review on the PR (auto on open/push, or comment `bugbot run`); fix findings, re-review until clean.
 6. Squash-merge, delete branch, pull main, cut next stage branch (sequencing enforced by construction).
 
-Stage-to-PR mapping (grouped by risk):
+Stage-to-PR mapping (grouped by risk; STATUS block above is authoritative):
 - PR 1 — Stage 0 + 1: scaffolding, config, CLI, sampler (+ tests) — MERGED #11
-- PR 2 — Stage 2: review-page generator + signed golden labels CSV — MERGED #12
-- PR 3 — Stage 3: sync runner + run records — OPEN #13
-- PR 4 — Stage 4: two-pass prompts (prose-only; user reviews taxonomy text)
-- PR 5 — Stage 5: two-pass schemas + runner + tests
+- PR 2 — Stage 2: review-page generator + Fable draft labels (human gold still open) — MERGED #12
+- PR 3 — Stage 3: sync runner + run records — MERGED #13
+- PR 4 — Stage 4: two-pass prompts — MERGED #14
+- PR 5 — Stage 5: two-pass schemas + runner + tests — MERGED #15
 - PR 6 — Stage 6: logprob extraction + fixtures + tests (own PR: subtlest code, silent-failure risk)
 - PR 7 — Stage 7: batch parity smoke + scorer
 - PR 8 — Stage 8: experiment artifacts (scored summaries) + fixes exposed by real runs
@@ -144,4 +236,4 @@ Stage-to-PR mapping (grouped by risk):
 
 ## Success criteria
 
-All six gate questions have evidenced answers; every benchmarked model has scored runs with CIs and cost; calibration verdict on `logprob_confidence` is measured; 100 gold rows are human-signed.
+All six gate questions have evidenced answers; every benchmarked model has scored runs with CIs and cost; calibration verdict on `logprob_confidence` is measured; 100 gold rows carry Fable draft labels adopted as provisional gold (human sign-off waived 2026-07-07, pivot 4).
