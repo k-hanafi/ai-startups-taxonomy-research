@@ -42,14 +42,14 @@ isProject: false
 
 ## STATUS (source of truth — update after every PR merge / pivot)
 
-Last updated: **2026-07-08** (pre-Stage-8 latency capture PR open: per-row wall-clock latency in run records + scorer summary, the measured axis pivot 7 added for Stage 8). Long implementer chat retired; thin orchestrator + fresh workers own continuity from here.
+Last updated: **2026-07-08** (PR #19 latency capture merged by user; small parity-report resilience PR open, ties to eval question Q3 implementation robustness).
 
 | Field | Value |
 |-------|--------|
-| **Last merged** | PR **#18** — calibration wire-up: `score --confidence-from-raw` feeds chosen-digit confidence (pivot 6) into the scorer (merged by user 2026-07-08). Verified on the banked none_r1 run: calibration populated (ECE 0.077, n=100), the 4 minority-sampling rows all land below 0.5 confidence (0.12 / 0.21 / 0.28 / 0.33). |
-| **Open now** | Pre-Stage-8 latency capture PR (branch `eval-harness/latency-capture`): `time.monotonic` around each API call, `latency_s` on single-pass records, `a_latency_s`/`b_latency_s` + flat `latency_s` total on two-pass records, and a mean/p50/p95/max `latency` block in scored.json (null for legacy runs — the three banked baselines re-verified scoring cleanly). |
-| **Working branch** | `eval-harness/latency-capture` |
-| **Next** | After the latency PR merges: Stage 8 model/config selection experiment on the committed two-pass architecture (pivot 7): sweep GPT-family models x Pass B effort (medium vs high, per the banked 77%-vs-66% subclass finding), measuring accuracy, calibration, cost, and latency. Paid, so the USER runs the CLI or delegates. |
+| **Last merged** | PR **#19** — pre-Stage-8 latency capture: `time.monotonic` around each API call, `latency_s` on single-pass records, `a_latency_s`/`b_latency_s` + flat `latency_s` total on two-pass records, and a mean/p50/p95/max `latency` block in scored.json (null for legacy runs). Merged by user 2026-07-08. |
+| **Open now** | Parity-report resilience PR (branch `eval-harness/parity-report-resilience`, eval question Q3): batch-parity no longer aborts via SystemExit when the batch phase times out or finishes without an output file. It writes the parity report anyway (verdict forced FAIL + a `batch_error` field) so the already-paid sync results are preserved, and the CLI still exits nonzero. Report writing refactored into `_write_parity_report`. |
+| **Working branch** | `eval-harness/parity-report-resilience` |
+| **Next** | After the resilience PR merges: Stage 8 paid model/config selection experiment on the committed two-pass architecture (pivot 7): sweep GPT-family models x Pass B effort (medium vs high, per the banked 77%-vs-66% subclass finding), measuring accuracy, calibration, cost, and latency. Paid, so the USER runs the CLI or delegates. |
 | **Gold labels** | Fable `draft_*` = provisional gold (pivot 4; human review waived, `gold_verdict` stays 0/100 by design). ONE full agent re-draft deferred to end of pipeline, after all design decisions lock (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
 
@@ -65,6 +65,7 @@ Last updated: **2026-07-08** (pre-Stage-8 latency capture PR open: per-row wall-
 | #17 | 6 logprob extraction | `eval-harness/stage-6-logprob-extract` (deleted) | Merged 2026-07-07 (`9caaa3f`), Bugbot clean. Gate evidence: Q2 tokenization pinned (decision-token index varies 34–44, structural location mandatory; byte reconstruction exact on 100/100 banked rows); Q3 `valid_mass` ≥ 0.999998 everywhere; Q5 fixtures composed from 6 decision tokens, zero company text. NOTE for Stage 7 calibration: 4/100 banked rows sampled the MINORITY token (verdict ≠ argmax, e.g. chosen 1 at p₁=0.28; `chose_minority` fixture pins one). **Locked (pivot 6):** sampled digit = prediction; logprob confidence describes certainty about that choice, never argmax substitution. |
 | #16 | 7 batch parity + scorer | `eval-harness/stage-7-parity-scorer` | Merged by user 2026-07-07. Gate Q4 PASS (batch honors top_logprobs/effort/temperature, identical logprob shape). Banked nano baselines scored + committed (binary 93/93, subclass 41 none / 66 high / 77 medium). Calibration seam left data-only; wired in #18. |
 | #18 | 7 calibration wire-up | `eval-harness/calibration-wireup` (deleted) | Merged by user 2026-07-08. `score --confidence-from-raw` runs the Stage 6 extractor over `raw/` and feeds chosen-digit confidence (pivot 6) into the scorer's external-mapping seam (scoring.py still never imports logprob_extract; the CLI is the connector). Verified on banked none_r1: ECE 0.077 (n=100), all 4 minority-sampling rows below 0.5 confidence. |
+| #19 | pre-8 latency capture | `eval-harness/latency-capture` | Merged by user 2026-07-08. Per-row wall-clock latency in run records + mean/p50/p95/max latency block in scored.json — the measured axis pivot 7 added for Stage 8. |
 
 ### In progress
 
@@ -72,7 +73,7 @@ Last updated: **2026-07-08** (pre-Stage-8 latency capture PR open: per-row wall-
 
 ### Pending (in order)
 
-Latency-capture PR (open, see STATUS) → PR 8 paid Stage 8 model/config selection experiment (pivot 7: sweep GPT-family models x Pass B medium-vs-high effort on the committed two-pass architecture, provisionally scored vs current drafts; banked single-pass runs are reference points only) → **final gold re-draft + offline re-score (pivot 5)** → PR 9 dashboard → PR 10 report answering the three eval questions + `AGENTS.md`.
+Parity-report resilience PR (open, see STATUS) → PR 8 paid Stage 8 model/config selection experiment (pivot 7: sweep GPT-family models x Pass B medium-vs-high effort on the committed two-pass architecture, provisionally scored vs current drafts; banked single-pass runs are reference points only) → **final gold re-draft + offline re-score (pivot 5)** → PR 9 dashboard → PR 10 report answering the three eval questions + `AGENTS.md`.
 
 ### Pivots locked (do not rediscover in chat)
 

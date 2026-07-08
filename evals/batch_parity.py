@@ -221,15 +221,15 @@ def _create_sync(client: OpenAI, kwargs: dict[str, Any]) -> Any:
     return client.responses.create(**kwargs)
 
 
-def _wait_for_batch(client: OpenAI, batch_id: str) -> Any:
+def _wait_for_batch(client: OpenAI, batch_id: str) -> tuple[Any, str | None]:
     """Poll until the batch reaches a terminal status or the wait cap."""
     deadline = time.monotonic() + cfg.PARITY_MAX_WAIT_SECONDS
     while True:
         batch = client.batches.retrieve(batch_id)
         if batch.status in BATCH_TERMINAL_STATUSES:
-            return batch
+            return batch, None
         if time.monotonic() >= deadline:
-            raise SystemExit(
+            return batch, (
                 f"Batch {batch_id} still {batch.status} after "
                 f"{cfg.PARITY_MAX_WAIT_SECONDS}s. Retrieve it later from the "
                 "OpenAI dashboard; the sync responses are already saved."
@@ -239,11 +239,15 @@ def _wait_for_batch(client: OpenAI, batch_id: str) -> Any:
         time.sleep(cfg.PARITY_POLL_SECONDS)
 
 
-def _download_batch_bodies(client: OpenAI, batch: Any) -> dict[str, dict[str, Any]]:
+def _download_batch_bodies(
+    client: OpenAI, batch: Any
+) -> tuple[dict[str, dict[str, Any]], str | None]:
     """custom_id -> response payload dict from the batch output file."""
     if not batch.output_file_id:
-        raise SystemExit(f"Batch {batch.id} finished {batch.status} with no "
-                         f"output file (errors: {batch.error_file_id})")
+        return {}, (
+            f"Batch {batch.id} finished {batch.status} with no "
+            f"output file (errors: {batch.error_file_id})"
+        )
     content = client.files.content(batch.output_file_id).text
     bodies: dict[str, dict[str, Any]] = {}
     for line in content.splitlines():
@@ -252,7 +256,40 @@ def _download_batch_bodies(client: OpenAI, batch: Any) -> dict[str, dict[str, An
         rec = json.loads(line)
         response = rec.get("response") or {}
         bodies[rec["custom_id"]] = response.get("body") or {}
-    return bodies
+    return bodies, None
+
+
+def _write_parity_report(
+    run_id: str,
+    requests: dict[str, dict[str, Any]],
+    sync_bodies: dict[str, dict[str, Any]],
+    batch_bodies: dict[str, dict[str, Any]],
+    model: str,
+    *,
+    batch_error: str | None = None,
+) -> dict[str, Any]:
+    """Build and persist the gate Q4 report; always returns the report dict.
+
+    A batch_error (timeout or missing output file) forces a FAIL verdict, so
+    the CLI exits nonzero even though the sync results are preserved on disk.
+    """
+    report = build_parity_report(requests, sync_bodies, batch_bodies, model)
+    if batch_error:
+        report["batch_error"] = batch_error
+        report["verdict"] = "FAIL"
+    report_path = parity_report_path(run_id)
+    report_path.write_text(
+        json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    logger.info("Gate Q4 verdict: %s (%s)", report["verdict"], report_path)
+    if batch_error:
+        logger.error("Batch phase failed: %s", batch_error)
+    for cid, row in report["rows"].items():
+        if not row["ok"]:
+            for c in row["checks"]:
+                if not c["ok"]:
+                    logger.warning("  %s: %s (%s)", cid, c["name"], c["detail"])
+    return report
 
 
 def run_parity(model: str = cfg.EVAL_MODELS[0]) -> dict[str, Any]:
@@ -300,22 +337,20 @@ def run_parity(model: str = cfg.EVAL_MODELS[0]) -> dict[str, Any]:
     )
     logger.info("Submitted batch %s, waiting for completion", batch.id)
 
-    batch = _wait_for_batch(client, batch.id)
-    batch_bodies = _download_batch_bodies(client, batch)
-    for cid, body in batch_bodies.items():
-        (raw / f"{cid}_batch.json").write_text(
-            json.dumps(body, ensure_ascii=False), encoding="utf-8"
-        )
+    batch, wait_error = _wait_for_batch(client, batch.id)
+    batch_error = wait_error
+    batch_bodies: dict[str, dict[str, Any]] = {}
+    if wait_error is None:
+        batch_bodies, download_error = _download_batch_bodies(client, batch)
+        if download_error:
+            batch_error = download_error
+        else:
+            for cid, body in batch_bodies.items():
+                (raw / f"{cid}_batch.json").write_text(
+                    json.dumps(body, ensure_ascii=False), encoding="utf-8"
+                )
 
-    report = build_parity_report(requests, sync_bodies, batch_bodies, model)
-    report_path = parity_report_path(run_id)
-    report_path.write_text(
-        json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    return _write_parity_report(
+        run_id, requests, sync_bodies, batch_bodies, model,
+        batch_error=batch_error,
     )
-    logger.info("Gate Q4 verdict: %s (%s)", report["verdict"], report_path)
-    for cid, row in report["rows"].items():
-        if not row["ok"]:
-            for c in row["checks"]:
-                if not c["ok"]:
-                    logger.warning("  %s: %s (%s)", cid, c["name"], c["detail"])
-    return report

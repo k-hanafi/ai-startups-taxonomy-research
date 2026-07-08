@@ -140,6 +140,9 @@ def main() -> None:
         from evals.batch_parity import run_parity
 
         report = run_parity(model=args.model or cfg.EVAL_MODELS[0])
+        # Nonzero exit on any non-PASS verdict, including batch_error runs
+        # (batch timed out / no output file). The report is still written so
+        # the paid sync results survive either way.
         if report["verdict"] != "PASS":
             sys.exit(1)
         return
