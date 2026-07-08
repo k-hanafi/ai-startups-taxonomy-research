@@ -521,8 +521,11 @@ def load_confidence_file(path: str | Path) -> dict[str, float]:
     return {str(k): float(v) for k, v in data.items()}
 
 
-def score_cli(run_id: str, baseline: Optional[str], confidence_path: Optional[str]) -> None:
-    confidence = load_confidence_file(confidence_path) if confidence_path else None
+def score_cli(
+    run_id: str,
+    baseline: Optional[str],
+    confidence: Optional[dict[str, float]],
+) -> None:
     report = score_run(run_id, baseline_run_id=baseline, confidence=confidence)
     for axis in AXES:
         ax = report["axes"][axis]
