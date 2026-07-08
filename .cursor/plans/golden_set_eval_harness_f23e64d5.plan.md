@@ -65,7 +65,7 @@ Last updated: **2026-07-07** (pivot 5 recorded: full gold re-draft deferred to e
 
 ### In progress
 
-- **PR 6 / Stage 6** — worker on `eval-harness/stage-6-logprob-extract`: `evals/logprob_extract.py` + fixtures from the banked `none_r1` raw responses + tests.
+- **PR 6 / Stage 6** — **PR #17 OPEN (merge-ready)** on `eval-harness/stage-6-logprob-extract`: `evals/logprob_extract.py` + 4 anonymized fixtures from the banked `none_r1` raw responses + 39 offline tests. Q2: decision rides on a single '0'/'1' token at a VARIABLE index (34–44 across the banked run), byte reconstruction exact on all 100 rows. Q3: `valid_mass` ≥ 0.999998 on all 100 banked rows (≈no mass leaks outside {0,1}). Q5: fixtures reduced to the 6 decision-relevant tokens, no company/evidence text. Bonus finding for Stage 7 calibration: 4/100 rows sampled the MINORITY token (emitted verdict disagrees with argmax, e.g. chosen '1' at p₁=0.28).
 - **PR 7 / Stage 7** — parallel worker on `eval-harness/stage-7-parity-scorer`: `evals/scoring.py` (accuracy, macro-F1, confusion, bootstrap CIs, cost, reasoning-token sizing) + 10-row Batch parity smoke. Calibration consumes a per-row confidence value as plain data, NOT an import of PR 6's module. Workers stop at merge-ready (Bugbot clean); orchestrator sequences merges 6 then 7 (PR 7 rebases over 6's plan-file edits).
 
 ### Pending (in order)
