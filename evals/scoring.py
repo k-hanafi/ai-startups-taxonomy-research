@@ -366,24 +366,40 @@ def calibration_report(
     gold: dict[str, dict[str, str]],
     predictions: dict[str, dict[str, Any]],
 ) -> Optional[dict[str, Any]]:
-    """Binary-axis calibration, or None when no confidence input exists."""
+    """Binary-axis calibration, or None when no confidence input exists.
+
+    n_eligible counts every scored row that could carry a confidence value;
+    when n < n_eligible the coverage gap is reported loudly (a git-ignored,
+    machine-local raw/ can be partially copied without any other symptom).
+    """
     if not confidence:
         return None
+    eligible = [
+        uuid for uuid in predictions
+        if uuid in gold
+        and _predicted_labels(predictions[uuid])["ai_native"] != MISSING
+    ]
     conf_list: list[float] = []
     correct_list: list[bool] = []
-    for uuid, value in confidence.items():
-        if uuid not in gold or uuid not in predictions:
+    for uuid in eligible:
+        value = confidence.get(uuid)
+        if value is None:
             continue
         pred = _predicted_labels(predictions[uuid])["ai_native"]
-        if pred == MISSING:
-            continue
         conf_list.append(value)
         correct_list.append(pred == gold[uuid]["ai_native"])
     if not conf_list:
         return None
+    if len(conf_list) < len(eligible):
+        logger.warning(
+            "calibration covers only %d of %d eligible rows "
+            "(confidence input is missing rows, e.g. an incomplete raw/ dir)",
+            len(conf_list), len(eligible),
+        )
     return {
         "axis": "ai_native",
         "n": len(conf_list),
+        "n_eligible": len(eligible),
         "reliability": reliability_bins(conf_list, correct_list),
         "selective_prediction": selective_prediction_curve(conf_list, correct_list),
     }

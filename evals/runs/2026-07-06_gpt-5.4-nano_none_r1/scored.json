@@ -1,6 +1,6 @@
 {
   "run_id": "2026-07-06_gpt-5.4-nano_none_r1",
-  "scored_at_utc": "2026-07-08T05:46:19.871021+00:00",
+  "scored_at_utc": "2026-07-08T05:52:32.558754+00:00",
   "gold_source": "Fable draft_* columns (provisional gold, pivots 4+5)",
   "n_gold": 100,
   "n_prediction_records": 100,
@@ -175,6 +175,7 @@
   "calibration": {
     "axis": "ai_native",
     "n": 100,
+    "n_eligible": 100,
     "reliability": {
       "bins": [
         {

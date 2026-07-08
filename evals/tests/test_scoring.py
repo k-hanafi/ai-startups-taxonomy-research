@@ -271,6 +271,29 @@ def test_score_run_paired_baseline_delta(mini_run, tmp_path):
     assert vs["deltas"]["ai_native"]["delta_accuracy"] == pytest.approx(2 / 3)
 
 
+def test_calibration_reports_partial_confidence_coverage(mini_run, caplog):
+    # raw/ is git-ignored and machine-local, so a confidence mapping can
+    # silently cover fewer rows than were scored. The gap must be visible.
+    run_id, _ = mini_run
+    import logging
+    with caplog.at_level(logging.WARNING, logger="evals.scoring"):
+        report = scoring.score_run(
+            run_id, confidence={"u1": 0.95, "u3": 0.2}, write=False
+        )
+    cal = report["calibration"]
+    assert cal["n"] == 2
+    assert cal["n_eligible"] == 3
+    assert any("2 of 3" in r.message for r in caplog.records)
+
+
+def test_calibration_full_coverage_matches_eligible(mini_run):
+    run_id, _ = mini_run
+    report = scoring.score_run(
+        run_id, confidence={"u1": 0.95, "u2": 0.9, "u3": 0.2}, write=False
+    )
+    assert report["calibration"]["n"] == report["calibration"]["n_eligible"] == 3
+
+
 def test_score_run_calibration_from_raw_logprob_fixtures(tmp_path, monkeypatch):
     """Full wire-up on real (anonymized) tokenization: fixtures as raw/,
     run_confidence as the external mapping, calibration populated, and the
