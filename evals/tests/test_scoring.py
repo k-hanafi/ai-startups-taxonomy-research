@@ -120,6 +120,46 @@ def test_cost_unknown_model_reports_tokens_without_dollars():
     assert cost["total_input_tokens"] == 10
 
 
+# --- latency -------------------------------------------------------------------
+
+def test_latency_summary_known_answer():
+    records = [{"latency_s": 1.0}, {"latency_s": 2.0}, {"latency_s": 3.0},
+               {"latency_s": 10.0}]
+    summary = scoring.latency_summary(records)
+    stats = summary["latency_s"]
+    assert stats["n"] == 4
+    assert stats["mean"] == pytest.approx(4.0)
+    assert stats["p50"] == pytest.approx(2.5)
+    assert stats["max"] == 10.0
+    # Single-pass records carry no per-pass fields.
+    assert "a_latency_s" not in summary and "b_latency_s" not in summary
+
+
+def test_latency_summary_two_pass_per_pass_breakdown():
+    records = [
+        {"latency_s": 10.0, "a_latency_s": 1.0, "b_latency_s": 9.0},
+        {"latency_s": 20.0, "a_latency_s": 2.0, "b_latency_s": 18.0},
+    ]
+    summary = scoring.latency_summary(records)
+    assert summary["latency_s"]["mean"] == pytest.approx(15.0)
+    assert summary["a_latency_s"]["mean"] == pytest.approx(1.5)
+    assert summary["b_latency_s"]["mean"] == pytest.approx(13.5)
+
+
+def test_latency_summary_none_for_legacy_records():
+    # Banked pre-latency runs must keep scoring: summary is None, not a crash.
+    legacy = [{"input_tokens": 100, "output_tokens": 10}]
+    assert scoring.latency_summary(legacy) is None
+    assert scoring.latency_summary([{"latency_s": None}]) is None
+
+
+def test_latency_summary_skips_null_rows():
+    # A resumed run can mix legacy rows (no field) with new ones.
+    records = [{"latency_s": 4.0}, {}, {"latency_s": None}]
+    stats = scoring.latency_summary(records)["latency_s"]
+    assert stats["n"] == 1 and stats["mean"] == 4.0
+
+
 # --- calibration ---------------------------------------------------------------
 
 def test_resolve_confidence_absent_everywhere_is_empty():
@@ -232,9 +272,26 @@ def test_score_run_end_to_end(mini_run):
     assert report["calibration"] is None
     assert report["cost"]["n_rows"] == 3
     assert report["cost"]["total_input_tokens"] == 300
+    # Legacy records carry no latency fields: summary degrades to None.
+    assert report["latency"] is None
 
     scored = json.loads((run_dir / "scored.json").read_text(encoding="utf-8"))
     assert scored["run_id"] == run_id
+
+
+def test_score_run_surfaces_latency_when_recorded(mini_run):
+    run_id, run_dir = mini_run
+    path = run_dir / "predictions.jsonl"
+    records = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
+    for i, rec in enumerate(records):
+        if rec["status"] == "completed":
+            rec["latency_s"] = float(i + 1)
+    path.write_text(
+        "".join(json.dumps(r) + "\n" for r in records), encoding="utf-8"
+    )
+    report = scoring.score_run(run_id, write=False)
+    assert report["latency"]["latency_s"]["n"] == 3
+    assert report["latency"]["latency_s"]["mean"] == pytest.approx(2.0)
 
 
 def test_score_run_with_confidence_computes_calibration(mini_run):

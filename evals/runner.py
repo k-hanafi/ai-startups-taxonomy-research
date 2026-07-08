@@ -27,6 +27,7 @@ import inspect
 import json
 import logging
 import subprocess
+import time
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -186,7 +187,7 @@ def _completed_custom_ids(predictions_path: Path) -> set[str]:
 
 
 def _prediction_record(custom_id: str, org_uuid: str, model: str, effort: str,
-                       resp: Any) -> dict[str, Any]:
+                       resp: Any, latency_s: float | None = None) -> dict[str, Any]:
     """Label-only row for predictions.jsonl (no scraped evidence text)."""
     parsed: dict[str, Any] = {}
     text = getattr(resp, "output_text", "") or ""
@@ -216,6 +217,7 @@ def _prediction_record(custom_id: str, org_uuid: str, model: str, effort: str,
         "input_tokens": getattr(usage, "input_tokens", None) if usage else None,
         "output_tokens": getattr(usage, "output_tokens", None) if usage else None,
         "reasoning_tokens": reasoning_tokens,
+        "latency_s": latency_s,
     }
 
 
@@ -264,12 +266,17 @@ def run(model: str = cfg.EVAL_MODELS[0],
     for i, row in enumerate(todo, start=1):
         cid = f"startup-{row['org_uuid']}"
         kwargs = build_request_kwargs(row, system_prompt, schema, model, effort)
+        # Wall-clock latency around the API call; retry backoff is included,
+        # so this is the honest per-row cost a production caller would feel.
+        started = time.monotonic()
         resp = _create(client, kwargs)
+        latency_s = round(time.monotonic() - started, 3)
 
         (run_raw_dir(run_id) / f"{cid}.json").write_text(
             json.dumps(resp.model_dump(), ensure_ascii=False), encoding="utf-8"
         )
-        record = _prediction_record(cid, row["org_uuid"], model, effort, resp)
+        record = _prediction_record(cid, row["org_uuid"], model, effort, resp,
+                                    latency_s)
         with predictions_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
