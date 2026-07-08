@@ -129,12 +129,18 @@ def test_assemble_record_ai_native_family():
         "verification_critique": "ok", "boundary_disagreement": False,
     }, reasoning=500)
     rec = two_pass.assemble_record("startup-x", "x", "gpt-5.4-nano", "high",
-                                   "GENAI-ERA", ra, rb)
+                                   "GENAI-ERA", ra, rb,
+                                   latency_a_s=0.8, latency_b_s=12.4)
     assert rec["status"] == "completed"
     assert rec["ai_native"] == 1 and rec["subclass"] == "1E"
     assert rec["rad_score"] == "RAD-M" and rec["conf_rad"] == 3
     assert rec["cohort"] == "GENAI-ERA"
     assert rec["b_reasoning_tokens"] == 500
+    # Per-pass latencies land separately plus a flat total under the
+    # single-pass field name, so the scorer reads one field for both shapes.
+    assert rec["a_latency_s"] == 0.8
+    assert rec["b_latency_s"] == 12.4
+    assert rec["latency_s"] == pytest.approx(13.2)
 
 
 def test_assemble_record_zero_family_forces_rad_na():
@@ -154,9 +160,13 @@ def test_assemble_record_zero_family_forces_rad_na():
 def test_assemble_record_failed_pass_a_not_completed():
     ra = _resp("incomplete", None)
     rec = two_pass.assemble_record("startup-z", "z", "gpt-5.4-nano", "high",
-                                   "PRE-GENAI", ra, None)
+                                   "PRE-GENAI", ra, None, latency_a_s=1.5)
     assert rec["status"] != "completed"
     assert rec["subclass"] is None and rec["rad_score"] is None
+    # No Pass B means no meaningful end-to-end latency: total stays None.
+    assert rec["a_latency_s"] == 1.5
+    assert rec["latency_s"] is None
+    assert "b_latency_s" not in rec
 
 
 def test_assemble_record_parse_failure_never_marked_completed():

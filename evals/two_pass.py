@@ -24,6 +24,7 @@ import datetime
 import inspect
 import json
 import logging
+import time
 from typing import Any, Literal, Optional
 
 from openai import OpenAI
@@ -241,7 +242,9 @@ def _parse_output(resp: Any) -> Optional[dict[str, Any]]:
 
 
 def assemble_record(custom_id: str, org_uuid: str, model: str, effort_b: str,
-                    cohort: str, resp_a: Any, resp_b: Any) -> dict[str, Any]:
+                    cohort: str, resp_a: Any, resp_b: Any,
+                    latency_a_s: float | None = None,
+                    latency_b_s: float | None = None) -> dict[str, Any]:
     """One predictions.jsonl line combining both passes.
 
     status is 'completed' only when both passes completed AND parsed; resume
@@ -286,8 +289,17 @@ def assemble_record(custom_id: str, org_uuid: str, model: str, effort_b: str,
         "verification_critique": b.get("verification_critique") if b else None,
     }
     record.update(_usage_fields(resp_a, "a"))
+    record["a_latency_s"] = latency_a_s
     if resp_b is not None:
         record.update(_usage_fields(resp_b, "b"))
+        record["b_latency_s"] = latency_b_s
+    # Flat total under the single-pass field name, so the scorer reads one
+    # field for both run shapes. A row missing Pass B has no meaningful
+    # end-to-end latency (it will be re-run), so the total stays None.
+    if latency_a_s is not None and latency_b_s is not None:
+        record["latency_s"] = round(latency_a_s + latency_b_s, 3)
+    else:
+        record["latency_s"] = None
     return record
 
 
@@ -385,18 +397,25 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
         cid = f"startup-{row['org_uuid']}"
         cohort = compute_cohort(row.get("founded_date", ""))
 
+        # Wall-clock latency around each API call; retry backoff is included,
+        # so this is the honest per-pass cost a production caller would feel.
+        started_a = time.monotonic()
         resp_a = _create(client, pass_a_kwargs(row, prompt_a, model))
+        latency_a_s = round(time.monotonic() - started_a, 3)
         (run_raw_dir(run_id) / f"{cid}_a.json").write_text(
             json.dumps(resp_a.model_dump(), ensure_ascii=False), encoding="utf-8"
         )
 
         a = _parse_output(resp_a)
         resp_b = None
+        latency_b_s = None
         if a is not None and a.get("ai_native") in (0, 1):
+            started_b = time.monotonic()
             resp_b = _create(
                 client,
                 pass_b_kwargs(row, a["ai_native"], cohort, model, effort_b),
             )
+            latency_b_s = round(time.monotonic() - started_b, 3)
             (run_raw_dir(run_id) / f"{cid}_b.json").write_text(
                 json.dumps(resp_b.model_dump(), ensure_ascii=False), encoding="utf-8"
             )
@@ -405,7 +424,8 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
                            "row will retry on resume", cid, getattr(resp_a, "status", None))
 
         record = assemble_record(
-            cid, row["org_uuid"], model, effort_b, cohort, resp_a, resp_b
+            cid, row["org_uuid"], model, effort_b, cohort, resp_a, resp_b,
+            latency_a_s, latency_b_s,
         )
         with predictions_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
