@@ -52,10 +52,16 @@ def main() -> None:
         "--baseline", default=None,
         help="Baseline run_id for paired-bootstrap deltas",
     )
-    p_score.add_argument(
+    conf_src = p_score.add_mutually_exclusive_group()
+    conf_src.add_argument(
         "--confidence", default=None,
         help="Optional JSON file mapping org_uuid/custom_id -> binary "
              "confidence (enables calibration metrics)",
+    )
+    conf_src.add_argument(
+        "--confidence-from-raw", action="store_true",
+        help="Derive binary confidence from the run's raw/ logprob responses "
+             "(chosen-digit probability mass, pivot 6) and compute calibration",
     )
     p_parity = subs.add_parser(
         "batch-parity",
@@ -114,9 +120,20 @@ def main() -> None:
         return
 
     if args.command == "score":
-        from evals.scoring import score_cli
+        from evals.scoring import load_confidence_file, score_cli
 
-        score_cli(args.run_id, args.baseline, args.confidence)
+        confidence = None
+        if args.confidence:
+            confidence = load_confidence_file(args.confidence)
+        elif args.confidence_from_raw:
+            from evals.logprob_extract import LogprobExtractionError, run_confidence
+            from evals.paths import run_raw_dir
+
+            try:
+                confidence = run_confidence(run_raw_dir(args.run_id))
+            except LogprobExtractionError as exc:
+                sys.exit(f"--confidence-from-raw failed: {exc}")
+        score_cli(args.run_id, args.baseline, confidence)
         return
     if args.command == "batch-parity":
         from evals import config as cfg
