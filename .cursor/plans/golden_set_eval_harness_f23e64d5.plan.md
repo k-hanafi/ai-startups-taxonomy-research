@@ -1,6 +1,6 @@
 ---
 name: Golden-set eval harness
-overview: Build a standalone 100-company golden-dataset evaluation harness (evals/, branch eval-harness) that benchmarks OpenAI models on cost + accuracy against Fable-drafted, human-verified gold labels, validates the logprob-confidence methodology end-to-end, and answers the six gate questions blocking the logprob pipeline plan.
+overview: Build a standalone 100-company golden-dataset evaluation harness (evals/, branch eval-harness) that benchmarks OpenAI models on cost + accuracy against Fable-drafted gold labels, validates the logprob-confidence methodology end-to-end, and answers the three locked eval questions (pivot 7 — calibration, model selection, implementation robustness) on the committed two-pass architecture.
 todos:
   - id: stage0-scaffolding
     content: Branch eval-harness; scaffold evals/ package (config.py, paths.py, CLI with sample/run/score/report); gitignore evals/runs/*/raw/
@@ -24,16 +24,16 @@ todos:
     content: "Stage 6: evals/logprob_extract.py Pass A binary logprob extraction, fixtures, 39 tests (gate Q2/Q3/Q5 evidenced) — MERGED #17"
     status: completed
   - id: stage7-parity-scorer
-    content: "Stage 7: Batch parity smoke (gate Q4, PASS) + evals/scoring.py scorer — MERGED #16. Calibration wire-up (score --confidence-from-raw, chosen-digit confidence per pivot 6) in its own follow-up PR"
+    content: "Stage 7: Batch parity smoke (gate Q4, PASS) + evals/scoring.py scorer — MERGED #16. Calibration wire-up (score --confidence-from-raw, chosen-digit confidence per pivot 6) — MERGED #18"
     status: completed
   - id: stage8-experiments
-    content: "Stage 8 (PR 8, paid): two-pass over the golden set vs banked single-pass baselines (nano none/medium/high in evals/runs/); repeats on finalists; go/no-go on the two-pass design"
+    content: "Stage 8 (PR 8, paid): model/config selection on the COMMITTED two-pass architecture (pivot 7) — sweep GPT-family models (nano, mini, one larger if affordable) x Pass B effort (medium vs high, per the 77%-vs-66% banked finding), measuring accuracy, calibration, cost, and latency; repeats on finalists. Needs a small pre-Stage-8 runner tweak to record per-row latency (not currently captured). Banked single-pass runs are reference points, not competitors"
     status: pending
   - id: stage9-dashboard
     content: "Stage 9 (PR 9): house-style static HTML dashboard: Pareto, per-axis metrics + CIs, confusion, calibration, disagreement browser"
     status: pending
   - id: stage10-wrapup
-    content: "Stage 10 (PR 10): evals/tests/, AGENTS.md updates, written gate report answering the gate questions + model recommendation"
+    content: "Stage 10 (PR 10): evals/tests/, AGENTS.md updates, written report answering the three eval questions (pivot 7: calibration, model selection, implementation robustness) + model recommendation"
     status: pending
 isProject: false
 ---
@@ -42,14 +42,14 @@ isProject: false
 
 ## STATUS (source of truth — update after every PR merge / pivot)
 
-Last updated: **2026-07-07** (calibration wire-up PR opened: scorer + logprob extractor connected per pivot 6). Long implementer chat retired; thin orchestrator + fresh workers own continuity from here.
+Last updated: **2026-07-08** (pivot 7 locked: eval scope fixed at three questions, two-pass architecture committed; PR #18 calibration wire-up merged). Long implementer chat retired; thin orchestrator + fresh workers own continuity from here.
 
 | Field | Value |
 |-------|--------|
-| **Last merged** | PR **#16** — Stage 7 Batch parity smoke (gate Q4 PASS) + scorer with banked baselines scored (merged by user 2026-07-07) |
-| **Open now** | Calibration wire-up PR on `eval-harness/calibration-wireup`: `score --confidence-from-raw` runs `logprob_extract.extract_run` and feeds chosen-digit confidence (pivot 6) into the scorer's external-mapping seam. Verified on the banked none_r1 run: calibration populated (ECE 0.077, n=100), the 4 minority-sampling rows all land below 0.5 confidence (0.12 / 0.21 / 0.28 / 0.33). |
-| **Working branch** | `eval-harness/calibration-wireup` (this PR). USER merges when merge-ready. |
-| **Next** | Stage 8 experiment design (paid two-pass runs vs the banked single-pass baselines). Open design question raised by the banked scores: subclass accuracy is 77% at effort=medium vs 66% at high (41% at none), so Stage 8 should include a Pass B medium-vs-high effort arm before locking Pass B at high. |
+| **Last merged** | PR **#18** — calibration wire-up: `score --confidence-from-raw` feeds chosen-digit confidence (pivot 6) into the scorer (merged by user 2026-07-08). Verified on the banked none_r1 run: calibration populated (ECE 0.077, n=100), the 4 minority-sampling rows all land below 0.5 confidence (0.12 / 0.21 / 0.28 / 0.33). |
+| **Open now** | Nothing. |
+| **Working branch** | None (main). Next worker cuts the Stage 8 branch. |
+| **Next** | Stage 8 model/config selection experiment on the committed two-pass architecture (pivot 7): sweep GPT-family models x Pass B effort (medium vs high, per the banked 77%-vs-66% subclass finding), measuring accuracy, calibration, cost, and latency. Paid, so the USER runs the CLI or delegates. Small pre-Stage-8 runner tweak needed first: record per-row latency (not currently captured in predictions.jsonl). |
 | **Gold labels** | Fable `draft_*` = provisional gold (pivot 4; human review waived, `gold_verdict` stays 0/100 by design). ONE full agent re-draft deferred to end of pipeline, after all design decisions lock (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
 
@@ -63,15 +63,16 @@ Last updated: **2026-07-07** (calibration wire-up PR opened: scorer + logprob ex
 | #14 | 4 two-pass prompts | `two-pass/stage-1-prompts` | Merged |
 | #15 | 5 two-pass implementation | `two-pass/stage-2-implementation` (deleted) | Merged 2026-07-07; both `cursor[bot]` resume-invariant threads resolved (fix `705af2c` is in the merge) — no follow-up code needed |
 | #17 | 6 logprob extraction | `eval-harness/stage-6-logprob-extract` (deleted) | Merged 2026-07-07 (`9caaa3f`), Bugbot clean. Gate evidence: Q2 tokenization pinned (decision-token index varies 34–44, structural location mandatory; byte reconstruction exact on 100/100 banked rows); Q3 `valid_mass` ≥ 0.999998 everywhere; Q5 fixtures composed from 6 decision tokens, zero company text. NOTE for Stage 7 calibration: 4/100 banked rows sampled the MINORITY token (verdict ≠ argmax, e.g. chosen 1 at p₁=0.28; `chose_minority` fixture pins one). **Locked (pivot 6):** sampled digit = prediction; logprob confidence describes certainty about that choice, never argmax substitution. |
-| #16 | 7 batch parity + scorer | `eval-harness/stage-7-parity-scorer` | Merged by user 2026-07-07. Gate Q4 PASS (batch honors top_logprobs/effort/temperature, identical logprob shape). Banked nano baselines scored + committed (binary 93/93, subclass 41 none / 66 high / 77 medium). Calibration seam left data-only; wired in the follow-up calibration PR. |
+| #16 | 7 batch parity + scorer | `eval-harness/stage-7-parity-scorer` | Merged by user 2026-07-07. Gate Q4 PASS (batch honors top_logprobs/effort/temperature, identical logprob shape). Banked nano baselines scored + committed (binary 93/93, subclass 41 none / 66 high / 77 medium). Calibration seam left data-only; wired in #18. |
+| #18 | 7 calibration wire-up | `eval-harness/calibration-wireup` (deleted) | Merged by user 2026-07-08. `score --confidence-from-raw` runs the Stage 6 extractor over `raw/` and feeds chosen-digit confidence (pivot 6) into the scorer's external-mapping seam (scoring.py still never imports logprob_extract; the CLI is the connector). Verified on banked none_r1: ECE 0.077 (n=100), all 4 minority-sampling rows below 0.5 confidence. |
 
 ### In progress
 
-- **Calibration wire-up** — worker on `eval-harness/calibration-wireup`: `score --confidence-from-raw` runs the Stage 6 extractor over `raw/` and feeds chosen-digit confidence (pivot 6) into the scorer's external-mapping seam (scoring.py still never imports logprob_extract; the CLI is the connector). Verified on banked none_r1. Stops at merge-ready; USER merges.
+- Nothing. Next up is Stage 8 (see Pending).
 
 ### Pending (in order)
 
-Calibration wire-up merge → PR 8 paid two-pass experiments (provisionally scored vs current drafts; design must decide the Pass B effort arm — the banked 77% medium vs 66% high subclass finding says medium-vs-high needs its own comparison before locking Pass B at high) → **final gold re-draft + offline re-score (pivot 5)** → PR 9 dashboard → PR 10 gate report + `AGENTS.md`.
+Small runner tweak to record per-row latency → PR 8 paid Stage 8 model/config selection experiment (pivot 7: sweep GPT-family models x Pass B medium-vs-high effort on the committed two-pass architecture, provisionally scored vs current drafts; banked single-pass runs are reference points only) → **final gold re-draft + offline re-score (pivot 5)** → PR 9 dashboard → PR 10 report answering the three eval questions + `AGENTS.md`.
 
 ### Pivots locked (do not rediscover in chat)
 
@@ -81,6 +82,12 @@ Calibration wire-up merge → PR 8 paid two-pass experiments (provisionally scor
 4. **2026-07-07 human gold review waived (user).** Fable `draft_*` labels are the gold reference ("provisional gold"). Rationale: human judgment drifts from the prompted taxonomy, so human verdicts would NOT be apples-to-apples with production. Constraint: gold must stay architecture-independent — drafts were made by Fable **as an agent applying the monolith taxonomy** (Stage 2, pre-two-pass), NOT via any pipeline. Never regenerate gold through the two-pass pipeline itself (circular: would bias the benchmark toward the architecture under test and invalidate the banked single-pass baselines).
 5. **2026-07-07 full gold re-draft deferred to end of pipeline (user).** Current Fable drafts stay the provisional reference through Stages 6–8. ONE full re-draft of all 100 rows — Fable as agent, applying the then-final taxonomy text (incl. pivot 3's 0B fix) to the same evidence text the evaluated models receive — happens only after the whole flow is built and every design decision is locked (post Stage 8 go/no-go), then every banked run is re-scored offline (`scoring.py` is re-runnable by design, so late re-scoring is cheap). Rationale: re-drafting is expensive; doing it before the design freezes risks paying twice after another pivot. Supersedes pivot 4's open zero-family-refresh question (folds into the final re-draft). Stage 8's go/no-go is read provisionally against current drafts and confirmed after the re-draft.
 6. **2026-07-07 sampled output is the prediction (user).** For scoring and calibration, the model's **sampled output** (the digit token it actually emitted) is always the prediction/verdict. Never substitute logprob argmax when they disagree. Logprob-derived confidence (`p_one`, margin, etc.) is metadata about how sure the model was about the digit it chose, not a separate "correct answer." Applies to Pass A binary and any future logprob-scored fields. Closes the open calibration-target question flagged in Stage 6 (4/100 banked rows chose the minority token).
+7. **2026-07-08 eval scope fixed at three questions; two-pass architecture is COMMITTED, not under test (user).** The two-API-call design is a commitment: logprob confidence requires a reasoning-free call and subclass accuracy requires reasoning, so one call can never give both. The former "go/no-go: does two-pass beat the single-pass baselines" framing is RETIRED. Banked single-pass runs remain as reference points, not as competitors that could kill the design. The eval suite answers EXACTLY three questions (maximum scope, user-locked):
+   - **Q1 Calibration:** how correlated is logprob confidence with actual correctness (reliability, ECE, selective prediction)?
+   - **Q2 Model selection:** which GPT-family model to use, compared on accuracy, confidence quality, cost, and latency (latency included as a learning objective for production practice, not a research need)?
+   - **Q3 Implementation robustness:** do logprob extraction and Batch API parity work as intended — will the classifier work in production?
+
+   Mapping from the old six gate questions: old Q2/Q3/Q5 (tokenization, valid_mass, fixtures) and old Q4 (batch parity) fold into new Q3 and are already evidenced (PR #17, #16). Old Q6 (token sizing/cost model) folds into new Q2. Old Q1 was answered during the pivot to two-pass. The Stage 10 report is restructured around the three questions. Consequence for Stage 8: it is now a MODEL/CONFIG SELECTION experiment on the committed two-pass architecture — sweep GPT-family models (e.g. nano, mini, and one larger if affordable) and the Pass B effort arm (medium vs high, per the 77%-vs-66% banked finding), measuring accuracy, calibration, cost, and latency. NOT a design validation against single-pass. Per-row latency is not currently captured in run records, so a small pre-Stage-8 runner tweak is needed.
 
 ### Agent workflow (how we run PRs 6–10)
 
@@ -160,7 +167,7 @@ banked single-pass baselines instead of the original 4-model x effort matrix.
 
 ## Purpose
 
-This is the GATE from [.cursor/plans/logprob_confidence_classifier_17f55781.plan.md](.cursor/plans/logprob_confidence_classifier_17f55781.plan.md): before any production pipeline changes, build a 100-company golden-dataset eval harness that (a) answers the six open gate questions, (b) benchmarks gpt-5.4-nano / gpt-5.4-mini / gpt-5.4 / gpt-5.5 on accuracy vs cost, and (c) validates whether `logprob_confidence` actually predicts correctness (calibration).
+This is the GATE from [.cursor/plans/logprob_confidence_classifier_17f55781.plan.md](.cursor/plans/logprob_confidence_classifier_17f55781.plan.md): before any production pipeline changes, build a 100-company golden-dataset eval harness that (a) answers the six open gate questions, (b) benchmarks gpt-5.4-nano / gpt-5.4-mini / gpt-5.4 / gpt-5.5 on accuracy vs cost, and (c) validates whether `logprob_confidence` actually predicts correctness (calibration). *(2026-07-08, pivot 7: the six gate questions collapsed into three eval questions — calibration, model selection, implementation robustness — and the two-pass architecture is committed rather than under test. This paragraph kept for history; the pivot list above is authoritative.)*
 
 ## Locked design decisions (user-confirmed 2026-07-04)
 
@@ -210,11 +217,11 @@ flowchart TD
 
 **Stage 7 — Batch parity + scorer.** (a) 10 Pass-A rows via Batch API with identical params; assert logprob shape parity and parameter honoring vs sync (gate Q4). (b) `evals/scoring.py` (offline): all v1 metrics; calibration applies to Pass A binary confidence (pivot 6: sampled digit = verdict, logprob fields = confidence metadata only); reasoning-token usage sizes `MAX_OUTPUT_TOKENS` and the cost model (gate Q6). Writes `scored.json`.
 
-**Stage 8 — Experiments** (paid, outside sandbox, `keys/openai.env`). Two-pass over the golden set vs the banked single-pass baselines (nano none/medium/high already in `evals/runs/`); repeats on finalists for determinism variance; go/no-go on the two-pass design per the validation gate in the two-pass plan.
+**Stage 8 — Model/config selection experiment** (paid, outside sandbox, `keys/openai.env`). On the COMMITTED two-pass architecture (pivot 7): sweep GPT-family models (e.g. nano, mini, and one larger if affordable) crossed with the Pass B effort arm (medium vs high, per the 77%-vs-66% banked subclass finding), measuring accuracy, calibration, cost, and latency; repeats on finalists for determinism variance. NOT a design validation against single-pass — the banked nano none/medium/high runs in `evals/runs/` serve as reference points only. Requires a small pre-Stage-8 runner tweak to record per-row latency (not currently captured in `predictions.jsonl`).
 
 **Stage 9 — Dashboard.** House-style static HTML: cost-vs-accuracy Pareto, per-axis metrics with CIs, confusion matrices, calibration plots, disagreement browser (evidence + gold + each model's answer/rationale).
 
-**Stage 10 — Wrap-up.** `evals/tests/` completeness, AGENTS.md updates, and a written gate report answering the gate questions + the model recommendation — the artifact that unblocks the production promotion.
+**Stage 10 — Wrap-up.** `evals/tests/` completeness, AGENTS.md updates, and a written report answering the three eval questions (pivot 7: calibration, model selection, implementation robustness) + the model recommendation — the artifact that unblocks the production promotion.
 
 ## Execution workflow: sequential stage PRs to main + Bugbot (locked 2026-07-04)
 
@@ -242,4 +249,10 @@ Stage-to-PR mapping (grouped by risk; STATUS block above is authoritative):
 
 ## Success criteria
 
-All six gate questions have evidenced answers; every benchmarked model has scored runs with CIs and cost; calibration verdict on `logprob_confidence` is measured; 100 gold rows carry Fable labels from the final end-of-pipeline re-draft (pivots 4–5; human sign-off waived 2026-07-07).
+The three eval questions (pivot 7) have evidenced answers:
+
+1. **Calibration** — measured verdict on how correlated logprob confidence is with actual correctness (reliability diagram, ECE, selective-prediction curve).
+2. **Model selection** — a GPT-family model is chosen, with scored runs comparing accuracy, confidence quality, cost, and latency (with CIs) across the swept models and Pass B effort arms.
+3. **Implementation robustness** — logprob extraction and Batch API parity are shown to work as intended (already evidenced by PR #17 and #16), so the classifier will work in production.
+
+Plus: 100 gold rows carry Fable labels from the final end-of-pipeline re-draft (pivots 4–5; human sign-off waived 2026-07-07), and every banked run is re-scored offline against them.
