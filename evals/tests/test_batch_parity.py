@@ -235,3 +235,58 @@ def test_report_fail_verdict_on_one_bad_row():
     assert report["verdict"] == "FAIL"
     assert report["rows"]["startup-1"]["ok"] is True
     assert report["rows"]["startup-2"]["ok"] is False
+
+
+def test_download_batch_bodies_returns_error_when_no_output_file():
+    class Batch:
+        id = "batch_123"
+        status = "failed"
+        output_file_id = None
+        error_file_id = "file_err"
+
+    bodies, error = batch_parity._download_batch_bodies(None, Batch())  # type: ignore[arg-type]
+    assert bodies == {}
+    assert error is not None
+    assert "no output file" in error
+
+
+def test_write_parity_report_persists_fail_on_batch_error(tmp_path, monkeypatch):
+    requests = {"startup-1": _request_body()}
+    sync = {"startup-1": _response_body()}
+    run_id = "2026-07-07_parity_test"
+
+    def fake_run_dir(_run_id: str):
+        path = tmp_path / _run_id
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    monkeypatch.setattr(batch_parity, "parity_report_path",
+                        lambda _run_id: fake_run_dir(_run_id) / "parity_report.json")
+
+    report = batch_parity._write_parity_report(
+        run_id, requests, sync, {}, "gpt-5.4-nano",
+        batch_error="Batch timed out",
+    )
+    assert report["verdict"] == "FAIL"
+    assert report["batch_error"] == "Batch timed out"
+    saved = json.loads((tmp_path / run_id / "parity_report.json").read_text())
+    assert saved["verdict"] == "FAIL"
+    assert saved["batch_error"] == "Batch timed out"
+
+
+def test_batch_error_forces_fail_even_when_rows_pass(tmp_path, monkeypatch):
+    # The invariant behind the CLI's nonzero exit: a batch_error can never
+    # ride along with a PASS verdict, whatever the per-row checks say.
+    requests = {"startup-1": _request_body()}
+    sync = {"startup-1": _response_body()}
+    batch = copy.deepcopy(sync)
+
+    monkeypatch.setattr(batch_parity, "parity_report_path",
+                        lambda _run_id: tmp_path / "parity_report.json")
+
+    report = batch_parity._write_parity_report(
+        "run", requests, sync, batch, "gpt-5.4-nano",
+        batch_error="Batch expired after download started",
+    )
+    assert all(row["ok"] for row in report["rows"].values())
+    assert report["verdict"] == "FAIL"
