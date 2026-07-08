@@ -85,6 +85,7 @@ PR 6 logprob extract → PR 7 batch parity + scorer → PR 8 paid two-pass exper
 
 - **Source of truth:** this STATUS + plan frontmatter todos + git/PR state. Never chat memory.
 - **USER MERGES, ALWAYS (user rule, 2026-07-07).** Workers and orchestrators stop at merge-ready (tests green + Bugbot clean) and report. No agent squash-merges, pushes to main via PR merge, or closes PRs on its own. (Plan STATUS commits to main by the orchestrator remain allowed — that is the continuity mechanism.)
+- **No baby commits (user rule 2026-07-07):** orchestrator batches STATUS/plan edits into one consolidated commit per milestone, or rides them on the active PR branch. No standalone md-only micro-commits to main.
 - **Thin orchestrator:** orientation, kickoff prompts, STATUS/todo updates, course corrections written *here*. No full-stage coding.
 - **Fresh worker per PR:** reads this file → implements only that PR's scope → opens/finishes PR → updates this STATUS → stops.
 - **Subagents** for Bugbot / recon; parent keeps conclusions only.
