@@ -24,7 +24,7 @@ todos:
     content: "Stage 6: evals/logprob_extract.py Pass A binary logprob extraction, fixtures, 39 tests (gate Q2/Q3/Q5 evidenced) — MERGED #17"
     status: completed
   - id: stage7-parity-scorer
-    content: "Stage 7 (PR 7): 10-row Batch API parity smoke on Pass A requests (gate Q4) + evals/scoring.py: accuracy, macro-F1, confusion, bootstrap CIs, cost, calibration on Pass A binary confidence, reasoning-token sizing (gate Q6)"
+    content: "Stage 7 (PR 7): 10-row Batch API parity smoke on Pass A requests (gate Q4) + evals/scoring.py: accuracy, macro-F1, confusion, bootstrap CIs, cost, calibration on Pass A binary confidence (pivot 6: sampled digit = verdict; logprobs = confidence metadata only), reasoning-token sizing (gate Q6)"
     status: pending
   - id: stage8-experiments
     content: "Stage 8 (PR 8, paid): two-pass over the golden set vs banked single-pass baselines (nano none/medium/high in evals/runs/); repeats on finalists; go/no-go on the two-pass design"
@@ -42,14 +42,14 @@ isProject: false
 
 ## STATUS (source of truth — update after every PR merge / pivot)
 
-Last updated: **2026-07-07** (pivot 5 recorded: full gold re-draft deferred to end of pipeline). Long implementer chat retired; thin orchestrator + fresh workers own continuity from here.
+Last updated: **2026-07-07** (pivot 6 recorded: sampled output = prediction; logprobs = confidence metadata only). Long implementer chat retired; thin orchestrator + fresh workers own continuity from here.
 
 | Field | Value |
 |-------|--------|
 | **Last merged** | PR **#17** — Stage 6 logprob extraction (merged 2026-07-07, squash `9caaa3f`, Bugbot clean) |
 | **Open now** | none |
 | **Working branch** | none — `two-pass/stage-2-implementation` deleted (local + origin) after merge; next worker cuts fresh from main |
-| **Next** | Stage 7 worker still running (launched 2026-07-07 in parallel with the now-merged Stage 6). When merge-ready: rebase over main (Stage 6's plan edits), then USER merges. After that: small calibration wire-up (scorer ⇐ `logprob_extract` output, incl. the minority-token-sample decision), then Stage 8. |
+| **Next** | Stage 7 PR #16 open (parity PASS, scorer + banked baselines scored). When merge-ready: USER merges. Scorer calibration uses sampled digit as verdict (pivot 6); wire `logprob_extract` confidence metadata (p_one, margin) without argmax substitution. Then Stage 8. |
 | **Gold labels** | Fable `draft_*` = provisional gold (pivot 4; human review waived, `gold_verdict` stays 0/100 by design). ONE full agent re-draft deferred to end of pipeline, after all design decisions lock (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
 
@@ -62,7 +62,7 @@ Last updated: **2026-07-07** (pivot 5 recorded: full gold re-draft deferred to e
 | #13 | 3 sync runner + run records | `eval-harness/stage-3-runner` | Merged; banked baseline runs in `evals/runs/` (nano none/medium/high) |
 | #14 | 4 two-pass prompts | `two-pass/stage-1-prompts` | Merged |
 | #15 | 5 two-pass implementation | `two-pass/stage-2-implementation` (deleted) | Merged 2026-07-07; both `cursor[bot]` resume-invariant threads resolved (fix `705af2c` is in the merge) — no follow-up code needed |
-| #17 | 6 logprob extraction | `eval-harness/stage-6-logprob-extract` (deleted) | Merged 2026-07-07 (`9caaa3f`), Bugbot clean. Gate evidence: Q2 tokenization pinned (decision-token index varies 34–44, structural location mandatory; byte reconstruction exact on 100/100 banked rows); Q3 `valid_mass` ≥ 0.999998 everywhere; Q5 fixtures composed from 6 decision tokens, zero company text. NOTE for Stage 7 calibration: 4/100 banked rows sampled the MINORITY token (verdict ≠ argmax, e.g. chosen 1 at p₁=0.28; `chose_minority` fixture pins one) — scorer must pick sampled-verdict vs renormalized-probability as the calibration target. |
+| #17 | 6 logprob extraction | `eval-harness/stage-6-logprob-extract` (deleted) | Merged 2026-07-07 (`9caaa3f`), Bugbot clean. Gate evidence: Q2 tokenization pinned (decision-token index varies 34–44, structural location mandatory; byte reconstruction exact on 100/100 banked rows); Q3 `valid_mass` ≥ 0.999998 everywhere; Q5 fixtures composed from 6 decision tokens, zero company text. NOTE for Stage 7 calibration: 4/100 banked rows sampled the MINORITY token (verdict ≠ argmax, e.g. chosen 1 at p₁=0.28; `chose_minority` fixture pins one). **Locked (pivot 6):** sampled digit = prediction; logprob confidence describes certainty about that choice, never argmax substitution. |
 
 ### In progress
 
@@ -79,6 +79,7 @@ PR 6 logprob extract → PR 7 batch parity + scorer → PR 8 paid two-pass exper
 3. **Zero-family 0B semantics (user, 2026-07-06):** `0B` = traditional software that ships a meaningful AI feature augmenting the product (Notion-style transition signal). Not "AI-core that survived AI removal." AI-core misrouted via Pass A=0 should surface as `0A` + `boundary_disagreement`, not hide in `0B`.
 4. **2026-07-07 human gold review waived (user).** Fable `draft_*` labels are the gold reference ("provisional gold"). Rationale: human judgment drifts from the prompted taxonomy, so human verdicts would NOT be apples-to-apples with production. Constraint: gold must stay architecture-independent — drafts were made by Fable **as an agent applying the monolith taxonomy** (Stage 2, pre-two-pass), NOT via any pipeline. Never regenerate gold through the two-pass pipeline itself (circular: would bias the benchmark toward the architecture under test and invalidate the banked single-pass baselines).
 5. **2026-07-07 full gold re-draft deferred to end of pipeline (user).** Current Fable drafts stay the provisional reference through Stages 6–8. ONE full re-draft of all 100 rows — Fable as agent, applying the then-final taxonomy text (incl. pivot 3's 0B fix) to the same evidence text the evaluated models receive — happens only after the whole flow is built and every design decision is locked (post Stage 8 go/no-go), then every banked run is re-scored offline (`scoring.py` is re-runnable by design, so late re-scoring is cheap). Rationale: re-drafting is expensive; doing it before the design freezes risks paying twice after another pivot. Supersedes pivot 4's open zero-family-refresh question (folds into the final re-draft). Stage 8's go/no-go is read provisionally against current drafts and confirmed after the re-draft.
+6. **2026-07-07 sampled output is the prediction (user).** For scoring and calibration, the model's **sampled output** (the digit token it actually emitted) is always the prediction/verdict. Never substitute logprob argmax when they disagree. Logprob-derived confidence (`p_one`, margin, etc.) is metadata about how sure the model was about the digit it chose, not a separate "correct answer." Applies to Pass A binary and any future logprob-scored fields. Closes the open calibration-target question flagged in Stage 6 (4/100 banked rows chose the minority token).
 
 ### Agent workflow (how we run PRs 6–10)
 
@@ -205,7 +206,7 @@ flowchart TD
 
 **Stage 6 — Logprob extraction** (`evals/logprob_extract.py`). Targets Pass A's binary-only output: byte-reconstruction with char spans, decision-token location, renormalization, top1/margin/entropy. Pins real tokenization (gate Q2), captures anonymized fixtures (gate Q5), records `valid_mass` (gate Q3). Prototype later promoted to `src/logprobs.py`.
 
-**Stage 7 — Batch parity + scorer.** (a) 10 Pass-A rows via Batch API with identical params; assert logprob shape parity and parameter honoring vs sync (gate Q4). (b) `evals/scoring.py` (offline): all v1 metrics; calibration applies to Pass A binary confidence; reasoning-token usage sizes `MAX_OUTPUT_TOKENS` and the cost model (gate Q6). Writes `scored.json`.
+**Stage 7 — Batch parity + scorer.** (a) 10 Pass-A rows via Batch API with identical params; assert logprob shape parity and parameter honoring vs sync (gate Q4). (b) `evals/scoring.py` (offline): all v1 metrics; calibration applies to Pass A binary confidence (pivot 6: sampled digit = verdict, logprob fields = confidence metadata only); reasoning-token usage sizes `MAX_OUTPUT_TOKENS` and the cost model (gate Q6). Writes `scored.json`.
 
 **Stage 8 — Experiments** (paid, outside sandbox, `keys/openai.env`). Two-pass over the golden set vs the banked single-pass baselines (nano none/medium/high already in `evals/runs/`); repeats on finalists for determinism variance; go/no-go on the two-pass design per the validation gate in the two-pass plan.
 
