@@ -42,14 +42,14 @@ isProject: false
 
 ## STATUS (source of truth — update after every PR merge / pivot)
 
-Last updated: **2026-07-08** (pivot 7 locked: eval scope fixed at three questions, two-pass architecture committed; PR #18 calibration wire-up merged). Long implementer chat retired; thin orchestrator + fresh workers own continuity from here.
+Last updated: **2026-07-08** (pre-Stage-8 latency capture PR open: per-row wall-clock latency in run records + scorer summary, the measured axis pivot 7 added for Stage 8). Long implementer chat retired; thin orchestrator + fresh workers own continuity from here.
 
 | Field | Value |
 |-------|--------|
 | **Last merged** | PR **#18** — calibration wire-up: `score --confidence-from-raw` feeds chosen-digit confidence (pivot 6) into the scorer (merged by user 2026-07-08). Verified on the banked none_r1 run: calibration populated (ECE 0.077, n=100), the 4 minority-sampling rows all land below 0.5 confidence (0.12 / 0.21 / 0.28 / 0.33). |
-| **Open now** | Nothing. |
-| **Working branch** | None (main). Next worker cuts the Stage 8 branch. |
-| **Next** | Stage 8 model/config selection experiment on the committed two-pass architecture (pivot 7): sweep GPT-family models x Pass B effort (medium vs high, per the banked 77%-vs-66% subclass finding), measuring accuracy, calibration, cost, and latency. Paid, so the USER runs the CLI or delegates. Small pre-Stage-8 runner tweak needed first: record per-row latency (not currently captured in predictions.jsonl). |
+| **Open now** | Pre-Stage-8 latency capture PR (branch `eval-harness/latency-capture`): `time.monotonic` around each API call, `latency_s` on single-pass records, `a_latency_s`/`b_latency_s` + flat `latency_s` total on two-pass records, and a mean/p50/p95/max `latency` block in scored.json (null for legacy runs — the three banked baselines re-verified scoring cleanly). |
+| **Working branch** | `eval-harness/latency-capture` |
+| **Next** | After the latency PR merges: Stage 8 model/config selection experiment on the committed two-pass architecture (pivot 7): sweep GPT-family models x Pass B effort (medium vs high, per the banked 77%-vs-66% subclass finding), measuring accuracy, calibration, cost, and latency. Paid, so the USER runs the CLI or delegates. |
 | **Gold labels** | Fable `draft_*` = provisional gold (pivot 4; human review waived, `gold_verdict` stays 0/100 by design). ONE full agent re-draft deferred to end of pipeline, after all design decisions lock (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
 
@@ -72,7 +72,7 @@ Last updated: **2026-07-08** (pivot 7 locked: eval scope fixed at three question
 
 ### Pending (in order)
 
-Small runner tweak to record per-row latency → PR 8 paid Stage 8 model/config selection experiment (pivot 7: sweep GPT-family models x Pass B medium-vs-high effort on the committed two-pass architecture, provisionally scored vs current drafts; banked single-pass runs are reference points only) → **final gold re-draft + offline re-score (pivot 5)** → PR 9 dashboard → PR 10 report answering the three eval questions + `AGENTS.md`.
+Latency-capture PR (open, see STATUS) → PR 8 paid Stage 8 model/config selection experiment (pivot 7: sweep GPT-family models x Pass B medium-vs-high effort on the committed two-pass architecture, provisionally scored vs current drafts; banked single-pass runs are reference points only) → **final gold re-draft + offline re-score (pivot 5)** → PR 9 dashboard → PR 10 report answering the three eval questions + `AGENTS.md`.
 
 ### Pivots locked (do not rediscover in chat)
 

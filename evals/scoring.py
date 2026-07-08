@@ -8,8 +8,10 @@ re-scoring every banked run later costs one command.
 
 Metrics: per-axis accuracy (ai_native / subclass / rad), macro-F1, confusion
 matrices, bootstrap CIs on accuracy, paired-bootstrap CIs on deltas vs a
-baseline run, cost per row from actual token usage, and an output/reasoning
-token summary that sizes MAX_OUTPUT_TOKENS and the cost model (gate Q6).
+baseline run, cost per row from actual token usage, an output/reasoning
+token summary that sizes MAX_OUTPUT_TOKENS and the cost model (gate Q6),
+and wall-clock latency distributions when the run recorded them (pivot 7;
+older banked runs score unchanged with latency: null).
 
 Calibration (reliability bins + selective-prediction curve) is computed ONLY
 when a per-row binary confidence is supplied, either as a binary_confidence
@@ -279,6 +281,42 @@ def cost_and_tokens(records: list[dict[str, Any]], model: str) -> dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
+# Latency (pivot 7: a measured axis for Stage 8 model selection)
+# ---------------------------------------------------------------------------
+
+def _latency_stats(values: list[float]) -> dict[str, float]:
+    arr = np.asarray(values, dtype=float)
+    return {
+        "n": len(values),
+        "mean": float(arr.mean()),
+        "p50": float(np.percentile(arr, 50)),
+        "p95": float(np.percentile(arr, 95)),
+        "max": float(arr.max()),
+    }
+
+
+def latency_summary(records: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """Wall-clock latency distributions, or None for runs that predate capture.
+
+    Runs banked before the latency fields existed score exactly as before
+    (scored.json just carries latency: null). Two-pass runs additionally get
+    per-pass distributions, which is what the Stage 8 Pass B effort arm needs.
+    """
+    def collect(field: str) -> list[float]:
+        return [float(r[field]) for r in records if r.get(field) is not None]
+
+    total = collect("latency_s")
+    if not total:
+        return None
+    out = {"latency_s": _latency_stats(total)}
+    for field in ("a_latency_s", "b_latency_s"):
+        values = collect(field)
+        if values:
+            out[field] = _latency_stats(values)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Calibration (optional input seam for the Stage 6 extractor)
 # ---------------------------------------------------------------------------
 
@@ -476,6 +514,7 @@ def score_run(
         },
         "axes": axes_report,
         "cost": cost_and_tokens(scored_records, model),
+        "latency": latency_summary(scored_records),
         "calibration": calibration_report(
             resolve_confidence(scored_records, confidence), gold, predictions
         ),
@@ -554,6 +593,12 @@ def score_cli(
     if cost["mean_usd_per_row"] is not None:
         logger.info("cost: $%.4f/row ($%.2f total, %d rows)",
                     cost["mean_usd_per_row"], cost["total_usd"], cost["n_rows"])
+    latency = report["latency"]
+    if latency is not None:
+        stats = latency["latency_s"]
+        logger.info("latency: mean %.2fs, p50 %.2fs, p95 %.2fs, max %.2fs (%d rows)",
+                    stats["mean"], stats["p50"], stats["p95"], stats["max"],
+                    stats["n"])
     logger.info("calibration: %s",
                 "computed" if report["calibration"] else
                 "skipped (no binary confidence input)")
