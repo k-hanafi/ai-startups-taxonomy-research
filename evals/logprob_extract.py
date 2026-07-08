@@ -304,3 +304,35 @@ def extract_run(raw_dir: Path) -> list[dict[str, Any]]:
         custom_id = path.stem.removesuffix("_a")
         rows.append({"custom_id": custom_id, **extract_raw_file(path).as_dict()})
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Scorer connector (pivot 6: confidence in the SAMPLED digit)
+# ---------------------------------------------------------------------------
+
+def chosen_confidence(row: dict[str, Any]) -> float:
+    """Renormalized probability mass on the digit the model actually sampled.
+
+    Pivot 6 (locked 2026-07-07): the sampled output is always the prediction,
+    so calibration must measure how sure the model was about the digit it
+    CHOSE, never the argmax. p_one is P(ai_native = 1), so a row that sampled
+    the minority token (e.g. chose 1 at p_one = 0.28) gets confidence < 0.5.
+    """
+    return row["p_one"] if row["ai_native"] == 1 else 1.0 - row["p_one"]
+
+
+def run_confidence(raw_dir: Path) -> dict[str, float]:
+    """custom_id -> chosen-digit confidence for every raw response in a run.
+
+    The exact shape the scorer's external-confidence seam accepts
+    (resolve_confidence matches custom_id keys). Raises when the run has no
+    raw responses at all, so an explicit --confidence-from-raw request never
+    silently degrades into a calibration-free score.
+    """
+    rows = extract_run(raw_dir)
+    if not rows:
+        raise LogprobExtractionError(
+            f"no raw response files under {raw_dir}; this run cannot supply "
+            "logprob confidence (raw/ is git-ignored and machine-local)"
+        )
+    return {row["custom_id"]: chosen_confidence(row) for row in rows}

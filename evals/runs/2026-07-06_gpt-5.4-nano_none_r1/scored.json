@@ -1,6 +1,6 @@
 {
   "run_id": "2026-07-06_gpt-5.4-nano_none_r1",
-  "scored_at_utc": "2026-07-07T23:41:15.755560+00:00",
+  "scored_at_utc": "2026-07-08T05:52:32.558754+00:00",
   "gold_source": "Fable draft_* columns (provisional gold, pivots 4+5)",
   "n_gold": 100,
   "n_prediction_records": 100,
@@ -172,7 +172,158 @@
     },
     "max_output_tokens_note": "Size MAX_OUTPUT_TOKENS from the output_tokens p95/max above (reasoning tokens count against the cap)."
   },
-  "calibration": null,
+  "calibration": {
+    "axis": "ai_native",
+    "n": 100,
+    "n_eligible": 100,
+    "reliability": {
+      "bins": [
+        {
+          "range": [
+            0.0,
+            0.1
+          ],
+          "count": 0,
+          "mean_confidence": null,
+          "accuracy": null
+        },
+        {
+          "range": [
+            0.1,
+            0.2
+          ],
+          "count": 1,
+          "mean_confidence": 0.11920292202211757,
+          "accuracy": 0.0
+        },
+        {
+          "range": [
+            0.2,
+            0.30000000000000004
+          ],
+          "count": 2,
+          "mean_confidence": 0.2467372058931246,
+          "accuracy": 1.0
+        },
+        {
+          "range": [
+            0.30000000000000004,
+            0.4
+          ],
+          "count": 1,
+          "mean_confidence": 0.334589441253186,
+          "accuracy": 1.0
+        },
+        {
+          "range": [
+            0.4,
+            0.5
+          ],
+          "count": 0,
+          "mean_confidence": null,
+          "accuracy": null
+        },
+        {
+          "range": [
+            0.5,
+            0.6000000000000001
+          ],
+          "count": 3,
+          "mean_confidence": 0.5360955052256952,
+          "accuracy": 0.6666666666666666
+        },
+        {
+          "range": [
+            0.6000000000000001,
+            0.7000000000000001
+          ],
+          "count": 1,
+          "mean_confidence": 0.665410558746814,
+          "accuracy": 1.0
+        },
+        {
+          "range": [
+            0.7000000000000001,
+            0.8
+          ],
+          "count": 1,
+          "mean_confidence": 0.7431680086124812,
+          "accuracy": 1.0
+        },
+        {
+          "range": [
+            0.8,
+            0.9
+          ],
+          "count": 1,
+          "mean_confidence": 0.8519528019683105,
+          "accuracy": 1.0
+        },
+        {
+          "range": [
+            0.9,
+            1.0
+          ],
+          "count": 90,
+          "mean_confidence": 0.9921352522837369,
+          "accuracy": 0.9444444444444444
+        }
+      ],
+      "ece": 0.07714493889514315
+    },
+    "selective_prediction": [
+      {
+        "coverage": 0.1,
+        "n": 10,
+        "accuracy": 1.0
+      },
+      {
+        "coverage": 0.2,
+        "n": 20,
+        "accuracy": 1.0
+      },
+      {
+        "coverage": 0.3,
+        "n": 30,
+        "accuracy": 1.0
+      },
+      {
+        "coverage": 0.4,
+        "n": 40,
+        "accuracy": 1.0
+      },
+      {
+        "coverage": 0.5,
+        "n": 50,
+        "accuracy": 1.0
+      },
+      {
+        "coverage": 0.6,
+        "n": 60,
+        "accuracy": 0.9833333333333333
+      },
+      {
+        "coverage": 0.7,
+        "n": 70,
+        "accuracy": 0.9714285714285714
+      },
+      {
+        "coverage": 0.8,
+        "n": 80,
+        "accuracy": 0.9375
+      },
+      {
+        "coverage": 0.9,
+        "n": 90,
+        "accuracy": 0.9444444444444444
+      },
+      {
+        "coverage": 1.0,
+        "n": 100,
+        "accuracy": 0.93
+      }
+    ]
+  },
   "vs_baseline": {
     "baseline_run_id": "2026-07-06_gpt-5.4-nano_high_r1",
     "n_paired": 100,
