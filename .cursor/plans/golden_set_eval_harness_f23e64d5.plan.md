@@ -49,7 +49,7 @@ Last updated: **2026-07-07** (pivot 5 recorded: full gold re-draft deferred to e
 | **Last merged** | PR **#17** — Stage 6 logprob extraction (merged 2026-07-07, squash `9caaa3f`, Bugbot clean) |
 | **Open now** | none |
 | **Working branch** | none — `two-pass/stage-2-implementation` deleted (local + origin) after merge; next worker cuts fresh from main |
-| **Next** | Stage 7 worker still running (launched 2026-07-07 in parallel with the now-merged Stage 6). When merge-ready: rebase over main (Stage 6's plan edits), then merge. After that: small calibration wire-up (scorer ⇐ `logprob_extract` output, incl. the minority-token-sample decision), then Stage 8. |
+| **Next** | Stage 7 worker still running (launched 2026-07-07 in parallel with the now-merged Stage 6). When merge-ready: rebase over main (Stage 6's plan edits), then USER merges. After that: small calibration wire-up (scorer ⇐ `logprob_extract` output, incl. the minority-token-sample decision), then Stage 8. |
 | **Gold labels** | Fable `draft_*` = provisional gold (pivot 4; human review waived, `gold_verdict` stays 0/100 by design). ONE full agent re-draft deferred to end of pipeline, after all design decisions lock (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
 
@@ -83,6 +83,7 @@ PR 6 logprob extract → PR 7 batch parity + scorer → PR 8 paid two-pass exper
 ### Agent workflow (how we run PRs 6–10)
 
 - **Source of truth:** this STATUS + plan frontmatter todos + git/PR state. Never chat memory.
+- **USER MERGES, ALWAYS (user rule, 2026-07-07).** Workers and orchestrators stop at merge-ready (tests green + Bugbot clean) and report. No agent squash-merges, pushes to main via PR merge, or closes PRs on its own. (Plan STATUS commits to main by the orchestrator remain allowed — that is the continuity mechanism.)
 - **Thin orchestrator:** orientation, kickoff prompts, STATUS/todo updates, course corrections written *here*. No full-stage coding.
 - **Fresh worker per PR:** reads this file → implements only that PR's scope → opens/finishes PR → updates this STATUS → stops.
 - **Subagents** for Bugbot / recon; parent keeps conclusions only.
@@ -222,7 +223,7 @@ Per-stage loop:
 3. Local Bugbot subagent pass on the branch diff BEFORE pushing (fast inner net).
 4. Push, open PR (titles/bodies per the portfolio-git-messages skill).
 5. GitHub Bugbot review on the PR (auto on open/push, or comment `bugbot run`); fix findings, re-review until clean.
-6. Squash-merge, delete branch, pull main, cut next stage branch (sequencing enforced by construction).
+6. Agent stops at merge-ready; the USER squash-merges (rule 2026-07-07 — agents never merge). After the user merges: delete branch, pull main, cut next stage branch.
 
 Stage-to-PR mapping (grouped by risk; STATUS block above is authoritative):
 - PR 1 — Stage 0 + 1: scaffolding, config, CLI, sampler (+ tests) — MERGED #11
