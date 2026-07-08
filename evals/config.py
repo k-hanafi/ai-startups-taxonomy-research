@@ -104,6 +104,23 @@ BOOTSTRAP_RESAMPLES: int = 10_000
 BOOTSTRAP_SEED: int = 20260705
 CONFIDENCE_LEVEL: float = 0.95
 
+# Calibration (computed only when a per-row binary confidence is available).
+CALIBRATION_BINS: int = 10
+# Coverage fractions for the selective-prediction curve: accuracy when the
+# model only answers on its top-X% most confident rows.
+SELECTIVE_COVERAGE_GRID: list[float] = [round(0.1 * k, 1) for k in range(1, 11)]
+
+# ---------------------------------------------------------------------------
+# Batch API parity smoke (gate Q4)
+# ---------------------------------------------------------------------------
+
+PARITY_ROWS: int = 10
+PARITY_POLL_SECONDS: int = 30
+# 10 nano rows normally finish in minutes; bail out (with the batch id saved
+# for resume) rather than blocking a terminal for the full 24h window.
+PARITY_MAX_WAIT_SECONDS: int = 7_200
+PARITY_COMPLETION_WINDOW: str = "24h"
+
 # ---------------------------------------------------------------------------
 # Pricing ($ per 1M tokens, sync API) — verified 2026-07-05 against the
 # OpenAI pricing page. src/tokens.py MODEL_PRICING is stale; the harness
