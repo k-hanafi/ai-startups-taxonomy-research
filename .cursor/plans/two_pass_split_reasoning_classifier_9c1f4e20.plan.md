@@ -15,10 +15,10 @@ todos:
     content: "STAGE 2: two-pass runner in evals/ - Pass A at effort=none+logprobs, cohort in code, Pass B at effort=high with the family schema chosen from Pass A; assemble the full record; offline tests"
     status: pending
   - id: s3-eval
-    content: "STAGE 3 (paid, after both PRs merge): run two-pass over the golden set; measure binary calibration (Pass A logprobs) + conditioned subclass accuracy vs the banked single-pass baselines (none 41% / high 66% vs Fable)"
+    content: "STAGE 3 (paid, after both PRs merge): run two-pass over the golden set; measure binary calibration (Pass A logprobs) + conditioned subclass accuracy, with the banked single-pass runs as reference points (none 41% / high 66% vs Fable). Per pivot 7 this is a model/config selection experiment, not a design validation"
     status: pending
   - id: s3-decide
-    content: "STAGE 3: go/no-go vs single-pass high baseline; if go, write the production promotion plan and update the logprob plan's implementation half"
+    content: "STAGE 3: pick the model/config (pivot 7 superseded the go/no-go vs single-pass), write the production promotion plan, and update the logprob plan's implementation half"
     status: pending
 isProject: false
 ---
@@ -139,8 +139,9 @@ GitHub Bugbot on the PR, squash-merge):
 - **Stage 2 — Implementation** (`two-pass/stage-2-implementation`). Schemas,
   request builders, the two-pass runner in `evals/`, cohort-in-code, offline
   tests. Depends on Stage 1's merged prompt files but on nothing else new.
-- **Stage 3 — Paid validation run + go/no-go.** Not a PR of its own; produces
-  run artifacts + the decision, recorded back into this plan.
+- **Stage 3 — Paid experiment run + model/config selection** (reframed by
+  pivot 7; formerly "validation run + go/no-go"). Not a PR of its own; produces
+  run artifacts + the model/config decision, recorded back into this plan.
 
 Sequencing with the eval harness ([golden_set_eval_harness_f23e64d5.plan.md](golden_set_eval_harness_f23e64d5.plan.md)):
 harness PR 3 (runner, open) merges first since Stage 2 builds on its run-dir
@@ -162,6 +163,14 @@ a clean binary token, and Pass B carries no logprobs. Keep its schema naming
 work (evidence_sufficiency rename) for the production promotion.
 
 ## Validation gate (before production)
+
+> **SUPERSEDED 2026-07-08 by pivot 7** (see the golden-set plan's "Pivots
+> locked"): the two-pass architecture is COMMITTED, not gated on beating
+> single-pass. Logprob confidence requires a reasoning-free call and subclass
+> accuracy requires reasoning, so one call can never give both — there is no
+> single-pass alternative to fall back to. The eval now answers calibration,
+> model/config selection, and implementation robustness on this architecture;
+> banked single-pass runs are reference points only. Section kept for history.
 
 Two-pass conditioned subclass accuracy must beat the single-pass high baseline
 (66% vs Fable) by enough to justify the second call; binary logprob confidence
