@@ -154,12 +154,14 @@ def test_prediction_record_extracts_labels_and_usage():
             output_tokens_details=SimpleNamespace(reasoning_tokens=180),
         ),
     )
-    rec = runner._prediction_record("startup-x", "x", "gpt-5.4-nano", "medium", resp)
+    rec = runner._prediction_record("startup-x", "x", "gpt-5.4-nano", "medium", resp,
+                                    latency_s=2.345)
     assert rec["subclass"] == "1E"
     assert rec["ai_native"] == 1
     assert rec["reasoning_tokens"] == 180
     assert rec["input_tokens"] == 1200
     assert rec["org_uuid"] == "x"
+    assert rec["latency_s"] == 2.345
 
 
 def test_prediction_record_survives_empty_output():
@@ -168,3 +170,4 @@ def test_prediction_record_survives_empty_output():
     assert rec["subclass"] is None
     assert rec["status"] == "incomplete"
     assert rec["input_tokens"] is None
+    assert rec["latency_s"] is None
