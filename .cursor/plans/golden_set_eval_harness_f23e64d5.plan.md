@@ -24,8 +24,8 @@ todos:
     content: "Stage 6: evals/logprob_extract.py Pass A binary logprob extraction, fixtures, 39 tests (gate Q2/Q3/Q5 evidenced) — MERGED #17"
     status: completed
   - id: stage7-parity-scorer
-    content: "Stage 7 (PR 7): 10-row Batch API parity smoke on Pass A requests (gate Q4) + evals/scoring.py: accuracy, macro-F1, confusion, bootstrap CIs, cost, calibration on Pass A binary confidence (pivot 6: sampled digit = verdict; logprobs = confidence metadata only), reasoning-token sizing (gate Q6)"
-    status: pending
+    content: "Stage 7: Batch parity smoke (gate Q4, PASS) + evals/scoring.py scorer — MERGED #16. Calibration wire-up (score --confidence-from-raw, chosen-digit confidence per pivot 6) in its own follow-up PR"
+    status: completed
   - id: stage8-experiments
     content: "Stage 8 (PR 8, paid): two-pass over the golden set vs banked single-pass baselines (nano none/medium/high in evals/runs/); repeats on finalists; go/no-go on the two-pass design"
     status: pending
@@ -42,14 +42,14 @@ isProject: false
 
 ## STATUS (source of truth — update after every PR merge / pivot)
 
-Last updated: **2026-07-07** (pivot 6 recorded: sampled output = prediction; logprobs = confidence metadata only). Long implementer chat retired; thin orchestrator + fresh workers own continuity from here.
+Last updated: **2026-07-07** (calibration wire-up PR opened: scorer + logprob extractor connected per pivot 6). Long implementer chat retired; thin orchestrator + fresh workers own continuity from here.
 
 | Field | Value |
 |-------|--------|
-| **Last merged** | PR **#17** — Stage 6 logprob extraction (merged 2026-07-07, squash `9caaa3f`, Bugbot clean) |
-| **Open now** | none |
-| **Working branch** | none — `two-pass/stage-2-implementation` deleted (local + origin) after merge; next worker cuts fresh from main |
-| **Next** | Stage 7 PR #16 open (parity PASS, scorer + banked baselines scored). When merge-ready: USER merges. Scorer calibration uses sampled digit as verdict (pivot 6); wire `logprob_extract` confidence metadata (p_one, margin) without argmax substitution. Then Stage 8. |
+| **Last merged** | PR **#16** — Stage 7 Batch parity smoke (gate Q4 PASS) + scorer with banked baselines scored (merged by user 2026-07-07) |
+| **Open now** | Calibration wire-up PR on `eval-harness/calibration-wireup`: `score --confidence-from-raw` runs `logprob_extract.extract_run` and feeds chosen-digit confidence (pivot 6) into the scorer's external-mapping seam. Verified on the banked none_r1 run: calibration populated (ECE 0.077, n=100), the 4 minority-sampling rows all land below 0.5 confidence (0.12 / 0.21 / 0.28 / 0.33). |
+| **Working branch** | `eval-harness/calibration-wireup` (this PR). USER merges when merge-ready. |
+| **Next** | Stage 8 experiment design (paid two-pass runs vs the banked single-pass baselines). Open design question raised by the banked scores: subclass accuracy is 77% at effort=medium vs 66% at high (41% at none), so Stage 8 should include a Pass B medium-vs-high effort arm before locking Pass B at high. |
 | **Gold labels** | Fable `draft_*` = provisional gold (pivot 4; human review waived, `gold_verdict` stays 0/100 by design). ONE full agent re-draft deferred to end of pipeline, after all design decisions lock (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
 
@@ -63,14 +63,15 @@ Last updated: **2026-07-07** (pivot 6 recorded: sampled output = prediction; log
 | #14 | 4 two-pass prompts | `two-pass/stage-1-prompts` | Merged |
 | #15 | 5 two-pass implementation | `two-pass/stage-2-implementation` (deleted) | Merged 2026-07-07; both `cursor[bot]` resume-invariant threads resolved (fix `705af2c` is in the merge) — no follow-up code needed |
 | #17 | 6 logprob extraction | `eval-harness/stage-6-logprob-extract` (deleted) | Merged 2026-07-07 (`9caaa3f`), Bugbot clean. Gate evidence: Q2 tokenization pinned (decision-token index varies 34–44, structural location mandatory; byte reconstruction exact on 100/100 banked rows); Q3 `valid_mass` ≥ 0.999998 everywhere; Q5 fixtures composed from 6 decision tokens, zero company text. NOTE for Stage 7 calibration: 4/100 banked rows sampled the MINORITY token (verdict ≠ argmax, e.g. chosen 1 at p₁=0.28; `chose_minority` fixture pins one). **Locked (pivot 6):** sampled digit = prediction; logprob confidence describes certainty about that choice, never argmax substitution. |
+| #16 | 7 batch parity + scorer | `eval-harness/stage-7-parity-scorer` | Merged by user 2026-07-07. Gate Q4 PASS (batch honors top_logprobs/effort/temperature, identical logprob shape). Banked nano baselines scored + committed (binary 93/93, subclass 41 none / 66 high / 77 medium). Calibration seam left data-only; wired in the follow-up calibration PR. |
 
 ### In progress
 
-- **PR 7 / Stage 7** — **OPEN as PR #16** (`eval-harness/stage-7-parity-scorer`): `evals/scoring.py` + `score` CLI (all Metrics v1; calibration via optional per-row confidence data, no PR-6 import) + `batch-parity` CLI. Paid 10-row parity smoke RUN: **gate Q4 PASS** (batch honors top_logprobs/effort/temperature, identical logprob shape). Banked nano baselines scored + committed (binary 93/93, subclass 41 none / 66 high / 77 medium). Merges after PR 6.
+- **Calibration wire-up** — worker on `eval-harness/calibration-wireup`: `score --confidence-from-raw` runs the Stage 6 extractor over `raw/` and feeds chosen-digit confidence (pivot 6) into the scorer's external-mapping seam (scoring.py still never imports logprob_extract; the CLI is the connector). Verified on banked none_r1. Stops at merge-ready; USER merges.
 
 ### Pending (in order)
 
-PR 6 logprob extract → PR 7 batch parity + scorer → PR 8 paid two-pass experiments (provisionally scored vs current drafts) → **final gold re-draft + offline re-score (pivot 5)** → PR 9 dashboard → PR 10 gate report + `AGENTS.md`.
+Calibration wire-up merge → PR 8 paid two-pass experiments (provisionally scored vs current drafts; design must decide the Pass B effort arm — the banked 77% medium vs 66% high subclass finding says medium-vs-high needs its own comparison before locking Pass B at high) → **final gold re-draft + offline re-score (pivot 5)** → PR 9 dashboard → PR 10 gate report + `AGENTS.md`.
 
 ### Pivots locked (do not rediscover in chat)
 

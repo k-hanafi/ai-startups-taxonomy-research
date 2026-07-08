@@ -320,3 +320,50 @@ def test_extract_run_falls_back_to_single_pass_files(tmp_path: Path):
     rows = lpx.extract_run(tmp_path)
     assert [r["custom_id"] for r in rows] == ["startup-y"]
     assert rows[0]["ai_native"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Scorer connector (pivot 6: confidence in the sampled digit)
+# ---------------------------------------------------------------------------
+
+def test_chosen_confidence_follows_the_sampled_digit():
+    assert lpx.chosen_confidence({"ai_native": 1, "p_one": 0.9}) == 0.9
+    assert lpx.chosen_confidence({"ai_native": 0, "p_one": 0.1}) == pytest.approx(0.9)
+    # Minority sampling on both sides: confidence must drop below 0.5,
+    # never flip to the argmax mass.
+    assert lpx.chosen_confidence({"ai_native": 1, "p_one": 0.28}) == pytest.approx(0.28)
+    assert lpx.chosen_confidence({"ai_native": 0, "p_one": 0.7}) == pytest.approx(0.3)
+
+
+def test_chose_minority_fixture_gets_confidence_below_half():
+    fixture = json.loads(
+        (FIXTURES_DIR / "chose_minority.json").read_text(encoding="utf-8")
+    )
+    result = lpx.extract_binary_confidence(fixture)
+    confidence = lpx.chosen_confidence(result.as_dict())
+    assert result.ai_native == 1  # the sampled digit was the minority token
+    assert confidence == pytest.approx(result.p_one)
+    assert confidence < 0.5
+    assert confidence != pytest.approx(result.top1_prob)  # argmax never substituted
+
+
+def test_run_confidence_maps_custom_id_to_chosen_digit_mass(tmp_path: Path):
+    one = pass_a_response("1", entry("1", -0.2, [("0", -1.7)]))
+    zero = pass_a_response("0", entry("0", -0.1, [("1", -2.4)]))
+    (tmp_path / "startup-a.json").write_text(json.dumps(one))
+    (tmp_path / "startup-b.json").write_text(json.dumps(zero))
+    conf = lpx.run_confidence(tmp_path)
+    p_one_a = math.exp(-0.2) / (math.exp(-0.2) + math.exp(-1.7))
+    p_zero_b = math.exp(-0.1) / (math.exp(-0.1) + math.exp(-2.4))
+    assert conf.keys() == {"startup-a", "startup-b"}
+    assert conf["startup-a"] == pytest.approx(p_one_a)
+    assert conf["startup-b"] == pytest.approx(p_zero_b)
+
+
+def test_run_confidence_refuses_a_run_without_raw_responses(tmp_path: Path):
+    # Both a missing dir and an empty one: raw/ is git-ignored, so a fresh
+    # clone hits this. The error must be loud, not a silent no-calibration.
+    with pytest.raises(lpx.LogprobExtractionError, match="no raw response"):
+        lpx.run_confidence(tmp_path / "does-not-exist")
+    with pytest.raises(lpx.LogprobExtractionError, match="no raw response"):
+        lpx.run_confidence(tmp_path)

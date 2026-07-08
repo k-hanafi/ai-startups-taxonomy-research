@@ -5,6 +5,7 @@ path, and an end-to-end score_run over a tmp_path mini golden set."""
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -268,6 +269,57 @@ def test_score_run_paired_baseline_delta(mini_run, tmp_path):
     vs = report["vs_baseline"]
     assert vs["n_paired"] == 3
     assert vs["deltas"]["ai_native"]["delta_accuracy"] == pytest.approx(2 / 3)
+
+
+def test_score_run_calibration_from_raw_logprob_fixtures(tmp_path, monkeypatch):
+    """Full wire-up on real (anonymized) tokenization: fixtures as raw/,
+    run_confidence as the external mapping, calibration populated, and the
+    minority-sampling row landing below 0.5 confidence (pivot 6)."""
+    from evals.logprob_extract import run_confidence
+
+    fixtures_dir = Path(__file__).resolve().parent / "fixtures"
+    run_id = "raw-run"
+    run_dir = tmp_path / "runs" / run_id
+    raw_dir = run_dir / "raw"
+    raw_dir.mkdir(parents=True)
+
+    gold_lines, predictions, minority_cid = [], [], None
+    for i, src in enumerate(sorted(fixtures_dir.glob("*.json"))):
+        fixture = json.loads(src.read_text(encoding="utf-8"))
+        uuid = f"u{i}"
+        cid = f"startup-{uuid}"
+        (raw_dir / f"{cid}.json").write_text(src.read_text(encoding="utf-8"))
+        sampled = fixture["expected"]["ai_native"]
+        if src.stem == "chose_minority":
+            minority_cid = cid
+        gold_lines.append(f"{uuid},{sampled},1A,RAD-H\n")
+        predictions.append(
+            {"custom_id": cid, "org_uuid": uuid, "status": "completed",
+             "ai_native": sampled, "subclass": "1A", "rad_score": "RAD-H",
+             "input_tokens": 10, "output_tokens": 5, "reasoning_tokens": 0}
+        )
+    assert minority_cid is not None
+
+    gold_csv = tmp_path / "golden_set.csv"
+    gold_csv.write_text(GOLD_HEADER + "".join(gold_lines), encoding="utf-8")
+    (run_dir / "predictions.jsonl").write_text(
+        "".join(json.dumps(r) + "\n" for r in predictions), encoding="utf-8"
+    )
+    monkeypatch.setattr(scoring, "GOLDEN_SET_CSV", gold_csv)
+    monkeypatch.setattr(scoring, "run_predictions_path",
+                        lambda rid: tmp_path / "runs" / rid / "predictions.jsonl")
+    monkeypatch.setattr(scoring, "run_config_path",
+                        lambda rid: tmp_path / "runs" / rid / "config.json")
+
+    confidence = run_confidence(raw_dir)
+    assert confidence[minority_cid] < 0.5
+
+    report = scoring.score_run(run_id, confidence=confidence, write=False)
+    cal = report["calibration"]
+    assert cal is not None and cal["n"] == len(predictions)
+    assert sum(b["count"] for b in cal["reliability"]["bins"]) == len(predictions)
+    assert 0.0 <= cal["reliability"]["ece"] <= 1.0
+    assert cal["selective_prediction"][-1]["coverage"] == 1.0
 
 
 def test_gold_with_empty_labels_refused(tmp_path, monkeypatch):
