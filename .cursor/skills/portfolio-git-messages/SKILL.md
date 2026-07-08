@@ -57,6 +57,10 @@ Bugbot fix: Backfill classifier CSV from snapshots so crashes cannot drop compan
 - Prefix on **every** commit in a Bugbot fix batch.
 - Bodies follow the same rules below. One plain sentence may note it closes a review finding. No severity labels or line numbers in titles.
 
+## Bottom-up layout (light steer)
+
+**Prefer** skimmable messages: the first sentence or two should answer *what this does and why it matters* in plain English, before file paths, module names, or implementation detail. Put technical bullets underneath for readers who want depth. Adapt when a different shape is clearer.
+
 ## Bodies: value, then judgment
 
 Pick one shape:
@@ -78,11 +82,25 @@ Target **3 to 6 lines total**. Longer probably means split the commit.
 
 **Do:** concrete verbs (cut, replace, narrow, default, gate, retry, log, document).
 
+## No baby commits on main
+
+The public log is judged on substance per commit, not commit count. Micro-commits of plan or STATUS files read as contribution-graph padding.
+
+- **Never** commit plan/STATUS/markdown housekeeping edits to main as standalone micro-commits. Batch them.
+- Plan/STATUS updates accumulate in the working tree and land as **one consolidated commit per real milestone** (a PR merge, a locked pivot batch, a session end) with a substantive WHY-first message.
+- Prefer riding doc/plan updates on the relevant PR branch instead of direct-to-main whenever a related PR exists.
+- Rule of thumb: if a commit touches only `.md` files and takes under a minute to explain, it probably belongs batched with the next substantive commit.
+- Direct-to-main commits are reserved for consolidated milestone records, never per-thought updates.
+
 ## PR titles and bodies
 
 PR titles follow the same WHY-first title rules as commits.
 
-PR bodies: short Summary (2 to 4 bullets, goal-anchored), Test plan checklist, same plain-English tone. No em dashes or semicolons as clause separators.
+PR bodies: **Summary** first, then **Test plan** checklist.
+
+- **Summary headline (1 to 2 sentences):** what the PR does and why, readable without opening the diff. This is the only part many readers need.
+- **Summary detail (optional bullets below):** tradeoffs, scope, concrete behavior. Technical specifics belong here, not in the headline.
+- Same plain-English tone throughout. No em dashes or semicolons as clause separators.
 
 ## More examples
 
