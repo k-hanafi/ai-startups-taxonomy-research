@@ -66,7 +66,7 @@ Last updated: **2026-07-07** (pivot 6 recorded: sampled output = prediction; log
 
 ### In progress
 
-- **PR 7 / Stage 7** — parallel worker on `eval-harness/stage-7-parity-scorer`: `evals/scoring.py` (accuracy, macro-F1, confusion, bootstrap CIs, cost, reasoning-token sizing) + 10-row Batch parity smoke. Calibration consumes a per-row confidence value as plain data, NOT an import of PR 6's module. Workers stop at merge-ready (Bugbot clean); orchestrator sequences merges 6 then 7 (PR 7 rebases over 6's plan-file edits).
+- **PR 7 / Stage 7** — **OPEN as PR #16** (`eval-harness/stage-7-parity-scorer`): `evals/scoring.py` + `score` CLI (all Metrics v1; calibration via optional per-row confidence data, no PR-6 import) + `batch-parity` CLI. Paid 10-row parity smoke RUN: **gate Q4 PASS** (batch honors top_logprobs/effort/temperature, identical logprob shape). Banked nano baselines scored + committed (binary 93/93, subclass 41 none / 66 high / 77 medium). Merges after PR 6.
 
 ### Pending (in order)
 
