@@ -21,8 +21,8 @@ todos:
     content: "Stage 5 two-pass implementation (BinaryResult + family-constrained SubclassResult, run-two-pass CLI, resume invariants incl. n_rows/repeat) — MERGED #15"
     status: completed
   - id: stage6-logprob-extract
-    content: "Stage 6 (PR 6): evals/logprob_extract.py targeting Pass A binary-only output: byte-reconstruction, decision-token metrics, fixtures (gate Q2/Q3/Q5)"
-    status: pending
+    content: "Stage 6: evals/logprob_extract.py Pass A binary logprob extraction, fixtures, 39 tests (gate Q2/Q3/Q5 evidenced) — MERGED #17"
+    status: completed
   - id: stage7-parity-scorer
     content: "Stage 7 (PR 7): 10-row Batch API parity smoke on Pass A requests (gate Q4) + evals/scoring.py: accuracy, macro-F1, confusion, bootstrap CIs, cost, calibration on Pass A binary confidence, reasoning-token sizing (gate Q6)"
     status: pending
@@ -46,10 +46,10 @@ Last updated: **2026-07-07** (pivot 5 recorded: full gold re-draft deferred to e
 
 | Field | Value |
 |-------|--------|
-| **Last merged** | PR **#15** — Stage 5 two-pass implementation (merged 2026-07-07 22:29 UTC, merge `84a7755`; includes Bugbot fix `705af2c`) |
+| **Last merged** | PR **#17** — Stage 6 logprob extraction (merged 2026-07-07, squash `9caaa3f`, Bugbot clean) |
 | **Open now** | none |
 | **Working branch** | none — `two-pass/stage-2-implementation` deleted (local + origin) after merge; next worker cuts fresh from main |
-| **Next** | Stages 6 + 7 running as PARALLEL workers (launched 2026-07-07). Merge order stays 6 → 7. PR 7's calibration hook stays decoupled from PR 6 (confidence passed in as data, no import); wired after both merge. |
+| **Next** | Stage 7 worker still running (launched 2026-07-07 in parallel with the now-merged Stage 6). When merge-ready: rebase over main (Stage 6's plan edits), then merge. After that: small calibration wire-up (scorer ⇐ `logprob_extract` output, incl. the minority-token-sample decision), then Stage 8. |
 | **Gold labels** | Fable `draft_*` = provisional gold (pivot 4; human review waived, `gold_verdict` stays 0/100 by design). ONE full agent re-draft deferred to end of pipeline, after all design decisions lock (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
 
@@ -62,10 +62,10 @@ Last updated: **2026-07-07** (pivot 5 recorded: full gold re-draft deferred to e
 | #13 | 3 sync runner + run records | `eval-harness/stage-3-runner` | Merged; banked baseline runs in `evals/runs/` (nano none/medium/high) |
 | #14 | 4 two-pass prompts | `two-pass/stage-1-prompts` | Merged |
 | #15 | 5 two-pass implementation | `two-pass/stage-2-implementation` (deleted) | Merged 2026-07-07; both `cursor[bot]` resume-invariant threads resolved (fix `705af2c` is in the merge) — no follow-up code needed |
+| #17 | 6 logprob extraction | `eval-harness/stage-6-logprob-extract` (deleted) | Merged 2026-07-07 (`9caaa3f`), Bugbot clean. Gate evidence: Q2 tokenization pinned (decision-token index varies 34–44, structural location mandatory; byte reconstruction exact on 100/100 banked rows); Q3 `valid_mass` ≥ 0.999998 everywhere; Q5 fixtures composed from 6 decision tokens, zero company text. NOTE for Stage 7 calibration: 4/100 banked rows sampled the MINORITY token (verdict ≠ argmax, e.g. chosen 1 at p₁=0.28; `chose_minority` fixture pins one) — scorer must pick sampled-verdict vs renormalized-probability as the calibration target. |
 
 ### In progress
 
-- **PR 6 / Stage 6** — **PR #17 OPEN (merge-ready)** on `eval-harness/stage-6-logprob-extract`: `evals/logprob_extract.py` + 4 anonymized fixtures from the banked `none_r1` raw responses + 39 offline tests. Q2: decision rides on a single '0'/'1' token at a VARIABLE index (34–44 across the banked run), byte reconstruction exact on all 100 rows. Q3: `valid_mass` ≥ 0.999998 on all 100 banked rows (≈no mass leaks outside {0,1}). Q5: fixtures reduced to the 6 decision-relevant tokens, no company/evidence text. Bonus finding for Stage 7 calibration: 4/100 rows sampled the MINORITY token (emitted verdict disagrees with argmax, e.g. chosen '1' at p₁=0.28).
 - **PR 7 / Stage 7** — parallel worker on `eval-harness/stage-7-parity-scorer`: `evals/scoring.py` (accuracy, macro-F1, confusion, bootstrap CIs, cost, reasoning-token sizing) + 10-row Batch parity smoke. Calibration consumes a per-row confidence value as plain data, NOT an import of PR 6's module. Workers stop at merge-ready (Bugbot clean); orchestrator sequences merges 6 then 7 (PR 7 rebases over 6's plan-file edits).
 
 ### Pending (in order)
