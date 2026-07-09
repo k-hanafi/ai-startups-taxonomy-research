@@ -110,24 +110,26 @@ def test_pass_a_sends_logprobs_pass_b_does_not(sample_row):
 
 # --- record assembly -----------------------------------------------------------
 
-def _resp(status: str, payload: dict | None, reasoning: int = 0):
+def _resp(status: str, payload: dict | None, reasoning: int = 0,
+          cached: int = 0):
     return SimpleNamespace(
         status=status,
         output_text=json.dumps(payload) if payload is not None else "",
         usage=SimpleNamespace(
             input_tokens=100, output_tokens=50,
             output_tokens_details=SimpleNamespace(reasoning_tokens=reasoning),
+            input_tokens_details=SimpleNamespace(cached_tokens=cached),
         ),
     )
 
 
 def test_assemble_record_ai_native_family():
-    ra = _resp("completed", {"ai_native": 1})
+    ra = _resp("completed", {"ai_native": 1}, cached=10)
     rb = _resp("completed", {
         "subclass": "1E", "rad_score": "RAD-M", "conf_classification": 4,
         "conf_rad": 3, "reasons_3_points": "a | b | c", "sources_used": "keywords",
         "verification_critique": "ok", "boundary_disagreement": False,
-    }, reasoning=500)
+    }, reasoning=500, cached=40)
     rec = two_pass.assemble_record("startup-x", "x", "gpt-5.4-nano", "high",
                                    "GENAI-ERA", ra, rb,
                                    latency_a_s=0.8, latency_b_s=12.4)
@@ -136,6 +138,9 @@ def test_assemble_record_ai_native_family():
     assert rec["rad_score"] == "RAD-M" and rec["conf_rad"] == 3
     assert rec["cohort"] == "GENAI-ERA"
     assert rec["b_reasoning_tokens"] == 500
+    assert rec["a_cached_tokens"] == 10
+    assert rec["b_cached_tokens"] == 40
+    assert rec["cached_tokens"] == 50
     # Per-pass latencies land separately plus a flat total under the
     # single-pass field name, so the scorer reads one field for both shapes.
     assert rec["a_latency_s"] == 0.8

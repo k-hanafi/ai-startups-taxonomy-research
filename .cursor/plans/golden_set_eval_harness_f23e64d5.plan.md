@@ -42,16 +42,17 @@ isProject: false
 
 ## STATUS (source of truth — update after every PR merge / pivot)
 
-Last updated: **2026-07-08** (PR #19 latency capture merged by user; small parity-report resilience PR open, ties to eval question Q3 implementation robustness).
+Last updated: **2026-07-08** (pivot 8 locked: cached_tokens + production cost extrapolation on the committed two-pass path; PR open on `eval-harness/cached-tokens-cost-extrapolate`).
 
 | Field | Value |
 |-------|--------|
-| **Last merged** | PR **#19** — pre-Stage-8 latency capture: `time.monotonic` around each API call, `latency_s` on single-pass records, `a_latency_s`/`b_latency_s` + flat `latency_s` total on two-pass records, and a mean/p50/p95/max `latency` block in scored.json (null for legacy runs). Merged by user 2026-07-08. |
-| **Open now** | Parity-report resilience PR (branch `eval-harness/parity-report-resilience`, eval question Q3): batch-parity no longer aborts via SystemExit when the batch phase times out or finishes without an output file. It writes the parity report anyway (verdict forced FAIL + a `batch_error` field) so the already-paid sync results are preserved, and the CLI still exits nonzero. Report writing refactored into `_write_parity_report`. |
-| **Working branch** | `eval-harness/parity-report-resilience` |
-| **Next** | After the resilience PR merges: Stage 8 paid model/config selection experiment on the committed two-pass architecture (pivot 7): sweep GPT-family models x Pass B effort (medium vs high, per the banked 77%-vs-66% subclass finding), measuring accuracy, calibration, cost, and latency. Paid, so the USER runs the CLI or delegates. |
+| **Last merged** | PR **#20** — parity-report resilience (eval Q3): batch-parity no longer aborts via `SystemExit` when the batch phase times out or finishes without an output file. Writes the parity report anyway (`batch_error` + forced FAIL verdict), CLI still exits nonzero. Squash-merged by user 2026-07-08 (`cb30187` on `main`). |
+| **Open now** | This PR — `eval-harness/cached-tokens-cost-extrapolate`: capture `cached_tokens` in eval runners + reusable `evals/cost_extrapolate.py` ladder in `scored.json` / `report` (pivot 8). Stop at MERGE-READY; user merges. |
+| **Working branch** | `eval-harness/cached-tokens-cost-extrapolate` (cut from `origin/main` after #20). |
+| **Next** | After this merges: Stage 8 paid model/config selection on the committed two-pass architecture (pivot 7), using measured cache rates from two-pass runs (never the old single-pass ~78% production figure). Paid — USER runs CLI or delegates (decision pending). Open decisions: final model list; timing of end-of-pipeline gold re-draft (pivot 5). |
 | **Gold labels** | Fable `draft_*` = provisional gold (pivot 4; human review waived, `gold_verdict` stays 0/100 by design). ONE full agent re-draft deferred to end of pipeline, after all design decisions lock (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
+| **Architecture reminder** | Two-pass is COMMITTED for production promotion (pivots 7–8). `src/` classifier is still historically one-pass; eval/cost projections assume two-pass. Banked single-pass runs are reference points only. |
 
 ### Done
 
@@ -66,14 +67,15 @@ Last updated: **2026-07-08** (PR #19 latency capture merged by user; small parit
 | #16 | 7 batch parity + scorer | `eval-harness/stage-7-parity-scorer` | Merged by user 2026-07-07. Gate Q4 PASS (batch honors top_logprobs/effort/temperature, identical logprob shape). Banked nano baselines scored + committed (binary 93/93, subclass 41 none / 66 high / 77 medium). Calibration seam left data-only; wired in #18. |
 | #18 | 7 calibration wire-up | `eval-harness/calibration-wireup` (deleted) | Merged by user 2026-07-08. `score --confidence-from-raw` runs the Stage 6 extractor over `raw/` and feeds chosen-digit confidence (pivot 6) into the scorer's external-mapping seam (scoring.py still never imports logprob_extract; the CLI is the connector). Verified on banked none_r1: ECE 0.077 (n=100), all 4 minority-sampling rows below 0.5 confidence. |
 | #19 | pre-8 latency capture | `eval-harness/latency-capture` | Merged by user 2026-07-08. Per-row wall-clock latency in run records + mean/p50/p95/max latency block in scored.json — the measured axis pivot 7 added for Stage 8. |
+| #20 | Q3 parity resilience | `eval-harness/parity-report-resilience` | Squash-merged 2026-07-08 (`cb30187`). Batch timeout / missing-output no longer discard paid sync results; `batch_error` + forced FAIL + nonzero exit. |
 
 ### In progress
 
-- Nothing. Next up is Stage 8 (see Pending).
+- Pivot 8 PR: cached_tokens capture + production cost extrapolation module (before/alongside Stage 8, not deferred to Stage 9).
 
 ### Pending (in order)
 
-Parity-report resilience PR (open, see STATUS) → PR 8 paid Stage 8 model/config selection experiment (pivot 7: sweep GPT-family models x Pass B medium-vs-high effort on the committed two-pass architecture, provisionally scored vs current drafts; banked single-pass runs are reference points only) → **final gold re-draft + offline re-score (pivot 5)** → PR 9 dashboard → PR 10 report answering the three eval questions + `AGENTS.md`.
+Pivot 8 merge (user) → PR 8 paid Stage 8 model/config selection experiment (pivot 7: sweep GPT-family models × Pass B medium-vs-high effort on the committed two-pass architecture, provisionally scored vs current drafts; banked single-pass runs are reference points only; cost axis uses measured two-pass cache rates via pivot 8) → **final gold re-draft + offline re-score (pivot 5)** → PR 9 dashboard → PR 10 report answering the three eval questions + `AGENTS.md`.
 
 ### Pivots locked (do not rediscover in chat)
 
@@ -88,7 +90,13 @@ Parity-report resilience PR (open, see STATUS) → PR 8 paid Stage 8 model/confi
    - **Q2 Model selection:** which GPT-family model to use, compared on accuracy, confidence quality, cost, and latency (latency included as a learning objective for production practice, not a research need)?
    - **Q3 Implementation robustness:** do logprob extraction and Batch API parity work as intended — will the classifier work in production?
 
-   Mapping from the old six gate questions: old Q2/Q3/Q5 (tokenization, valid_mass, fixtures) and old Q4 (batch parity) fold into new Q3 and are already evidenced (PR #17, #16). Old Q6 (token sizing/cost model) folds into new Q2. Old Q1 was answered during the pivot to two-pass. The Stage 10 report is restructured around the three questions. Consequence for Stage 8: it is now a MODEL/CONFIG SELECTION experiment on the committed two-pass architecture — sweep GPT-family models (e.g. nano, mini, and one larger if affordable) and the Pass B effort arm (medium vs high, per the 77%-vs-66% banked finding), measuring accuracy, calibration, cost, and latency. NOT a design validation against single-pass. Per-row latency is not currently captured in run records, so a small pre-Stage-8 runner tweak is needed.
+   Mapping from the old six gate questions: old Q2/Q3/Q5 (tokenization, valid_mass, fixtures) and old Q4 (batch parity) fold into new Q3 and are already evidenced (PR #17, #16). Old Q6 (token sizing/cost model) folds into new Q2. Old Q1 was answered during the pivot to two-pass. The Stage 10 report is restructured around the three questions. Consequence for Stage 8: it is now a MODEL/CONFIG SELECTION experiment on the committed two-pass architecture — sweep GPT-family models (e.g. nano, mini, and one larger if affordable) and the Pass B effort arm (medium vs high, per the 77%-vs-66% banked finding), measuring accuracy, calibration, cost, and latency. NOT a design validation against single-pass. Per-row latency capture landed in PR #19 (ready for Stage 8).
+8. **2026-07-08 production cost extrapolation locked (user).** Implement now (own PR, before/alongside Stage 8), not deferred to Stage 9-only. Decisions:
+   - **Scale-up N default:** alive + dead extractable ≈ **41,076** (`22,032` non-empty live evidence + `19,044` `scrape_targets_dead`). Named constants in `evals/config.py` allow toggling other Ns later; default is the combo.
+   - **Architecture for cost projections:** COMMITTED **two-pass ONLY**. Do not project single-pass production costs as the primary path. `src/` remains historically one-pass; eval/cost math assumes two-pass. Banked single-pass runs stay reference points (pivot 7).
+   - **Cache:** MUST capture `cached_tokens` in eval runners (match `src/downloader.py` Responses usage mapping). Measure cache rate from golden-set **two-pass** runs. Do **not** assume production's ~78% cache rate (pre-two-pass / different prompts).
+   - **Feature shape:** reusable `evals/cost_extrapolate.py` writes a structured, interpretable block into `scored.json`; dashboard/report only renders it (immutable per-run artifact + pure viewer).
+   - **Breakdown ladder:** (1) golden-set actual tokens + $ at sync list, (2) cache adjustment from measured rate, (3) batch 50% → production-equivalent $ on the golden 100, (4) scale × (N_prod / n_golden), (5) assumptions callout (N, cache source, batch discount, two-pass, reasoning billed inside output). Legacy runs without `cached_tokens` mark cache as unavailable — honest gaps, no invented hit rate.
 
 ### Agent workflow (how we run PRs 6–10)
 
