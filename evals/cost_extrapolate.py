@@ -48,17 +48,35 @@ def _sync_cost(
 
 
 def _records_have_cached_field(records: list[dict[str, Any]]) -> bool:
-    """True when at least one record carries an explicit cached_tokens field.
+    """True when EVERY record carries an explicit cached_tokens field.
 
     Distinguishes 'field present, value 0' (real miss) from legacy banked
-    runs that never recorded the field.
+    runs that never recorded the field. A mixed resume (some rows with the
+    field, some without) must NOT count as measured — otherwise missing
+    rows silently look like 0% cache hits and inflate the production $.
     """
+    if not records:
+        return False
     for rec in records:
         if "cached_tokens" in rec:
-            return True
+            continue
         if "a_cached_tokens" in rec or "b_cached_tokens" in rec:
-            return True
-    return False
+            continue
+        return False
+    return True
+
+
+def _records_partial_cached_field(records: list[dict[str, Any]]) -> bool:
+    """True when some but not all records carry a cached_tokens field."""
+    if not records:
+        return False
+    present = sum(
+        1 for rec in records
+        if "cached_tokens" in rec
+        or "a_cached_tokens" in rec
+        or "b_cached_tokens" in rec
+    )
+    return 0 < present < len(records)
 
 
 def _sum_cached(records: list[dict[str, Any]]) -> int:
@@ -268,13 +286,14 @@ def production_cost_from_records(
 
     present = _records_have_cached_field(records)
     cached = _sum_cached(records) if present else None
+    partial = _records_partial_cached_field(records)
 
     if any("a_input_tokens" in r for r in records):
         detected_architecture = "two-pass"
     else:
         detected_architecture = "single-pass"
 
-    return extrapolate_production_cost(
+    result = extrapolate_production_cost(
         model=model,
         n_golden=len(records),
         total_input_tokens=total_in,
@@ -285,6 +304,17 @@ def production_cost_from_records(
         n_prod_label=n_prod_label,
         architecture=detected_architecture,
     )
+    if partial and not present:
+        # Override the generic legacy reason with the mixed-resume case.
+        step2 = result.get("steps", {}).get("2_cache")
+        if step2 is not None:
+            step2["reason"] = (
+                "mixed predictions: some rows lack cached_tokens (partial "
+                "resume over a legacy run). Re-run the full set so every "
+                "row is measured; do not invent a cache rate for gaps."
+            )
+        result["reason"] = "cached_tokens_partial_coverage"
+    return result
 
 
 def format_cost_ladder(estimate: dict[str, Any]) -> str:
