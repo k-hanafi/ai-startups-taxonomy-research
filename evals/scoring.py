@@ -11,7 +11,11 @@ matrices, bootstrap CIs on accuracy, paired-bootstrap CIs on deltas vs a
 baseline run, cost per row from actual token usage, an output/reasoning
 token summary that sizes MAX_OUTPUT_TOKENS and the cost model (gate Q6),
 and wall-clock latency distributions when the run recorded them (pivot 7;
-older banked runs score unchanged with latency: null).
+older banked runs score unchanged with latency: null). When predictions
+carry ``cached_tokens`` (pivot 8), ``production_cost_estimate`` adds the
+cache → batch → scale ladder for a production-N projection; legacy runs
+without that field mark the cache step unavailable instead of inventing
+a hit rate.
 
 Calibration (reliability bins + selective-prediction curve) is computed ONLY
 when a per-row binary confidence is supplied, either as a binary_confidence
@@ -212,17 +216,20 @@ def paired_bootstrap_delta(
 # ---------------------------------------------------------------------------
 
 def _record_tokens(record: dict[str, Any]) -> dict[str, int]:
-    """input/output/reasoning token totals for one record, both run shapes.
+    """input/output/reasoning/cached token totals for one record, both shapes.
 
     Single-pass records carry flat fields; two-pass records carry a_/b_
     prefixed fields that are summed (a completed two-pass row always has
-    both passes).
+    both passes). Cached defaults to 0 when the field is absent on a
+    legacy record — callers that need "field present?" use
+    ``evals.cost_extrapolate`` instead of this helper alone.
     """
     if "a_input_tokens" in record:
         keys = {
             "input": ("a_input_tokens", "b_input_tokens"),
             "output": ("a_output_tokens", "b_output_tokens"),
             "reasoning": ("a_reasoning_tokens", "b_reasoning_tokens"),
+            "cached": ("a_cached_tokens", "b_cached_tokens"),
         }
         return {
             kind: sum(int(record.get(k) or 0) for k in fields)
@@ -232,6 +239,7 @@ def _record_tokens(record: dict[str, Any]) -> dict[str, int]:
         "input": int(record.get("input_tokens") or 0),
         "output": int(record.get("output_tokens") or 0),
         "reasoning": int(record.get("reasoning_tokens") or 0),
+        "cached": int(record.get("cached_tokens") or 0),
     }
 
 
@@ -248,9 +256,13 @@ def _token_stats(values: list[int]) -> dict[str, float]:
 
 def cost_and_tokens(records: list[dict[str, Any]], model: str) -> dict[str, Any]:
     """Actual-usage cost + token distributions over completed records."""
+    from evals.cost_extrapolate import _records_have_cached_field
+
     tokens = [_record_tokens(r) for r in records]
     total_in = sum(t["input"] for t in tokens)
     total_out = sum(t["output"] for t in tokens)
+    cache_present = _records_have_cached_field(records)
+    total_cached = sum(t["cached"] for t in tokens) if cache_present else None
 
     pricing = cfg.EVAL_MODEL_PRICING.get(model)
     total_usd = mean_usd = None
@@ -258,19 +270,30 @@ def cost_and_tokens(records: list[dict[str, Any]], model: str) -> dict[str, Any]
         total_usd = total_in / 1e6 * pricing["input"] + total_out / 1e6 * pricing["output"]
         mean_usd = total_usd / len(records)
 
+    if cache_present:
+        pricing_note = (
+            "Sync list price on total input tokens (no cache discount in this "
+            "block). See production_cost_estimate for the cache → batch → "
+            "scale ladder. Reasoning tokens are inside output_tokens."
+        )
+    else:
+        pricing_note = (
+            "Sync list price on total input tokens. Cached-input discount not "
+            "applied (predictions records do not carry cached_tokens), so this "
+            "is an upper bound on actual spend."
+        )
+
     return {
         "model": model,
         "n_rows": len(records),
         "total_input_tokens": total_in,
         "total_output_tokens": total_out,
+        "total_cached_tokens": total_cached,
+        "cache_field_present": cache_present,
         "total_usd": total_usd,
         "mean_usd_per_row": mean_usd,
         "pricing_per_mtok": pricing,
-        "pricing_note": (
-            "Sync list price on total input tokens. Cached-input discount not "
-            "applied (predictions records do not carry cached_tokens), so this "
-            "is an upper bound on actual spend."
-        ),
+        "pricing_note": pricing_note,
         "output_tokens": _token_stats([t["output"] for t in tokens]),
         "reasoning_tokens": _token_stats([t["reasoning"] for t in tokens]),
         "max_output_tokens_note": (
@@ -500,6 +523,8 @@ def score_run(
     model = run_config.get("model") or predictions[scored_uuids[0]].get("model") or ""
 
     scored_records = [predictions[u] for u in scored_uuids]
+    from evals.cost_extrapolate import production_cost_from_records
+
     report: dict[str, Any] = {
         "run_id": run_id,
         "scored_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -514,6 +539,9 @@ def score_run(
         },
         "axes": axes_report,
         "cost": cost_and_tokens(scored_records, model),
+        "production_cost_estimate": production_cost_from_records(
+            scored_records, model
+        ),
         "latency": latency_summary(scored_records),
         "calibration": calibration_report(
             resolve_confidence(scored_records, confidence), gold, predictions
@@ -593,6 +621,11 @@ def score_cli(
     if cost["mean_usd_per_row"] is not None:
         logger.info("cost: $%.4f/row ($%.2f total, %d rows)",
                     cost["mean_usd_per_row"], cost["total_usd"], cost["n_rows"])
+    est = report.get("production_cost_estimate")
+    if est:
+        from evals.cost_extrapolate import format_cost_ladder
+        for line in format_cost_ladder(est).splitlines():
+            logger.info("%s", line)
     latency = report["latency"]
     if latency is not None:
         stats = latency["latency_s"]

@@ -220,6 +220,8 @@ def identity_hashes() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 def _usage_fields(resp: Any, prefix: str) -> dict[str, Any]:
+    from evals.usage import cached_tokens_from_usage
+
     usage = getattr(resp, "usage", None)
     reasoning = None
     if usage is not None and getattr(usage, "output_tokens_details", None) is not None:
@@ -228,6 +230,8 @@ def _usage_fields(resp: Any, prefix: str) -> dict[str, Any]:
         f"{prefix}_input_tokens": getattr(usage, "input_tokens", None) if usage else None,
         f"{prefix}_output_tokens": getattr(usage, "output_tokens", None) if usage else None,
         f"{prefix}_reasoning_tokens": reasoning,
+        # 0 when usage/details absent; same semantics as single-pass runner.
+        f"{prefix}_cached_tokens": cached_tokens_from_usage(usage),
     }
 
 
@@ -293,13 +297,17 @@ def assemble_record(custom_id: str, org_uuid: str, model: str, effort_b: str,
     if resp_b is not None:
         record.update(_usage_fields(resp_b, "b"))
         record["b_latency_s"] = latency_b_s
-    # Flat total under the single-pass field name, so the scorer reads one
+    # Flat totals under the single-pass field names so the scorer reads one
     # field for both run shapes. A row missing Pass B has no meaningful
     # end-to-end latency (it will be re-run), so the total stays None.
     if latency_a_s is not None and latency_b_s is not None:
         record["latency_s"] = round(latency_a_s + latency_b_s, 3)
     else:
         record["latency_s"] = None
+    # Cached tokens always sum A+B (0 when a pass is missing).
+    record["cached_tokens"] = int(record.get("a_cached_tokens") or 0) + int(
+        record.get("b_cached_tokens") or 0
+    )
     return record
 
 

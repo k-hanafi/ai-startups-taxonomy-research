@@ -64,6 +64,7 @@ from evals.paths import (
     run_predictions_path,
     run_raw_dir,
 )
+from evals.usage import cached_tokens_from_usage
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,9 @@ def _prediction_record(custom_id: str, org_uuid: str, model: str, effort: str,
         "input_tokens": getattr(usage, "input_tokens", None) if usage else None,
         "output_tokens": getattr(usage, "output_tokens", None) if usage else None,
         "reasoning_tokens": reasoning_tokens,
+        # 0 when usage/details absent (API omits the field on a miss); never
+        # invent a production cache rate for missing data.
+        "cached_tokens": cached_tokens_from_usage(usage),
         "latency_s": latency_s,
     }
 
