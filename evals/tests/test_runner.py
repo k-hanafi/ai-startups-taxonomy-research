@@ -152,6 +152,7 @@ def test_prediction_record_extracts_labels_and_usage():
             input_tokens=1200,
             output_tokens=350,
             output_tokens_details=SimpleNamespace(reasoning_tokens=180),
+            input_tokens_details=SimpleNamespace(cached_tokens=400),
         ),
     )
     rec = runner._prediction_record("startup-x", "x", "gpt-5.4-nano", "medium", resp,
@@ -160,8 +161,32 @@ def test_prediction_record_extracts_labels_and_usage():
     assert rec["ai_native"] == 1
     assert rec["reasoning_tokens"] == 180
     assert rec["input_tokens"] == 1200
+    assert rec["cached_tokens"] == 400
     assert rec["org_uuid"] == "x"
     assert rec["latency_s"] == 2.345
+
+
+def test_prediction_record_cached_tokens_zero_when_usage_missing():
+    resp = SimpleNamespace(status="incomplete", output_text="", usage=None)
+    rec = runner._prediction_record("startup-y", "y", "gpt-5.4-nano", "medium", resp)
+    assert rec["cached_tokens"] == 0
+    assert rec["input_tokens"] is None
+
+
+def test_prediction_record_cached_tokens_from_dict_usage():
+    # Dict-shaped usage (as in raw JSON dumps) must parse the same way.
+    from evals.usage import cached_tokens_from_usage
+
+    assert cached_tokens_from_usage({
+        "input_tokens": 100,
+        "input_tokens_details": {"cached_tokens": 55},
+    }) == 55
+    assert cached_tokens_from_usage({
+        "prompt_tokens": 100,
+        "prompt_tokens_details": {"cached_tokens": 12},
+    }) == 12
+    assert cached_tokens_from_usage({}) == 0
+    assert cached_tokens_from_usage(None) == 0
 
 
 def test_prediction_record_survives_empty_output():
@@ -170,4 +195,5 @@ def test_prediction_record_survives_empty_output():
     assert rec["subclass"] is None
     assert rec["status"] == "incomplete"
     assert rec["input_tokens"] is None
+    assert rec["cached_tokens"] == 0
     assert rec["latency_s"] is None

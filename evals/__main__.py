@@ -68,7 +68,16 @@ def main() -> None:
         help="PAID: 10-row Batch-vs-sync parity smoke on Pass A (gate Q4, Stage 7)",
     )
     p_parity.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
-    subs.add_parser("report", help="Build the benchmark dashboard (Stage 8)")
+    p_report = subs.add_parser(
+        "report",
+        help="Render production-cost extrapolation for a scored run (pivot 8)",
+    )
+    p_report.add_argument(
+        "run_id",
+        nargs="?",
+        default=None,
+        help="Run directory under evals/runs/ (default: most recently scored)",
+    )
 
     args = parser.parse_args()
 
@@ -145,6 +154,12 @@ def main() -> None:
         # the paid sync results survive either way.
         if report["verdict"] != "PASS":
             sys.exit(1)
+        return
+
+    if args.command == "report":
+        from evals.report import report_cli
+
+        report_cli(args.run_id)
         return
 
     # Later stages land in subsequent PRs; fail loudly instead of silently.
