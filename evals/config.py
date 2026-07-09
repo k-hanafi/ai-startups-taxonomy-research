@@ -133,3 +133,25 @@ EVAL_MODEL_PRICING: dict[str, dict[str, float]] = {
     "gpt-5.4":      {"input": 2.50, "output": 15.00},
     "gpt-5.5":      {"input": 5.00, "output": 30.00},
 }
+
+# ---------------------------------------------------------------------------
+# Production cost extrapolation (pivot 8)
+# ---------------------------------------------------------------------------
+# Same stacking as src/tokens.py / src/merger.py: batch 50% on all tokens,
+# then an extra 50% on the cached portion of input (cached input = 25% of
+# sync list). Do NOT import from src — evals stays offline-safe without keys.
+BATCH_DISCOUNT: float = 0.50
+CACHE_DISCOUNT: float = 0.50
+
+# Scale-up N: alive non-empty evidence + dead extractable targets (default).
+# Optional named alternatives for later toggles; default is the combo.
+N_PROD_ALIVE_EVIDENCE: int = 22_032
+N_PROD_DEAD_EXTRACTABLE: int = 19_044
+N_PROD_ALIVE_PLUS_DEAD: int = N_PROD_ALIVE_EVIDENCE + N_PROD_DEAD_EXTRACTABLE
+N_PROD_DEFAULT: int = N_PROD_ALIVE_PLUS_DEAD
+
+N_PROD_SCALE_OPTIONS: dict[str, int] = {
+    "alive_evidence": N_PROD_ALIVE_EVIDENCE,
+    "dead_extractable": N_PROD_DEAD_EXTRACTABLE,
+    "alive_plus_dead": N_PROD_ALIVE_PLUS_DEAD,
+}
