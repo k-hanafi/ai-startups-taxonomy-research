@@ -73,6 +73,20 @@ def test_zero_cached_with_field_present_is_real_zero_not_unavailable():
     )
 
 
+def test_mixed_cached_field_coverage_is_unavailable():
+    # Partial resume: one new row with cached_tokens, one legacy without.
+    records = [
+        {"input_tokens": 1000, "output_tokens": 0, "cached_tokens": 500},
+        {"input_tokens": 1000, "output_tokens": 0},
+    ]
+    est = ce.production_cost_from_records(records, "gpt-5.4-nano")
+    assert est["available"] is False
+    assert est["reason"] == "cached_tokens_partial_coverage"
+    assert "mixed" in est["steps"]["2_cache"]["reason"].lower()
+    # Must not silently treat the legacy row as a 0% cache hit.
+    assert est["steps"]["2_cache"].get("cache_hit_rate") is None
+
+
 def test_format_cost_ladder_mentions_assumptions():
     records = [{"input_tokens": 100, "output_tokens": 10, "cached_tokens": 20}]
     text = ce.format_cost_ladder(ce.production_cost_from_records(records, "gpt-5.4-nano"))
