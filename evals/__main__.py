@@ -1,4 +1,4 @@
-"""CLI entry point: python -m evals <sample|run|score|report>."""
+"""CLI entry point: python -m evals <sample|run|score|report|dashboard>."""
 
 from __future__ import annotations
 
@@ -77,6 +77,40 @@ def main() -> None:
         nargs="?",
         default=None,
         help="Run directory under evals/runs/ (default: most recently scored)",
+    )
+    p_dash = subs.add_parser(
+        "dashboard",
+        help="Build Stage 9 eval dashboard HTML (fixture or scored.json)",
+    )
+    p_dash.add_argument(
+        "--fixture",
+        nargs="?",
+        const=True,
+        default=None,
+        help="Use synthetic mock fixture (optional path). Default when no scored.json exists.",
+    )
+    p_dash.add_argument(
+        "--force-fixture",
+        action="store_true",
+        help="Prefer the mock fixture even if scored.json files exist",
+    )
+    p_dash.add_argument(
+        "--scored",
+        nargs="+",
+        default=None,
+        help="One or more scored.json paths",
+    )
+    p_dash.add_argument(
+        "--runs",
+        nargs="+",
+        default=None,
+        help="Run ids under evals/runs/",
+    )
+    p_dash.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="Output HTML path (default: Presentation Materials/eval_dashboard.html)",
     )
 
     args = parser.parse_args()
@@ -160,6 +194,37 @@ def main() -> None:
         from evals.report import report_cli
 
         report_cli(args.run_id)
+        return
+
+    if args.command == "dashboard":
+        import importlib.util
+        from pathlib import Path
+
+        from evals.paths import PROJECT_ROOT
+
+        builder = (
+            PROJECT_ROOT
+            / "data visualization"
+            / "02_Analysis_Code"
+            / "build_eval_dashboard.py"
+        )
+        spec = importlib.util.spec_from_file_location("build_eval_dashboard", builder)
+        if spec is None or spec.loader is None:
+            sys.exit(f"Cannot load dashboard builder at {builder}")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        ns = argparse.Namespace(
+            fixture=args.fixture,
+            force_fixture=args.force_fixture,
+            scored=args.scored,
+            runs=args.runs,
+            output=Path(args.output) if args.output else mod.OUTPUT_PATH,
+        )
+        metrics = mod.resolve_metrics(ns)
+        ns.output.parent.mkdir(parents=True, exist_ok=True)
+        ns.output.write_text(mod.build_html(metrics), encoding="utf-8")
+        mode = "SYNTHETIC" if metrics.get("synthetic") else "scored"
+        print(f"[{mode}] {metrics['n_configs']} configs → {ns.output}")
         return
 
     # Later stages land in subsequent PRs; fail loudly instead of silently.
