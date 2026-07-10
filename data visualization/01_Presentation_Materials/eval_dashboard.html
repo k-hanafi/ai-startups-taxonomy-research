@@ -311,7 +311,7 @@ footer {
   <button type="button" class="btn-ghost" id="btn-show-all">Show all</button>
   <button type="button" class="btn-ghost" id="btn-clear">Clear</button>
   <span class="toolbar-count" id="filter-count"></span>
-  <div class="pill-row"><button type="button" class="pill active" data-config="nano-low">nano / low</button><button type="button" class="pill active" data-config="nano-med">nano / medium</button><button type="button" class="pill active" data-config="nano-high">nano / high</button><button type="button" class="pill active" data-config="mini-low">mini / low</button><button type="button" class="pill active" data-config="mini-med">mini / medium</button><button type="button" class="pill active" data-config="mini-high">mini / high</button><button type="button" class="pill active" data-config="luna-low">luna / low</button><button type="button" class="pill active" data-config="luna-med">luna / medium</button><button type="button" class="pill active" data-config="luna-high">luna / high</button></div>
+  <div class="pill-row"><button type="button" class="pill active" data-config="mock_gpt-5.4-nano_low_r1">nano / low</button><button type="button" class="pill active" data-config="mock_gpt-5.4-nano_medium_r1">nano / medium</button><button type="button" class="pill active" data-config="mock_gpt-5.4-nano_high_r1">nano / high</button><button type="button" class="pill active" data-config="mock_gpt-5.4-mini_low_r1">mini / low</button><button type="button" class="pill active" data-config="mock_gpt-5.4-mini_medium_r1">mini / medium</button><button type="button" class="pill active" data-config="mock_gpt-5.4-mini_high_r1">mini / high</button><button type="button" class="pill active" data-config="mock_gpt-5.6-luna_low_r1">luna / low</button><button type="button" class="pill active" data-config="mock_gpt-5.6-luna_medium_r1">luna / medium</button><button type="button" class="pill active" data-config="mock_gpt-5.6-luna_high_r1">luna / high</button></div>
 </div>
 
 
@@ -362,13 +362,13 @@ footer {
   <footer>
     Generated 2026-07-10 · regenerate with
     <code>python "data visualization/02_Analysis_Code/build_eval_dashboard.py"</code>
-    or <code>python -m evals dashboard --fixture</code>.
+    or <code>python -m evals dashboard</code> (mock fixture by default).
     Config filter is required for multi-run charts.
   </footer>
 </div>
 <script>
 
-const M = {"synthetic": true, "source": "evals/tests/fixtures/dashboard_mock_runs.json", "n_configs": 9, "configs": [{"id": "nano-low", "label": "nano / low", "run_id": "mock_gpt-5.4-nano_low_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "low", "n_scored": 100, "subclass_acc": 0.68, "subclass_ci": 0.09200000000000003, "ai_native_acc": 0.9, "rad_acc": 0.76, "macro_f1": 0.62, "projected_usd": 95.0, "mean_confidence": 0.78, "share_above_90": 0.38, "ece": 0.088, "latency_p50": 2.4, "latency_p95": 5.9}, {"id": "nano-med", "label": "nano / medium", "run_id": "mock_gpt-5.4-nano_medium_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "medium", "n_scored": 100, "subclass_acc": 0.74, "subclass_ci": 0.08499999999999996, "ai_native_acc": 0.93, "rad_acc": 0.81, "macro_f1": 0.69, "projected_usd": 118.0, "mean_confidence": 0.83, "share_above_90": 0.46, "ece": 0.071, "latency_p50": 3.1, "latency_p95": 7.8}, {"id": "nano-high", "label": "nano / high", "run_id": "mock_gpt-5.4-nano_high_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "high", "n_scored": 100, "subclass_acc": 0.76, "subclass_ci": 0.08199999999999996, "ai_native_acc": 0.94, "rad_acc": 0.82, "macro_f1": 0.71, "projected_usd": 175.0, "mean_confidence": 0.85, "share_above_90": 0.51, "ece": 0.064, "latency_p50": 4.0, "latency_p95": 9.6}, {"id": "mini-low", "label": "mini / low", "run_id": "mock_gpt-5.4-mini_low_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "low", "n_scored": 100, "subclass_acc": 0.78, "subclass_ci": 0.08000000000000002, "ai_native_acc": 0.95, "rad_acc": 0.83, "macro_f1": 0.74, "projected_usd": 290.0, "mean_confidence": 0.85, "share_above_90": 0.54, "ece": 0.052, "latency_p50": 3.8, "latency_p95": 9.1}, {"id": "mini-med", "label": "mini / medium", "run_id": "mock_gpt-5.4-mini_medium_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "medium", "n_scored": 100, "subclass_acc": 0.82, "subclass_ci": 0.07500000000000001, "ai_native_acc": 0.96, "rad_acc": 0.85, "macro_f1": 0.78, "projected_usd": 412.0, "mean_confidence": 0.88, "share_above_90": 0.61, "ece": 0.038, "latency_p50": 4.6, "latency_p95": 11.2}, {"id": "mini-high", "label": "mini / high", "run_id": "mock_gpt-5.4-mini_high_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "high", "n_scored": 100, "subclass_acc": 0.84, "subclass_ci": 0.07200000000000001, "ai_native_acc": 0.97, "rad_acc": 0.86, "macro_f1": 0.8, "projected_usd": 580.0, "mean_confidence": 0.89, "share_above_90": 0.66, "ece": 0.035, "latency_p50": 5.8, "latency_p95": 13.4}, {"id": "luna-low", "label": "luna / low", "run_id": "mock_gpt-5.6-luna_low_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "low", "n_scored": 100, "subclass_acc": 0.81, "subclass_ci": 0.07600000000000001, "ai_native_acc": 0.96, "rad_acc": 0.84, "macro_f1": 0.77, "projected_usd": 980.0, "mean_confidence": 0.88, "share_above_90": 0.63, "ece": 0.045, "latency_p50": 6.2, "latency_p95": 14.8}, {"id": "luna-med", "label": "luna / medium", "run_id": "mock_gpt-5.6-luna_medium_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "medium", "n_scored": 100, "subclass_acc": 0.85, "subclass_ci": 0.07, "ai_native_acc": 0.97, "rad_acc": 0.87, "macro_f1": 0.81, "projected_usd": 1450.0, "mean_confidence": 0.9, "share_above_90": 0.7, "ece": 0.041, "latency_p50": 7.9, "latency_p95": 18.2}, {"id": "luna-high", "label": "luna / high", "run_id": "mock_gpt-5.6-luna_high_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "high", "n_scored": 100, "subclass_acc": 0.86, "subclass_ci": 0.068, "ai_native_acc": 0.98, "rad_acc": 0.88, "macro_f1": 0.82, "projected_usd": 2100.0, "mean_confidence": 0.92, "share_above_90": 0.74, "ece": 0.048, "latency_p50": 9.8, "latency_p95": 22.5}], "config_ids": ["nano-low", "nano-med", "nano-high", "mini-low", "mini-med", "mini-high", "luna-low", "luna-med", "luna-high"], "model_groups": {"nano": {"label": "nano", "ids": ["nano-low", "nano-med", "nano-high"]}, "mini": {"label": "mini", "ids": ["mini-low", "mini-med", "mini-high"]}, "luna": {"label": "luna", "ids": ["luna-low", "luna-med", "luna-high"]}}, "model_group_order": ["nano", "mini", "luna"]};
+const M = {"synthetic": true, "source": "evals/tests/fixtures/dashboard_mock_runs.json", "n_configs": 9, "configs": [{"id": "mock_gpt-5.4-nano_low_r1", "label": "nano / low", "run_id": "mock_gpt-5.4-nano_low_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "low", "n_scored": 100, "subclass_acc": 0.68, "subclass_ci": 0.09200000000000003, "ai_native_acc": 0.9, "rad_acc": 0.76, "macro_f1": 0.62, "projected_usd": 95.0, "mean_confidence": 0.78, "share_above_90": 0.38, "ece": 0.088, "latency_p50": 2.4, "latency_p95": 5.9}, {"id": "mock_gpt-5.4-nano_medium_r1", "label": "nano / medium", "run_id": "mock_gpt-5.4-nano_medium_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "medium", "n_scored": 100, "subclass_acc": 0.74, "subclass_ci": 0.08499999999999996, "ai_native_acc": 0.93, "rad_acc": 0.81, "macro_f1": 0.69, "projected_usd": 118.0, "mean_confidence": 0.83, "share_above_90": 0.46, "ece": 0.071, "latency_p50": 3.1, "latency_p95": 7.8}, {"id": "mock_gpt-5.4-nano_high_r1", "label": "nano / high", "run_id": "mock_gpt-5.4-nano_high_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "high", "n_scored": 100, "subclass_acc": 0.76, "subclass_ci": 0.08199999999999996, "ai_native_acc": 0.94, "rad_acc": 0.82, "macro_f1": 0.71, "projected_usd": 175.0, "mean_confidence": 0.85, "share_above_90": 0.51, "ece": 0.064, "latency_p50": 4.0, "latency_p95": 9.6}, {"id": "mock_gpt-5.4-mini_low_r1", "label": "mini / low", "run_id": "mock_gpt-5.4-mini_low_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "low", "n_scored": 100, "subclass_acc": 0.78, "subclass_ci": 0.08000000000000002, "ai_native_acc": 0.95, "rad_acc": 0.83, "macro_f1": 0.74, "projected_usd": 290.0, "mean_confidence": 0.85, "share_above_90": 0.54, "ece": 0.052, "latency_p50": 3.8, "latency_p95": 9.1}, {"id": "mock_gpt-5.4-mini_medium_r1", "label": "mini / medium", "run_id": "mock_gpt-5.4-mini_medium_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "medium", "n_scored": 100, "subclass_acc": 0.82, "subclass_ci": 0.07500000000000001, "ai_native_acc": 0.96, "rad_acc": 0.85, "macro_f1": 0.78, "projected_usd": 412.0, "mean_confidence": 0.88, "share_above_90": 0.61, "ece": 0.038, "latency_p50": 4.6, "latency_p95": 11.2}, {"id": "mock_gpt-5.4-mini_high_r1", "label": "mini / high", "run_id": "mock_gpt-5.4-mini_high_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "high", "n_scored": 100, "subclass_acc": 0.84, "subclass_ci": 0.07200000000000001, "ai_native_acc": 0.97, "rad_acc": 0.86, "macro_f1": 0.8, "projected_usd": 580.0, "mean_confidence": 0.89, "share_above_90": 0.66, "ece": 0.035, "latency_p50": 5.8, "latency_p95": 13.4}, {"id": "mock_gpt-5.6-luna_low_r1", "label": "luna / low", "run_id": "mock_gpt-5.6-luna_low_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "low", "n_scored": 100, "subclass_acc": 0.81, "subclass_ci": 0.07600000000000001, "ai_native_acc": 0.96, "rad_acc": 0.84, "macro_f1": 0.77, "projected_usd": 980.0, "mean_confidence": 0.88, "share_above_90": 0.63, "ece": 0.045, "latency_p50": 6.2, "latency_p95": 14.8}, {"id": "mock_gpt-5.6-luna_medium_r1", "label": "luna / medium", "run_id": "mock_gpt-5.6-luna_medium_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "medium", "n_scored": 100, "subclass_acc": 0.85, "subclass_ci": 0.07, "ai_native_acc": 0.97, "rad_acc": 0.87, "macro_f1": 0.81, "projected_usd": 1450.0, "mean_confidence": 0.9, "share_above_90": 0.7, "ece": 0.041, "latency_p50": 7.9, "latency_p95": 18.2}, {"id": "mock_gpt-5.6-luna_high_r1", "label": "luna / high", "run_id": "mock_gpt-5.6-luna_high_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "high", "n_scored": 100, "subclass_acc": 0.86, "subclass_ci": 0.068, "ai_native_acc": 0.98, "rad_acc": 0.88, "macro_f1": 0.82, "projected_usd": 2100.0, "mean_confidence": 0.92, "share_above_90": 0.74, "ece": 0.048, "latency_p50": 9.8, "latency_p95": 22.5}], "config_ids": ["mock_gpt-5.4-nano_low_r1", "mock_gpt-5.4-nano_medium_r1", "mock_gpt-5.4-nano_high_r1", "mock_gpt-5.4-mini_low_r1", "mock_gpt-5.4-mini_medium_r1", "mock_gpt-5.4-mini_high_r1", "mock_gpt-5.6-luna_low_r1", "mock_gpt-5.6-luna_medium_r1", "mock_gpt-5.6-luna_high_r1"], "model_groups": {"nano": {"label": "nano", "ids": ["mock_gpt-5.4-nano_low_r1", "mock_gpt-5.4-nano_medium_r1", "mock_gpt-5.4-nano_high_r1"]}, "mini": {"label": "mini", "ids": ["mock_gpt-5.4-mini_low_r1", "mock_gpt-5.4-mini_medium_r1", "mock_gpt-5.4-mini_high_r1"]}, "luna": {"label": "luna", "ids": ["mock_gpt-5.6-luna_low_r1", "mock_gpt-5.6-luna_medium_r1", "mock_gpt-5.6-luna_high_r1"]}}, "model_group_order": ["nano", "mini", "luna"]};
 const COLORS = {"nano": "#6366f1", "mini": "#0d9488", "luna": "#d97706"};
 
 const cfg = {displayModeBar: false, responsive: true};
@@ -405,15 +405,17 @@ function sec(x) {
   return Number(x).toFixed(2) + 's';
 }
 
-let visible = new Set(M.config_ids);
+let visible = new Set(M.configs.map(c => c.id));
 
 function visibleConfigs() {
   return M.configs.filter(c => visible.has(c.id));
 }
 
 function updateCount() {
+  // Count visible *rows*, not Set size: ids are unique per run_id, but
+  // row count is the source of truth if a bad payload ever reuses an id.
   const el = document.getElementById('filter-count');
-  if (el) el.textContent = visible.size + ' of ' + M.config_ids.length + ' visible';
+  if (el) el.textContent = visibleConfigs().length + ' of ' + M.configs.length + ' visible';
 }
 
 function syncPills() {
@@ -445,7 +447,7 @@ function toggleGroup(group) {
 }
 
 function showAll() {
-  visible = new Set(M.config_ids);
+  visible = new Set(M.configs.map(c => c.id));
   syncPills();
   renderAll();
 }
@@ -467,8 +469,15 @@ function renderPareto() {
   const host = document.getElementById('chart-pareto');
   if (!host) return;
   if (!runs.length) { emptyChart('chart-pareto', 'Turn on a config above to show the Pareto chart.'); return; }
+  // Log x-axis cannot place null/<=0 cost (legacy scored.json). Omit those
+  // points; leaderboard still shows money() "n/a" for the same configs.
+  const plottable = runs.filter(c => c.projected_usd != null && c.projected_usd > 0);
+  if (!plottable.length) {
+    emptyChart('chart-pareto', 'No configs with a positive projected cost to plot.');
+    return;
+  }
   host.innerHTML = '';
-  const traces = runs.map(c => ({
+  const traces = plottable.map(c => ({
     type: 'scatter',
     mode: 'markers+text',
     name: c.label,
