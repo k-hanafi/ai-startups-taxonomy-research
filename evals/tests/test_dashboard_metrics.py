@@ -162,3 +162,44 @@ def test_projected_usd_none_when_cost_unavailable():
     }
     row = config_row_from_scored(stub)
     assert row["projected_usd"] is None
+
+
+def _load_eval_dashboard_builder():
+    import argparse
+    import importlib.util
+
+    from evals.paths import PROJECT_ROOT
+
+    builder = (
+        PROJECT_ROOT
+        / "data visualization"
+        / "02_Analysis_Code"
+        / "build_eval_dashboard.py"
+    )
+    spec = importlib.util.spec_from_file_location("build_eval_dashboard", builder)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return argparse, mod
+
+
+def test_resolve_metrics_defaults_to_fixture_not_discovered_runs():
+    """Bare dashboard build must stay on the mock matrix (no auto-load of banked scored.json)."""
+    argparse, mod = _load_eval_dashboard_builder()
+    ns = argparse.Namespace(
+        fixture=None,
+        force_fixture=False,
+        scored=None,
+        runs=None,
+    )
+    metrics = mod.resolve_metrics(ns)
+    assert metrics["synthetic"] is True
+    assert metrics["n_configs"] == 9
+
+    ns_force = argparse.Namespace(
+        fixture=None,
+        force_fixture=True,
+        scored=None,
+        runs=None,
+    )
+    assert mod.resolve_metrics(ns_force)["synthetic"] is True
