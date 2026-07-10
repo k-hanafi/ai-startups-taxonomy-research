@@ -21,6 +21,19 @@ from evals.dashboard_metrics import (
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 MOCK = FIXTURES / "dashboard_mock_runs.json"
 
+# Fixture run_ids (unique filter keys). Labels stay model×effort.
+FIXTURE_IDS = [
+    "mock_gpt-5.4-nano_low_r1",
+    "mock_gpt-5.4-nano_medium_r1",
+    "mock_gpt-5.4-nano_high_r1",
+    "mock_gpt-5.4-mini_low_r1",
+    "mock_gpt-5.4-mini_medium_r1",
+    "mock_gpt-5.4-mini_high_r1",
+    "mock_gpt-5.6-luna_low_r1",
+    "mock_gpt-5.6-luna_medium_r1",
+    "mock_gpt-5.6-luna_high_r1",
+]
+
 
 def test_default_fixture_path_exists():
     assert DEFAULT_FIXTURE.exists()
@@ -33,12 +46,9 @@ def test_load_fixture_has_nine_stage8_configs():
     assert metrics["n_configs"] == 9
     assert len(metrics["configs"]) == 9
     assert len(metrics["config_ids"]) == 9
-    # Filter keys the HTML toolbar needs.
-    assert set(metrics["config_ids"]) == {
-        "nano-low", "nano-med", "nano-high",
-        "mini-low", "mini-med", "mini-high",
-        "luna-low", "luna-med", "luna-high",
-    }
+    # Filter keys are unique per run (run_id), not collapsed model×effort.
+    assert set(metrics["config_ids"]) == set(FIXTURE_IDS)
+    assert len(set(metrics["config_ids"])) == 9
     assert metrics["model_group_order"] == list(MODEL_GROUP_ORDER)
     for g in MODEL_GROUP_ORDER:
         assert g in metrics["model_groups"]
@@ -47,7 +57,8 @@ def test_load_fixture_has_nine_stage8_configs():
 
 def test_fixture_rows_carry_chart_fields():
     metrics = load_fixture(MOCK)
-    row = next(c for c in metrics["configs"] if c["id"] == "mini-med")
+    row = next(c for c in metrics["configs"] if c["id"] == "mock_gpt-5.4-mini_medium_r1")
+    assert row["label"] == "mini / medium"
     assert row["model"] == "gpt-5.4-mini"
     assert row["effort_b"] == "medium"
     assert row["model_group"] == "mini"
@@ -81,7 +92,8 @@ def test_config_row_from_minimal_scored_stub():
         "calibration": None,
     }
     row = config_row_from_scored(stub)
-    assert row["id"] == "nano-high"
+    assert row["id"] == "2026-07-10_gpt-5.4-nano_high_r1"
+    assert row["label"] == "nano / high"
     assert row["model_group"] == "nano"
     assert row["subclass_acc"] == 0.7
     assert row["subclass_ci"] == pytest.approx(0.1)
@@ -94,8 +106,59 @@ def test_build_metrics_filter_keys_stable_order():
     # Feed runs out of order; output should still be nano→mini→luna × low→med→high.
     shuffled = list(reversed(raw["scored_runs"]))
     metrics = build_metrics(shuffled, synthetic=True, source="test")
-    assert metrics["config_ids"] == [
-        "nano-low", "nano-med", "nano-high",
-        "mini-low", "mini-med", "mini-high",
-        "luna-low", "luna-med", "luna-high",
+    assert metrics["config_ids"] == FIXTURE_IDS
+
+
+def test_duplicate_model_effort_keeps_distinct_filter_ids():
+    """Stage-2 finalist repeats share model×effort but must not collide in Set filters."""
+    base = {
+        "model": "gpt-5.4-mini",
+        "effort_b": "medium",
+        "n_scored": 100,
+        "axes": {
+            "subclass": {"accuracy": 0.85, "accuracy_ci95": [0.8, 0.9], "macro_f1": 0.8},
+            "ai_native": {"accuracy": 0.95, "accuracy_ci95": [0.9, 1.0], "macro_f1": 0.95},
+            "rad": {"accuracy": 0.88, "accuracy_ci95": [0.82, 0.94], "macro_f1": 0.86},
+        },
+        "screen": {"id": "mini-med", "label": "mini / medium"},
+    }
+    runs = [
+        {**base, "run_id": "2026-07-10_gpt-5.4-mini_medium_r1"},
+        {**base, "run_id": "2026-07-10_gpt-5.4-mini_medium_r2"},
+        {**base, "run_id": "2026-07-10_gpt-5.4-mini_medium_r3"},
     ]
+    metrics = build_metrics(runs, synthetic=True, source="finalist-repeats")
+    assert metrics["n_configs"] == 3
+    assert len(set(metrics["config_ids"])) == 3
+    assert metrics["config_ids"] == [
+        "2026-07-10_gpt-5.4-mini_medium_r1",
+        "2026-07-10_gpt-5.4-mini_medium_r2",
+        "2026-07-10_gpt-5.4-mini_medium_r3",
+    ]
+    assert all(c["label"] == "mini / medium" for c in metrics["configs"])
+    # Group pill still lists every repeat (not collapsed to one mini-med id).
+    assert len(metrics["model_groups"]["mini"]["ids"]) == 3
+
+
+def test_projected_usd_none_when_cost_unavailable():
+    """Legacy / blocked cost estimates yield null; Pareto must omit those points."""
+    stub = {
+        "run_id": "2026-07-10_gpt-5.4-nano_low_r1",
+        "model": "gpt-5.4-nano",
+        "effort_b": "low",
+        "n_scored": 10,
+        "axes": {
+            "subclass": {
+                "accuracy": 0.7,
+                "accuracy_ci95": [0.6, 0.8],
+                "macro_f1": 0.65,
+            },
+            "ai_native": {"accuracy": 0.9, "accuracy_ci95": [0.8, 1.0], "macro_f1": 0.9},
+            "rad": {"accuracy": 0.8, "accuracy_ci95": [0.7, 0.9], "macro_f1": 0.75},
+        },
+        "production_cost_estimate": {"available": False},
+        "latency": {"latency_s": {"p50": 2.0, "p95": 5.0}},
+        "calibration": None,
+    }
+    row = config_row_from_scored(stub)
+    assert row["projected_usd"] is None
