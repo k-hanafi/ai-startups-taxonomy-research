@@ -421,9 +421,9 @@ function renderPareto() {
   const host = document.getElementById('chart-pareto');
   if (!host) return;
   if (!runs.length) { emptyChart('chart-pareto', 'Turn on a config above to show the Pareto chart.'); return; }
-  // Log x-axis cannot place null/<=0 cost (legacy scored.json). Omit those
-  // points; leaderboard still shows money() "n/a" for the same configs.
-  const plottable = runs.filter(c => c.projected_usd != null && c.projected_usd > 0);
+  // Log x-axis cannot place null/NaN/<=0 cost (legacy scored.json). Omit
+  // those points; leaderboard still shows money() "n/a" for the same configs.
+  const plottable = runs.filter(c => Number.isFinite(c.projected_usd) && c.projected_usd > 0);
   if (!plottable.length) {
     emptyChart('chart-pareto', 'No configs with a positive projected cost to plot.');
     return;
