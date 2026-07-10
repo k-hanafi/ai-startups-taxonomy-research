@@ -27,10 +27,10 @@ todos:
     content: "Stage 7: Batch parity smoke (gate Q4, PASS) + evals/scoring.py scorer — MERGED #16. Calibration wire-up (score --confidence-from-raw, chosen-digit confidence per pivot 6) — MERGED #18"
     status: completed
   - id: stage8-experiments
-    content: "Stage 8 (PR 8, paid): model/config selection on the COMMITTED two-pass architecture (pivot 7) — sweep GPT-family models (nano, mini, one larger if affordable) x Pass B effort (medium vs high, per the 77%-vs-66% banked finding), measuring accuracy, calibration, cost, and latency; repeats on finalists. Needs a small pre-Stage-8 runner tweak to record per-row latency (not currently captured). Banked single-pass runs are reference points, not competitors"
+    content: "Stage 8 (paid CLI, not a code PR until runs expose fixes): model/config selection on the COMMITTED two-pass architecture (pivot 7) — sweep GPT-family models (nano, mini, one larger if affordable) x Pass B effort (medium vs high, per the 77%-vs-66% banked finding), measuring accuracy, calibration, cost, and latency; repeats on finalists. Latency capture landed in #19; cost extrapolation in #21. Banked single-pass runs are reference points, not competitors"
     status: pending
   - id: stage9-dashboard
-    content: "Stage 9 (PR 9): house-style static HTML dashboard: Pareto, per-axis metrics + CIs, confusion, calibration, disagreement browser"
+    content: "Stage 9 (PR 9): house-style static HTML dashboard: Pareto, per-axis metrics + CIs, confusion, calibration, disagreement browser (after Stage 8 runs exist)"
     status: pending
   - id: stage10-wrapup
     content: "Stage 10 (PR 10): evals/tests/, AGENTS.md updates, written report answering the three eval questions (pivot 7: calibration, model selection, implementation robustness) + model recommendation"
@@ -42,17 +42,17 @@ isProject: false
 
 ## STATUS (source of truth — update after every PR merge / pivot)
 
-Last updated: **2026-07-08** (pivot 8 locked: cached_tokens + production cost extrapolation on the committed two-pass path; PR open on `eval-harness/cached-tokens-cost-extrapolate`).
+Last updated: **2026-07-09** (PR **#21** / pivot 8 MERGED; no open PRs. Next = Stage 8 paid model/config sweep. Today's user intent: full eval benchmark → understand → dashboard instance → later plan `src/` two-pass promotion for ~40k).
 
 | Field | Value |
 |-------|--------|
-| **Last merged** | PR **#20** — parity-report resilience (eval Q3): batch-parity no longer aborts via `SystemExit` when the batch phase times out or finishes without an output file. Writes the parity report anyway (`batch_error` + forced FAIL verdict), CLI still exits nonzero. Squash-merged by user 2026-07-08 (`cb30187` on `main`). |
-| **Open now** | This PR — `eval-harness/cached-tokens-cost-extrapolate`: capture `cached_tokens` in eval runners + reusable `evals/cost_extrapolate.py` ladder in `scored.json` / `report` (pivot 8). Stop at MERGE-READY; user merges. |
-| **Working branch** | `eval-harness/cached-tokens-cost-extrapolate` (cut from `origin/main` after #20). |
-| **Next** | After this merges: Stage 8 paid model/config selection on the committed two-pass architecture (pivot 7), using measured cache rates from two-pass runs (never the old single-pass ~78% production figure). Paid — USER runs CLI or delegates (decision pending). Open decisions: final model list; timing of end-of-pipeline gold re-draft (pivot 5). |
+| **Last merged** | PR **#21** — pivot 8: `cached_tokens` in eval runners + `evals/cost_extrapolate.py` ladder into `scored.json` / `python -m evals report` (production cost extrapolation on the committed two-pass path). Merged 2026-07-09 (`72ceeee` on `main`). |
+| **Open now** | **None.** No open PRs. |
+| **Working branch** | `main` (pull after #21). Stage 8 is a **paid CLI experiment**, not a code PR until runs expose fixes. |
+| **Next** | **Stage 8** paid model/config selection on the committed two-pass architecture (pivot 7): sweep GPT-family models × Pass B `medium` vs `high`, measuring accuracy, calibration, cost, latency; use measured two-pass cache rates (never the old single-pass ~78% figure). Then **Stage 9** house-style dashboard → **Stage 10** written report (three eval questions). Production `src/` two-pass + logprob promotion stays **gated until after dashboard insights** (~40k alive+dead plan is later, not today). Paid — USER runs CLI or delegates (decision pending). Open decisions: final model list; who runs/pays; timing of end-of-pipeline gold re-draft (pivot 5). |
 | **Gold labels** | Fable `draft_*` = provisional gold (pivot 4; human review waived, `gold_verdict` stays 0/100 by design). ONE full agent re-draft deferred to end of pipeline, after all design decisions lock (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
-| **Architecture reminder** | Two-pass is COMMITTED for production promotion (pivots 7–8). `src/` classifier is still historically one-pass; eval/cost projections assume two-pass. Banked single-pass runs are reference points only. |
+| **Architecture reminder** | Two-pass is COMMITTED for production promotion (pivots 7–8). `src/` classifier is still historically one-pass; eval/cost projections assume two-pass. Banked single-pass runs are reference points only. Do **not** start `src/` two-pass promotion until Stage 8–9 insights land. |
 
 ### Done
 
@@ -68,14 +68,19 @@ Last updated: **2026-07-08** (pivot 8 locked: cached_tokens + production cost ex
 | #18 | 7 calibration wire-up | `eval-harness/calibration-wireup` (deleted) | Merged by user 2026-07-08. `score --confidence-from-raw` runs the Stage 6 extractor over `raw/` and feeds chosen-digit confidence (pivot 6) into the scorer's external-mapping seam (scoring.py still never imports logprob_extract; the CLI is the connector). Verified on banked none_r1: ECE 0.077 (n=100), all 4 minority-sampling rows below 0.5 confidence. |
 | #19 | pre-8 latency capture | `eval-harness/latency-capture` | Merged by user 2026-07-08. Per-row wall-clock latency in run records + mean/p50/p95/max latency block in scored.json — the measured axis pivot 7 added for Stage 8. |
 | #20 | Q3 parity resilience | `eval-harness/parity-report-resilience` | Squash-merged 2026-07-08 (`cb30187`). Batch timeout / missing-output no longer discard paid sync results; `batch_error` + forced FAIL + nonzero exit. |
+| #21 | pivot 8 cost extrapolate | `eval-harness/cached-tokens-cost-extrapolate` | Merged 2026-07-09 (`72ceeee`). `cached_tokens` in runners; `cost_extrapolate.py` ladder in `scored.json`; `python -m evals report` → `cost_report.html`. Scale-up N default = alive+dead ≈ 41,076. |
 
 ### In progress
 
-- Pivot 8 PR: cached_tokens capture + production cost extrapolation module (before/alongside Stage 8, not deferred to Stage 9).
+- **Stage 8 (paid):** model/config selection on the committed two-pass architecture — USER/delegate runs `python -m evals run-two-pass` matrix. No open code PR until runs expose fixes.
 
-### Pending (in order)
+### Pending (in order) — NEXT STEPS
 
-Pivot 8 merge (user) → PR 8 paid Stage 8 model/config selection experiment (pivot 7: sweep GPT-family models × Pass B medium-vs-high effort on the committed two-pass architecture, provisionally scored vs current drafts; banked single-pass runs are reference points only; cost axis uses measured two-pass cache rates via pivot 8) → **final gold re-draft + offline re-score (pivot 5)** → PR 9 dashboard → PR 10 report answering the three eval questions + `AGENTS.md`.
+1. **Stage 8** — paid GPT-family × Pass B medium-vs-high sweep (pivot 7); score with `--confidence-from-raw`; cost axis uses measured two-pass cache rates (pivot 8). Banked single-pass nano runs = reference only. Provisionally scored vs current Fable drafts.
+2. **Stage 9** — house-style static HTML dashboard (Pareto, CIs, confusion, calibration, disagreement browser). Until then: `python -m evals report <run_id>` is the interim cost-ladder view (`cost_report.html`).
+3. **Stage 10** — written report answering the three eval questions (calibration, model selection, implementation robustness) + model recommendation + `AGENTS.md`.
+4. **After insights (NOT today):** plan two-pass + logprob promotion into `src/` for ~40k production (alive+dead). Gated on Stage 8–9.
+5. **Pivot 5 (timing TBD):** final gold re-draft + offline re-score of all banked runs.
 
 ### Pivots locked (do not rediscover in chat)
 

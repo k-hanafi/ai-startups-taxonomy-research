@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-08 · Active branch: `main` (eval harness: pivot 8 cost extrapolation on PR branch)
+Last updated: 2026-07-09 · Active branch: `main` (eval harness: Stage 8 paid model/config sweep next; pivot 8 / PR #21 merged)
 
 ---
 
@@ -49,7 +49,7 @@ Authoritative plans (read when resuming a strand; committed under **`.cursor/pla
 - `.cursor/plans/survivorship_bias_wayback_*.plan.md` — death-anchored CDX probe (active survivorship strand).
 - `.cursor/plans/survivorship_tavily_pipeline_*.plan.md` — post-probe Tavily extract + classify pipeline.
 - `.cursor/plans/logprob_confidence_classifier_*.plan.md` — logprob-based confidence methodology (active).
-- `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; two-pass committed; cost extrapolation in `evals/`).
+- `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; two-pass committed; pivot 8 cost extrapolation merged; next = Stage 8 paid sweep).
 
 Cursor writes new plans to `~/.cursor/plans/` by default; copy or sync them into **`.cursor/plans/`** in this repo so they are version-controlled. Legacy copies may still exist in **`plans/`** at repo root. Repo agent skills (committed): **`portfolio-git-messages`**, **`git-commit-batch-plan`**, **`code-structure`**, **`clean-my-repo`** under **`.cursor/skills/`**. **`.cursor/rules/`** stays local.
 
