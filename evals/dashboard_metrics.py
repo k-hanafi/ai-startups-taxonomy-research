@@ -166,7 +166,14 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
         half = float(screen["subclass_ci"])
 
     group = MODEL_GROUP_BY_MODEL.get(str(model), _short_model(str(model)))
-    cfg_id = screen.get("id") or _config_id(str(model), str(effort))
+    # Filter id must be unique per scored run. model×effort (and screen.id)
+    # collide when Stage-2 finalist repeats share the same matrix cell; the
+    # HTML toolbar uses a Set of ids, so duplicates make "X of Y visible"
+    # disagree with chart/table row count. Labels stay human model×effort.
+    if run_id:
+        cfg_id = run_id
+    else:
+        cfg_id = screen.get("id") or _config_id(str(model), str(effort))
     label = screen.get("label") or f"{_short_model(str(model))} / {effort}"
 
     return {

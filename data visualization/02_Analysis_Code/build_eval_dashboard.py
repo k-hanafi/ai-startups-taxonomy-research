@@ -3,7 +3,7 @@
 
 Thin viewer skeleton: Pareto, leaderboard, confidence, latency, with a
 client-side config filter (model groups + per-config pills). Defaults to the
-synthetic Stage 8 matrix fixture until paid scored.json runs exist.
+synthetic Stage 8 matrix fixture; pass --runs / --scored for real scored.json.
 
 Writes:
     data visualization/01_Presentation_Materials/eval_dashboard.html
@@ -27,7 +27,6 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from evals.dashboard_metrics import (  # noqa: E402
     DEFAULT_FIXTURE,
-    discover_scored_runs,
     load_fixture,
     load_from_scored_paths,
 )
@@ -358,15 +357,17 @@ function sec(x) {
   return Number(x).toFixed(2) + 's';
 }
 
-let visible = new Set(M.config_ids);
+let visible = new Set(M.configs.map(c => c.id));
 
 function visibleConfigs() {
   return M.configs.filter(c => visible.has(c.id));
 }
 
 function updateCount() {
+  // Count visible *rows*, not Set size: ids are unique per run_id, but
+  // row count is the source of truth if a bad payload ever reuses an id.
   const el = document.getElementById('filter-count');
-  if (el) el.textContent = visible.size + ' of ' + M.config_ids.length + ' visible';
+  if (el) el.textContent = visibleConfigs().length + ' of ' + M.configs.length + ' visible';
 }
 
 function syncPills() {
@@ -398,7 +399,7 @@ function toggleGroup(group) {
 }
 
 function showAll() {
-  visible = new Set(M.config_ids);
+  visible = new Set(M.configs.map(c => c.id));
   syncPills();
   renderAll();
 }
@@ -420,8 +421,26 @@ function renderPareto() {
   const host = document.getElementById('chart-pareto');
   if (!host) return;
   if (!runs.length) { emptyChart('chart-pareto', 'Turn on a config above to show the Pareto chart.'); return; }
+  // Log x-axis cannot place null/NaN/<=0 cost (legacy scored.json). Omit
+  // those points; leaderboard still shows money() "n/a" for the same configs.
+  const plottable = runs.filter(c => Number.isFinite(c.projected_usd) && c.projected_usd > 0);
+  if (!plottable.length) {
+    emptyChart('chart-pareto', 'No configs with a positive projected cost to plot.');
+    return;
+  }
   host.innerHTML = '';
-  const traces = runs.map(c => ({
+  // Fit y to visible points (± CI), not the mock fixture's 60–95% band.
+  // Banked / single-pass real runs can land near ~41% subclass accuracy.
+  let yLo = Infinity;
+  let yHi = -Infinity;
+  for (const c of plottable) {
+    const ci = c.subclass_ci == null ? 0 : c.subclass_ci;
+    yLo = Math.min(yLo, c.subclass_acc - ci);
+    yHi = Math.max(yHi, c.subclass_acc + ci);
+  }
+  const pad = Math.max(0.03, (yHi - yLo) * 0.12);
+  const yRange = [Math.max(0, yLo - pad), Math.min(1, yHi + pad)];
+  const traces = plottable.map(c => ({
     type: 'scatter',
     mode: 'markers+text',
     name: c.label,
@@ -448,7 +467,7 @@ function renderPareto() {
     },
     yaxis: {
       title: {text: 'Subclass accuracy', font: {size: 11, color: '#9ca3af'}},
-      tickformat: '.0%', range: [0.6, 0.95], gridcolor: '#f3f4f6', zeroline: false,
+      tickformat: '.0%', range: yRange, gridcolor: '#f3f4f6', zeroline: false,
     },
     showlegend: false,
     margin: {l: 56, r: 16, t: 24, b: 52},
@@ -693,7 +712,7 @@ def build_html(metrics: dict) -> str:
   <footer>
     Generated {today} · regenerate with
     <code>python "data visualization/02_Analysis_Code/build_eval_dashboard.py"</code>
-    or <code>python -m evals dashboard --fixture</code>.
+    or <code>python -m evals dashboard</code> (mock fixture by default).
     Config filter is required for multi-run charts.
   </footer>
 </div>
@@ -714,10 +733,9 @@ def resolve_metrics(args: argparse.Namespace) -> dict:
         from evals.dashboard_metrics import load_from_run_ids
 
         return load_from_run_ids(args.runs)
-    # Default: fixture if no scored.json yet, else all discovered scored runs.
-    found = discover_scored_runs()
-    if found and not args.force_fixture:
-        return load_from_scored_paths(found)
+    # Default: mock fixture. Do not auto-load every evals/runs/*/scored.json
+    # (banked single-pass baselines would mix architectures and hide the banner).
+    # --force-fixture remains accepted for CLI compatibility (same outcome).
     return load_fixture(DEFAULT_FIXTURE)
 
 
@@ -728,24 +746,24 @@ def main() -> None:
         nargs="?",
         const=True,
         default=None,
-        help="Use the synthetic mock fixture (optional path). Default when no scored.json exists.",
+        help="Use the synthetic mock fixture (optional path). Same as the default when --runs/--scored are omitted.",
     )
     parser.add_argument(
         "--force-fixture",
         action="store_true",
-        help="Prefer the mock fixture even if scored.json files exist under evals/runs/.",
+        help="Explicitly use the mock fixture (same as default when --runs/--scored are omitted).",
     )
     parser.add_argument(
         "--scored",
         nargs="+",
         default=None,
-        help="One or more scored.json paths",
+        help="One or more scored.json paths (required to load real runs; no auto-discovery)",
     )
     parser.add_argument(
         "--runs",
         nargs="+",
         default=None,
-        help="Run ids under evals/runs/ (loads each scored.json)",
+        help="Run ids under evals/runs/ (loads each scored.json; required for real runs)",
     )
     parser.add_argument("-o", "--output", type=Path, default=OUTPUT_PATH)
     args = parser.parse_args()

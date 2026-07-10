@@ -185,7 +185,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `data visualization/02_Analysis_Code/*.py` | Scripts that build those dashboards |
 | `data visualization/02_Analysis_Code/survivorship_analysis.py` | Survivorship findings compute: survivor-vs-dead cohorts + 2 logistic models (pure metrics dict; PREVIEW from production if `survivorship_corrected.csv` absent) |
 | `data visualization/02_Analysis_Code/build_survivorship_insights_dashboard.py` | Renders `survivorship_insights.html` from that compute module (reuses house STYLE) |
-| `data visualization/02_Analysis_Code/build_eval_dashboard.py` | Stage 9 eval viewer (LangSmith-light UX): Pareto / leaderboard / confidence / latency + **config filter** (model groups + per-config pills). Defaults to mock fixture until Stage 8 scored runs exist. Writes `eval_dashboard.html`. |
+| `data visualization/02_Analysis_Code/build_eval_dashboard.py` | Stage 9 eval viewer (LangSmith-light UX): Pareto / leaderboard / confidence / latency + **config filter** (model groups + per-config pills). Defaults to mock fixture; pass `--runs`/`--scored` for real runs. Writes `eval_dashboard.html`. |
 | `tests/` | pytest for the live pipeline (schema, formatter, tokens, enrichment, tavily runner) |
 | `wayback_machine/tests/` | pytest for wayback (golden cleaner, cohort, state, config, budget, probe) |
 | `keys/` | API key env files, e.g. `keys/openai.env` (`OPENAI_API_KEY`). Git-ignored + cursor-ignored. **Never commit.** |
@@ -239,7 +239,7 @@ python scripts/run_tavily_crawl.py             # live homepage crawl
 # wayback run order: see wayback_machine/README.md
 
 pytest evals/tests/test_dashboard_metrics.py   # Stage 9 metrics (no OpenAI key)
-python -m evals dashboard --force-fixture      # build eval_dashboard.html from mock Stage 8 matrix
+python -m evals dashboard                       # build eval_dashboard.html from mock Stage 8 matrix (default)
 ```
 
 ## Conventions & invariants (don't break these)

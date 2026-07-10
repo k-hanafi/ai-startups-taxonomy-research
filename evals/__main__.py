@@ -87,24 +87,24 @@ def main() -> None:
         nargs="?",
         const=True,
         default=None,
-        help="Use synthetic mock fixture (optional path). Default when no scored.json exists.",
+        help="Use synthetic mock fixture (optional path). Same as default when --runs/--scored are omitted.",
     )
     p_dash.add_argument(
         "--force-fixture",
         action="store_true",
-        help="Prefer the mock fixture even if scored.json files exist",
+        help="Explicitly use the mock fixture (same as default when --runs/--scored are omitted)",
     )
     p_dash.add_argument(
         "--scored",
         nargs="+",
         default=None,
-        help="One or more scored.json paths",
+        help="One or more scored.json paths (required for real runs; no auto-discovery)",
     )
     p_dash.add_argument(
         "--runs",
         nargs="+",
         default=None,
-        help="Run ids under evals/runs/",
+        help="Run ids under evals/runs/ (required for real runs; no auto-discovery)",
     )
     p_dash.add_argument(
         "-o",
