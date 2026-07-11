@@ -19,7 +19,7 @@ from evals.dashboard_metrics import (
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-MOCK = FIXTURES / "dashboard_mock_runs.json"
+MOCK = FIXTURES / "dashboard" / "dashboard_mock_runs.json"
 
 # Fixture run_ids (unique filter keys). Labels stay model×effort.
 FIXTURE_IDS = [
@@ -62,6 +62,7 @@ def test_fixture_rows_carry_chart_fields():
     assert row["model"] == "gpt-5.4-mini"
     assert row["effort_b"] == "medium"
     assert row["model_group"] == "mini"
+    assert row["kind"] == "two_pass"
     assert 0.8 < row["subclass_acc"] < 0.9
     assert row["projected_usd"] == 412
     assert row["latency_p50"] == 4.6
@@ -69,11 +70,33 @@ def test_fixture_rows_carry_chart_fields():
     assert row["ece"] == 0.038
 
 
+def test_config_row_prefers_scored_metadata_over_run_id_parse():
+    """Explicit scored.json fields win when run_id would parse differently."""
+    stub = {
+        "run_id": "mock_gpt-5.4-nano_high_r1",  # would parse nano/high
+        "model": "gpt-5.6-luna",
+        "effort_b": "low",
+        "kind": "two_pass",
+        "n_scored": 100,
+        "axes": {
+            "subclass": {"accuracy": 0.8, "accuracy_ci95": [0.7, 0.9], "macro_f1": 0.75},
+            "ai_native": {"accuracy": 0.9, "accuracy_ci95": [0.8, 1.0], "macro_f1": 0.9},
+            "rad": {"accuracy": 0.85, "accuracy_ci95": [0.8, 0.9], "macro_f1": 0.8},
+        },
+    }
+    row = config_row_from_scored(stub)
+    assert row["model"] == "gpt-5.6-luna"
+    assert row["model_group"] == "luna"
+    assert row["effort_b"] == "low"
+    assert row["label"] == "luna / low"
+
+
 def test_config_row_from_minimal_scored_stub():
     stub = {
         "run_id": "2026-07-10_gpt-5.4-nano_high_r1",
         "model": "gpt-5.4-nano",
         "effort_b": "high",
+        "kind": "two_pass",
         "n_scored": 10,
         "axes": {
             "subclass": {
@@ -95,6 +118,7 @@ def test_config_row_from_minimal_scored_stub():
     assert row["id"] == "2026-07-10_gpt-5.4-nano_high_r1"
     assert row["label"] == "nano / high"
     assert row["model_group"] == "nano"
+    assert row["kind"] == "two_pass"
     assert row["subclass_acc"] == 0.7
     assert row["subclass_ci"] == pytest.approx(0.1)
     assert row["projected_usd"] == 120.5
@@ -135,9 +159,59 @@ def test_duplicate_model_effort_keeps_distinct_filter_ids():
         "2026-07-10_gpt-5.4-mini_medium_r2",
         "2026-07-10_gpt-5.4-mini_medium_r3",
     ]
-    assert all(c["label"] == "mini / medium" for c in metrics["configs"])
+    # Colliding model×effort labels get · rN so chart pills/axes stay distinct.
+    assert [c["label"] for c in metrics["configs"]] == [
+        "mini / medium · r1",
+        "mini / medium · r2",
+        "mini / medium · r3",
+    ]
     # Group pill still lists every repeat (not collapsed to one mini-med id).
     assert len(metrics["model_groups"]["mini"]["ids"]) == 3
+
+
+def test_single_pass_kind_for_banked_none_effort():
+    row = config_row_from_scored(
+        {
+            "run_id": "2026-07-06_gpt-5.4-nano_none_r1",
+            "model": "gpt-5.4-nano",
+            "effort": "none",
+            "kind": "single_pass",
+            "n_scored": 10,
+            "axes": {
+                "subclass": {"accuracy": 0.41, "accuracy_ci95": [0.3, 0.5], "macro_f1": 0.3},
+                "ai_native": {"accuracy": 0.8, "accuracy_ci95": [0.7, 0.9], "macro_f1": 0.8},
+                "rad": {"accuracy": 0.5, "accuracy_ci95": [0.4, 0.6], "macro_f1": 0.4},
+            },
+        }
+    )
+    assert row["kind"] == "single_pass"
+    assert row["effort_b"] == "none"
+    assert row["subclass_acc"] == 0.41
+
+
+def test_build_html_pareto_y_axis_is_data_driven():
+    """Generator must not ship the mock-only 60–95% Pareto band."""
+    _, mod = _load_eval_dashboard_builder()
+    html = mod.build_html(load_fixture(MOCK))
+    assert "range: [0.6, 0.95]" not in html
+    assert "yRange" in html
+    assert "effortCaption" in html
+    assert "Pass B ' + c.effort_b" not in html
+
+
+def test_committed_html_keeps_pareto_axis_in_sync():
+    """Checked-in eval_dashboard.html must match the generator's data-driven axis."""
+    from evals.paths import PROJECT_ROOT
+
+    html = (
+        PROJECT_ROOT
+        / "data visualization"
+        / "01_Presentation_Materials"
+        / "eval_dashboard.html"
+    ).read_text(encoding="utf-8")
+    assert "range: [0.6, 0.95]" not in html
+    assert "yRange" in html
+    assert "effortCaption" in html
 
 
 def test_projected_usd_none_when_cost_unavailable():

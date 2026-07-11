@@ -17,7 +17,12 @@ from typing import Any, Iterable, Optional
 from evals.paths import PROJECT_ROOT, RUNS_DIR, run_scored_path
 
 DEFAULT_FIXTURE = (
-    PROJECT_ROOT / "evals" / "tests" / "fixtures" / "dashboard_mock_runs.json"
+    PROJECT_ROOT
+    / "evals"
+    / "tests"
+    / "fixtures"
+    / "dashboard"
+    / "dashboard_mock_runs.json"
 )
 
 # Locked Stage 8 screen matrix (labels + fixture). Short group keys drive
@@ -55,6 +60,16 @@ def _parse_effort_from_run_id(run_id: str) -> Optional[str]:
     return None
 
 
+def _parse_repeat_from_run_id(run_id: str) -> Optional[int]:
+    """Repeat index from run_id suffix (..._r1 → 1)."""
+    if not run_id:
+        return None
+    tail = run_id.rsplit("_", 1)[-1]
+    if len(tail) >= 2 and tail[0] == "r" and tail[1:].isdigit():
+        return int(tail[1:])
+    return None
+
+
 def _parse_model_from_run_id(run_id: str) -> str:
     """Pull model slug from run_id when scored.json omits an explicit model."""
     # Patterns: 2026-07-05_gpt-5.4-nano_medium_r1, mock_gpt-5.4-mini_low_r1
@@ -62,6 +77,35 @@ def _parse_model_from_run_id(run_id: str) -> str:
         if known in run_id:
             return known
     return ""
+
+
+def _infer_kind(scored: dict[str, Any], run_id: str, effort: str) -> Optional[str]:
+    """Architecture label for leaderboard captions (two_pass vs single_pass)."""
+    kind = scored.get("kind")
+    if kind:
+        return str(kind)
+    if "2pass" in run_id or run_id.startswith("mock_"):
+        return "two_pass"
+    if effort == "none":
+        return "single_pass"
+    return None
+
+
+def _disambiguate_repeat_labels(configs: list[dict[str, Any]]) -> None:
+    """When Stage-2 finalist repeats share model×effort, append · rN to labels.
+
+    Stage-1 screens keep plain labels (one row per matrix cell). Only collide
+    when multiple runs share the same human label in one metrics payload.
+    """
+    counts: dict[str, int] = {}
+    for c in configs:
+        counts[c["label"]] = counts.get(c["label"], 0) + 1
+    for c in configs:
+        if counts[c["label"]] <= 1:
+            continue
+        rep = _parse_repeat_from_run_id(str(c.get("run_id") or ""))
+        if rep is not None:
+            c["label"] = f"{c['label']} · r{rep}"
 
 
 def _projected_usd(scored: dict[str, Any]) -> Optional[float]:
@@ -142,6 +186,7 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
     )
     effort = (
         scored.get("effort_b")
+        or scored.get("effort")
         or scored.get("reasoning_effort")
         or screen.get("effort_b")
         or _parse_effort_from_run_id(run_id)
@@ -169,12 +214,14 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
     # Filter id must be unique per scored run. model×effort (and screen.id)
     # collide when Stage-2 finalist repeats share the same matrix cell; the
     # HTML toolbar uses a Set of ids, so duplicates make "X of Y visible"
-    # disagree with chart/table row count. Labels stay human model×effort.
+    # disagree with chart/table row count. Labels stay human model×effort
+    # until build_metrics disambiguates collisions with · rN.
     if run_id:
         cfg_id = run_id
     else:
         cfg_id = screen.get("id") or _config_id(str(model), str(effort))
     label = screen.get("label") or f"{_short_model(str(model))} / {effort}"
+    kind = _infer_kind(scored, run_id, str(effort))
 
     return {
         "id": cfg_id,
@@ -183,6 +230,7 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
         "model": model,
         "model_group": group,
         "effort_b": effort,
+        "kind": kind,
         "n_scored": scored.get("n_scored"),
         "subclass_acc": subclass_acc,
         "subclass_ci": half,
@@ -244,6 +292,7 @@ def build_metrics(
 ) -> dict[str, Any]:
     """Build the chart-ready metrics dict (configs + filter keys)."""
     configs = _sort_configs([config_row_from_scored(s) for s in scored_runs])
+    _disambiguate_repeat_labels(configs)
     return {
         "synthetic": synthetic,
         "source": source,
