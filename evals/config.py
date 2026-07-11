@@ -18,6 +18,11 @@ EVAL_MODELS: list[str] = [
     "gpt-5.6-luna",
 ]
 
+# Pass B effort arms for the locked 9-cell Stage 8 screen (not "none":
+# Pass A already owns the logprob/calibration axis at effort=none).
+STAGE8_PASS_B_EFFORTS: list[str] = ["low", "medium", "high"]
+
+# Legacy single-pass knobs (kept for scoring older banked runs only).
 SCREEN_REASONING_EFFORT: str = "medium"
 REASONING_EFFORTS: list[str] = ["none", "low", "medium", "high"]
 FINALIST_REPEATS: int = 3
@@ -57,8 +62,24 @@ COHORT_BOUNDARY: tuple[int, int] = (2023, 3)
 # Request parameters (experimental; production does not send these yet)
 # ---------------------------------------------------------------------------
 
+# Pass A is a binary {0,1} digit decision. Request depth 2 so both legal
+# values can appear in top_logprobs. Legacy TOP_LOGPROBS=15 was a single-pass
+# subclass leftover and must not drive Pass A or parity success criteria.
+PASS_A_TOP_LOGPROBS: int = 2
+# Kept for legacy single-pass runner / older banked runs only.
 TOP_LOGPROBS: int = 15
 LOGPROB_INCLUDE: list[str] = ["message.output_text.logprobs"]
+
+# Rough Pass B output+reasoning token guesses for dry-run budget preflight.
+# Input-only char/4 estimates understate high-effort spend; these are order-of-
+# magnitude only (observed single-pass high peaked ~1,450 output tokens).
+PASS_B_OUTPUT_TOKEN_ESTIMATE: dict[str, int] = {
+    "none": 250,
+    "low": 500,
+    "medium": 1_000,
+    "high": 1_600,
+}
+PASS_A_OUTPUT_TOKEN_ESTIMATE: int = 8
 
 # Empirical finding (2026-07-05, gpt-5.4-nano): reasoning models reject the
 # `temperature` parameter with a 400 ("not supported with this model"). They

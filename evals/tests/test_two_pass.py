@@ -98,7 +98,7 @@ def test_pass_a_sends_logprobs_pass_b_does_not(sample_row):
     kb = two_pass.pass_b_kwargs(sample_row, 1, "GENAI-ERA", "gpt-5.4-nano", "high")
 
     assert ka["reasoning"] == {"effort": cfg.PASS_A_EFFORT}
-    assert ka["top_logprobs"] == cfg.TOP_LOGPROBS
+    assert ka["top_logprobs"] == cfg.PASS_A_TOP_LOGPROBS
     assert ka["include"] == list(cfg.LOGPROB_INCLUDE)
 
     assert kb["reasoning"] == {"effort": "high"}
@@ -112,7 +112,7 @@ def test_pass_a_sends_logprobs_pass_b_does_not(sample_row):
 
 def _resp(status: str, payload: dict | None, reasoning: int = 0,
           cached: int = 0):
-    return SimpleNamespace(
+    ns = SimpleNamespace(
         status=status,
         output_text=json.dumps(payload) if payload is not None else "",
         usage=SimpleNamespace(
@@ -121,6 +121,17 @@ def _resp(status: str, payload: dict | None, reasoning: int = 0,
             input_tokens_details=SimpleNamespace(cached_tokens=cached),
         ),
     )
+    ns.model_dump = lambda: {
+        "status": status,
+        "output_text": ns.output_text,
+        "usage": {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "output_tokens_details": {"reasoning_tokens": reasoning},
+            "input_tokens_details": {"cached_tokens": cached},
+        },
+    }
+    return ns
 
 
 def test_assemble_record_ai_native_family():
@@ -222,3 +233,185 @@ def test_dry_run_refuses_unknown_model_pricing(monkeypatch):
     ])
     with pytest.raises(SystemExit, match="Unknown model pricing"):
         two_pass.run_two_pass(model="gpt-not-a-real-model", dry_run=True, limit=1)
+
+
+def test_stage8_matrix_cells_locked():
+    cells = two_pass.stage8_matrix_cells()
+    assert len(cells) == 9
+    assert cells[0] == ("gpt-5.4-nano", "low")
+    assert cells[-1] == ("gpt-5.6-luna", "high")
+    with pytest.raises(SystemExit, match="Unknown Stage 8 model"):
+        two_pass.validate_stage8_cell("gpt-4o", "low")
+    with pytest.raises(SystemExit, match="Unknown Stage 8 Pass B effort"):
+        two_pass.validate_stage8_cell("gpt-5.4-nano", "none")
+
+
+def test_load_pass_a_bank_and_reuse_in_run(tmp_path, monkeypatch):
+    """Reuse path copies banked Pass A raw + verdict and only pays Pass B."""
+    bank_id = "bank-nano"
+    bank_dir = tmp_path / "runs" / bank_id
+    raw_dir = bank_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    cid = "startup-u1"
+    raw_a = {
+        "status": "completed",
+        "usage": {
+            "input_tokens": 10,
+            "output_tokens": 6,
+            "output_tokens_details": {"reasoning_tokens": 0},
+            "input_tokens_details": {"cached_tokens": 0},
+        },
+        "output": [{
+            "type": "message",
+            "content": [{
+                "type": "output_text",
+                "text": '{"ai_native": 1}',
+                "logprobs": [],
+            }],
+        }],
+    }
+    (raw_dir / f"{cid}_a.json").write_text(json.dumps(raw_a), encoding="utf-8")
+    (bank_dir / "predictions.jsonl").write_text(
+        json.dumps({
+            "custom_id": cid,
+            "org_uuid": "u1",
+            "status": "completed",
+            "ai_native": 1,
+            "model": "gpt-5.4-nano",
+            "a_latency_s": 0.5,
+            "a_input_tokens": 10,
+            "a_output_tokens": 6,
+            "a_reasoning_tokens": 0,
+            "a_cached_tokens": 0,
+        }) + "\n",
+        encoding="utf-8",
+    )
+    (bank_dir / "config.json").write_text(
+        json.dumps({"model": "gpt-5.4-nano", "kind": "two_pass", "effort_b": "low"}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(two_pass, "run_dir", lambda rid: tmp_path / "runs" / rid)
+    monkeypatch.setattr(two_pass, "run_raw_dir", lambda rid: tmp_path / "runs" / rid / "raw")
+    monkeypatch.setattr(
+        two_pass, "run_predictions_path",
+        lambda rid: tmp_path / "runs" / rid / "predictions.jsonl",
+    )
+    monkeypatch.setattr(
+        two_pass, "run_config_path",
+        lambda rid: tmp_path / "runs" / rid / "config.json",
+    )
+    monkeypatch.setattr(two_pass, "load_golden_rows", lambda: [{
+        "org_uuid": "u1",
+        "name": "Acme",
+        "short_description": "x",
+        "Long description": "y",
+        "category_list": "AI",
+        "category_groups_list": "Software",
+        "founded_date": "2024-01",
+        "employee_count": "1-10",
+        "total_funding_usd": "1",
+        "website_pages_used": "https://x.test/",
+        "website_evidence": "We build AI.",
+    }])
+    monkeypatch.setattr(two_pass, "identity_hashes", lambda: {
+        "prompt_a_sha256": "pa",
+        "prompt_b_family1_sha256": "pb1",
+        "prompt_b_family0_sha256": "pb0",
+        "schema_a_sha256": "sa",
+        "schema_b1_sha256": "sb1",
+        "schema_b0_sha256": "sb0",
+        "formatter_sha256": "fmt",
+    })
+    monkeypatch.setattr(two_pass, "_git_commit", lambda: "abc")
+    monkeypatch.setattr(two_pass, "OPENAI_API_KEY", "placeholder")
+
+    pass_a_calls = []
+
+    def fake_create(client, kwargs):
+        # Only Pass B should be paid when reusing.
+        assert "top_logprobs" not in kwargs
+        pass_a_calls.append("b")
+        return _resp(
+            "completed",
+            {
+                "subclass": "1A",
+                "rad_score": "RAD-H",
+                "conf_classification": 4,
+                "conf_rad": 3,
+                "reasons_3_points": "a; b; c",
+                "sources_used": "site",
+                "verification_critique": "ok",
+                "boundary_disagreement": False,
+            },
+            reasoning=100,
+        )
+
+    monkeypatch.setattr(two_pass, "_create", fake_create)
+    monkeypatch.setattr(two_pass, "OpenAI", lambda api_key: object())
+
+    bank = two_pass.load_pass_a_bank(bank_id)
+    assert bank[cid]["ai_native"] == 1
+
+    run_id = two_pass.run_two_pass(
+        model="gpt-5.4-nano",
+        effort_b="high",
+        reuse_pass_a_from=bank_id,
+        run_id="reuse-high",
+    )
+    assert run_id == "reuse-high"
+    assert pass_a_calls == ["b"]
+    preds = (tmp_path / "runs" / "reuse-high" / "predictions.jsonl").read_text()
+    rec = json.loads(preds.strip())
+    assert rec["ai_native"] == 1
+    assert rec["subclass"] == "1A"
+    assert rec["pass_a_bank_run_id"] == bank_id
+    assert (tmp_path / "runs" / "reuse-high" / "raw" / f"{cid}_a.json").exists()
+    cfg = json.loads(
+        (tmp_path / "runs" / "reuse-high" / "config.json").read_text(encoding="utf-8")
+    )
+    assert cfg["pass_a_bank_run_id"] == bank_id
+    assert cfg["top_logprobs"] == two_pass.cfg.PASS_A_TOP_LOGPROBS
+
+
+def test_reuse_pass_a_refuses_model_mismatch(tmp_path, monkeypatch):
+    bank_id = "bank-mini"
+    bank_dir = tmp_path / "runs" / bank_id
+    raw_dir = bank_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    cid = "startup-u1"
+    (raw_dir / f"{cid}_a.json").write_text(
+        json.dumps({"status": "completed", "output": []}), encoding="utf-8"
+    )
+    (bank_dir / "predictions.jsonl").write_text(
+        json.dumps({
+            "custom_id": cid, "org_uuid": "u1", "status": "completed",
+            "ai_native": 0, "model": "gpt-5.4-mini",
+        }) + "\n",
+        encoding="utf-8",
+    )
+    (bank_dir / "config.json").write_text(
+        json.dumps({"model": "gpt-5.4-mini"}), encoding="utf-8"
+    )
+    monkeypatch.setattr(two_pass, "run_dir", lambda rid: tmp_path / "runs" / rid)
+    monkeypatch.setattr(two_pass, "run_raw_dir", lambda rid: tmp_path / "runs" / rid / "raw")
+    monkeypatch.setattr(
+        two_pass, "run_predictions_path",
+        lambda rid: tmp_path / "runs" / rid / "predictions.jsonl",
+    )
+    monkeypatch.setattr(
+        two_pass, "run_config_path",
+        lambda rid: tmp_path / "runs" / rid / "config.json",
+    )
+    monkeypatch.setattr(two_pass, "load_golden_rows", lambda: [
+        {"org_uuid": "u1", "name": "x", "founded_date": "2020-01",
+         "website_evidence": "e", "short_description": "s"},
+    ])
+    with pytest.raises(SystemExit, match="Bank Pass A once per model"):
+        two_pass.run_two_pass(
+            model="gpt-5.4-nano",
+            effort_b="low",
+            reuse_pass_a_from=bank_id,
+            dry_run=False,
+            limit=1,
+        )
