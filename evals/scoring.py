@@ -488,11 +488,17 @@ def score_run(
     baseline_run_id: Optional[str] = None,
     confidence: Optional[dict[str, float]] = None,
     write: bool = True,
+    allow_partial: bool = False,
 ) -> dict[str, Any]:
     """Score one run against gold; optionally compare to a baseline run.
 
     Returns the scored summary dict and (by default) writes it to
     evals/runs/<run_id>/scored.json.
+
+    By default refuses when fewer completed predictions match gold than the
+    run expected (config ``n_rows``, else full golden-set size). Pass
+    ``allow_partial=True`` (CLI ``--allow-partial``) to score a mid-flight
+    resume without pretending it is a full screen.
     """
     gold = load_gold()
     records = load_predictions(run_id)
@@ -502,6 +508,22 @@ def score_run(
     if not scored_uuids:
         raise SystemExit(
             f"Run {run_id} has no completed predictions matching gold rows."
+        )
+
+    run_config = {}
+    config_path = run_config_path(run_id)
+    if config_path.exists():
+        run_config = json.loads(config_path.read_text(encoding="utf-8"))
+
+    expected_n = run_config.get("n_rows")
+    if expected_n is None:
+        expected_n = len(gold)
+    expected_n = int(expected_n)
+    if len(scored_uuids) < expected_n and not allow_partial:
+        raise SystemExit(
+            f"Run {run_id} scored {len(scored_uuids)}/{expected_n} rows "
+            f"(n_gold={len(gold)}). Re-run after the predictions finish, or "
+            "pass --allow-partial to score an incomplete run deliberately."
         )
 
     axes_report: dict[str, Any] = {}
@@ -516,11 +538,15 @@ def score_run(
             "confusion": confusion_matrix(gold_labels, pred_labels),
         }
 
-    run_config = {}
-    config_path = run_config_path(run_id)
-    if config_path.exists():
-        run_config = json.loads(config_path.read_text(encoding="utf-8"))
     model = run_config.get("model") or predictions[scored_uuids[0]].get("model") or ""
+    kind = run_config.get("kind")
+    if kind is None:
+        if "effort_b" in run_config:
+            kind = "two_pass"
+        elif run_config or model:
+            kind = "single_pass"
+        else:
+            kind = None
 
     scored_records = [predictions[u] for u in scored_uuids]
     from evals.cost_extrapolate import production_cost_from_records
@@ -529,9 +555,12 @@ def score_run(
         "run_id": run_id,
         "scored_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "gold_source": GOLD_SOURCE,
+        "model": model,
+        "kind": kind,
         "n_gold": len(gold),
         "n_prediction_records": len(records),
         "n_scored": len(scored_uuids),
+        "n_expected": expected_n,
         "bootstrap": {
             "resamples": cfg.BOOTSTRAP_RESAMPLES,
             "seed": cfg.BOOTSTRAP_SEED,
@@ -548,6 +577,12 @@ def score_run(
         ),
         "vs_baseline": None,
     }
+    if kind == "two_pass" or "effort_b" in run_config:
+        report["effort_b"] = run_config.get("effort_b")
+    else:
+        report["effort"] = run_config.get("reasoning_effort") or run_config.get(
+            "effort"
+        )
 
     if baseline_run_id is not None:
         report["vs_baseline"] = compare_to_baseline(
@@ -608,8 +643,14 @@ def score_cli(
     run_id: str,
     baseline: Optional[str],
     confidence: Optional[dict[str, float]],
+    allow_partial: bool = False,
 ) -> None:
-    report = score_run(run_id, baseline_run_id=baseline, confidence=confidence)
+    report = score_run(
+        run_id,
+        baseline_run_id=baseline,
+        confidence=confidence,
+        allow_partial=allow_partial,
+    )
     for axis in AXES:
         ax = report["axes"][axis]
         logger.info(
