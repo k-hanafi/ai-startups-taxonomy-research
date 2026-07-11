@@ -429,6 +429,17 @@ function renderPareto() {
     return;
   }
   host.innerHTML = '';
+  // Fit y to visible points (± CI), not the mock fixture's 60–95% band.
+  // Banked / single-pass real runs can land near ~41% subclass accuracy.
+  let yLo = Infinity;
+  let yHi = -Infinity;
+  for (const c of plottable) {
+    const ci = c.subclass_ci == null ? 0 : c.subclass_ci;
+    yLo = Math.min(yLo, c.subclass_acc - ci);
+    yHi = Math.max(yHi, c.subclass_acc + ci);
+  }
+  const pad = Math.max(0.03, (yHi - yLo) * 0.12);
+  const yRange = [Math.max(0, yLo - pad), Math.min(1, yHi + pad)];
   const traces = plottable.map(c => ({
     type: 'scatter',
     mode: 'markers+text',
@@ -456,7 +467,7 @@ function renderPareto() {
     },
     yaxis: {
       title: {text: 'Subclass accuracy', font: {size: 11, color: '#9ca3af'}},
-      tickformat: '.0%', range: [0.6, 0.95], gridcolor: '#f3f4f6', zeroline: false,
+      tickformat: '.0%', range: yRange, gridcolor: '#f3f4f6', zeroline: false,
     },
     showlegend: false,
     margin: {l: 56, r: 16, t: 24, b: 52},
