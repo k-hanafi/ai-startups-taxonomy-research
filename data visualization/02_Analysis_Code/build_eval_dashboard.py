@@ -474,6 +474,15 @@ function renderPareto() {
   }), cfg);
 }
 
+function effortCaption(c) {
+  // Two-pass Stage 8 uses Pass B effort; banked single-pass refs use reasoning effort.
+  // Do not hard-code "Pass B" when kind is single_pass or effort is none.
+  const e = c.effort_b == null ? '—' : String(c.effort_b);
+  if (c.kind === 'two_pass') return 'Pass B ' + e;
+  if (c.kind === 'single_pass' || e === 'none') return 'effort ' + e;
+  return 'effort ' + e;
+}
+
 function renderLeaderboard() {
   const tbody = document.getElementById('leaderboard-body');
   if (!tbody) return;
@@ -490,7 +499,7 @@ function renderLeaderboard() {
     return '<tr>' +
       '<td class="mono">#' + (i + 1) + '</td>' +
       '<td><div class="name-cell">' + c.label + '</div>' +
-        '<div class="sub-cell">' + c.model + ' · Pass B ' + c.effort_b + '</div></td>' +
+        '<div class="sub-cell">' + c.model + ' · ' + effortCaption(c) + '</div></td>' +
       '<td class="num"><div class="score-cell"><span class="score-val">' + pct(c.subclass_acc) + '</span>' +
         '<div class="score-bar"><span style="width:' + (100 * bar).toFixed(1) + '%"></span></div></div></td>' +
       '<td class="num mono">' + pct(c.ai_native_acc) + '</td>' +

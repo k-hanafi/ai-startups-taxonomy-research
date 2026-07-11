@@ -63,6 +63,13 @@ def main() -> None:
         help="Derive binary confidence from the run's raw/ logprob responses "
              "(chosen-digit probability mass, pivot 6) and compute calibration",
     )
+    p_score.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Score even when n_scored < expected rows (config n_rows or full "
+             "golden set). Default refuses so a mid-flight resume cannot look "
+             "like a finished screen.",
+    )
     p_parity = subs.add_parser(
         "batch-parity",
         help="PAID: 10-row Batch-vs-sync parity smoke on Pass A (gate Q4, Stage 7)",
@@ -176,7 +183,12 @@ def main() -> None:
                 confidence = run_confidence(run_raw_dir(args.run_id))
             except LogprobExtractionError as exc:
                 sys.exit(f"--confidence-from-raw failed: {exc}")
-        score_cli(args.run_id, args.baseline, confidence)
+        score_cli(
+            args.run_id,
+            args.baseline,
+            confidence,
+            allow_partial=args.allow_partial,
+        )
         return
     if args.command == "batch-parity":
         from evals import config as cfg
