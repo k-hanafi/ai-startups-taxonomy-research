@@ -68,6 +68,9 @@ def test_fixture_rows_carry_chart_fields():
     assert row["latency_p50"] == 4.6
     assert row["share_above_90"] == 0.61
     assert row["ece"] == 0.038
+    assert row["n_scored"] == 100
+    assert row["n_expected"] == 100
+    assert row["is_partial"] is False
 
 
 def test_config_row_prefers_scored_metadata_over_run_id_parse():
@@ -255,6 +258,88 @@ def _load_eval_dashboard_builder():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return argparse, mod
+
+
+def test_config_row_unknown_effort_when_metadata_missing():
+    """Missing effort must not silently become medium (mislabels the cell)."""
+    stub = {
+        "run_id": "2026-07-10_gpt-5.4-nano_r1",  # no effort token in id
+        "model": "gpt-5.4-nano",
+        "n_scored": 100,
+        "n_expected": 100,
+        "axes": {
+            "subclass": {"accuracy": 0.7, "accuracy_ci95": [0.6, 0.8], "macro_f1": 0.65},
+            "ai_native": {"accuracy": 0.9, "accuracy_ci95": [0.8, 1.0], "macro_f1": 0.9},
+            "rad": {"accuracy": 0.8, "accuracy_ci95": [0.7, 0.9], "macro_f1": 0.75},
+        },
+    }
+    row = config_row_from_scored(stub)
+    assert row["effort_b"] == "unknown"
+    assert row["label"] == "nano / unknown"
+    assert row["is_partial"] is False
+
+
+def test_config_row_marks_partial_when_n_scored_below_expected():
+    """--allow-partial screens must carry n_expected so the UI can warn."""
+    stub = {
+        "run_id": "2026-07-10_gpt-5.4-mini_medium_r1",
+        "model": "gpt-5.4-mini",
+        "effort_b": "medium",
+        "n_scored": 40,
+        "n_expected": 100,
+        "axes": {
+            "subclass": {"accuracy": 0.8, "accuracy_ci95": [0.7, 0.9], "macro_f1": 0.75},
+            "ai_native": {"accuracy": 0.9, "accuracy_ci95": [0.8, 1.0], "macro_f1": 0.9},
+            "rad": {"accuracy": 0.85, "accuracy_ci95": [0.8, 0.9], "macro_f1": 0.8},
+        },
+    }
+    row = config_row_from_scored(stub)
+    assert row["n_scored"] == 40
+    assert row["n_expected"] == 100
+    assert row["is_partial"] is True
+
+
+def test_unknown_effort_sorts_without_crashing():
+    """Unknown effort ranks after known efforts; sort must not KeyError."""
+    stubs = [
+        {
+            "run_id": "run_unknown",
+            "model": "gpt-5.4-nano",
+            "n_scored": 10,
+            "n_expected": 10,
+            "axes": {
+                "subclass": {"accuracy": 0.5, "macro_f1": 0.4},
+                "ai_native": {"accuracy": 0.5, "macro_f1": 0.4},
+                "rad": {"accuracy": 0.5, "macro_f1": 0.4},
+            },
+        },
+        {
+            "run_id": "run_low",
+            "model": "gpt-5.4-nano",
+            "effort_b": "low",
+            "n_scored": 10,
+            "n_expected": 10,
+            "axes": {
+                "subclass": {"accuracy": 0.5, "macro_f1": 0.4},
+                "ai_native": {"accuracy": 0.5, "macro_f1": 0.4},
+                "rad": {"accuracy": 0.5, "macro_f1": 0.4},
+            },
+        },
+    ]
+    metrics = build_metrics(stubs, synthetic=True, source="test")
+    efforts = [c["effort_b"] for c in metrics["configs"]]
+    assert efforts == ["low", "unknown"]
+
+
+def test_build_html_surfaces_partial_and_unknown_effort():
+    """Generator JS must expose partial badge + unknown effort captions."""
+    _, mod = _load_eval_dashboard_builder()
+    html = mod.build_html(load_fixture(MOCK))
+    assert "partial-badge" in html
+    assert "isPartial" in html
+    assert "sampleCaption" in html
+    assert "effort unknown" in html
+    assert "partial screen" in html
 
 
 def test_resolve_metrics_defaults_to_fixture_not_discovered_runs():

@@ -34,7 +34,10 @@ MODEL_GROUP_BY_MODEL: dict[str, str] = {
 }
 
 MODEL_GROUP_ORDER: tuple[str, ...] = ("nano", "mini", "luna")
-EFFORT_ORDER: tuple[str, ...] = ("low", "medium", "high")
+# Known Pass B / reasoning efforts first; unknown last so missing metadata
+# does not sort as if it were medium.
+EFFORT_ORDER: tuple[str, ...] = ("low", "medium", "high", "minimal", "none", "unknown")
+UNKNOWN_EFFORT = "unknown"
 
 
 def _short_model(model: str) -> str:
@@ -190,7 +193,7 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
         or scored.get("reasoning_effort")
         or screen.get("effort_b")
         or _parse_effort_from_run_id(run_id)
-        or "medium"
+        or UNKNOWN_EFFORT
     )
     axes = scored.get("axes") or {}
     subclass = axes.get("subclass") or {}
@@ -222,6 +225,13 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
         cfg_id = screen.get("id") or _config_id(str(model), str(effort))
     label = screen.get("label") or f"{_short_model(str(model))} / {effort}"
     kind = _infer_kind(scored, run_id, str(effort))
+    n_scored = scored.get("n_scored")
+    n_expected = scored.get("n_expected")
+    is_partial = (
+        n_scored is not None
+        and n_expected is not None
+        and int(n_scored) < int(n_expected)
+    )
 
     return {
         "id": cfg_id,
@@ -231,7 +241,9 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
         "model_group": group,
         "effort_b": effort,
         "kind": kind,
-        "n_scored": scored.get("n_scored"),
+        "n_scored": n_scored,
+        "n_expected": n_expected,
+        "is_partial": is_partial,
         "subclass_acc": subclass_acc,
         "subclass_ci": half,
         "ai_native_acc": float(
