@@ -297,6 +297,20 @@ table.ls td.mono { font-family: var(--mono); font-size: 12px; }
   color: var(--rose-text);
 }
 
+.partial-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--amber-pill);
+  color: var(--amber-text);
+  vertical-align: middle;
+}
+
 .stub-note {
   font-size: 12px;
   color: var(--muted);
@@ -440,26 +454,34 @@ function renderPareto() {
   }
   const pad = Math.max(0.03, (yHi - yLo) * 0.12);
   const yRange = [Math.max(0, yLo - pad), Math.min(1, yHi + pad)];
-  const traces = plottable.map(c => ({
-    type: 'scatter',
-    mode: 'markers+text',
-    name: c.label,
-    x: [c.projected_usd],
-    y: [c.subclass_acc],
-    text: [c.label],
-    textposition: 'top center',
-    textfont: {size: 10, color: '#6b7280'},
-    marker: {
-      size: 12,
-      color: colorFor(c),
-      line: {width: 1, color: '#fff'},
-    },
-    error_y: c.subclass_ci == null ? undefined : {
-      type: 'data', array: [c.subclass_ci], visible: true,
-      color: '#d1d5db', thickness: 1, width: 3,
-    },
-    hovertemplate: c.label + '<br>subclass %{y:.1%}<br>cost %{x:$,.0f}<extra></extra>',
-  }));
+  const traces = plottable.map(c => {
+    const partial = isPartial(c);
+    const nBit = sampleCaption(c);
+    const hoverExtra = (partial ? '<br>partial screen' : '') +
+      (nBit ? '<br>' + nBit : '');
+    return {
+      type: 'scatter',
+      mode: 'markers+text',
+      name: c.label,
+      x: [c.projected_usd],
+      y: [c.subclass_acc],
+      text: [partial ? c.label + ' · partial' : c.label],
+      textposition: 'top center',
+      textfont: {size: 10, color: partial ? '#b45309' : '#6b7280'},
+      marker: {
+        size: 12,
+        color: colorFor(c),
+        symbol: partial ? 'circle-open' : 'circle',
+        line: {width: partial ? 2 : 1, color: partial ? '#b45309' : '#fff'},
+      },
+      error_y: c.subclass_ci == null ? undefined : {
+        type: 'data', array: [c.subclass_ci], visible: true,
+        color: '#d1d5db', thickness: 1, width: 3,
+      },
+      hovertemplate: c.label + '<br>subclass %{y:.1%}<br>cost %{x:$,.0f}' +
+        hoverExtra + '<extra></extra>',
+    };
+  });
   Plotly.newPlot('chart-pareto', traces, layout({
     xaxis: {
       title: {text: 'Projected production $ (41k)', font: {size: 11, color: '#9ca3af'}},
@@ -477,10 +499,25 @@ function renderPareto() {
 function effortCaption(c) {
   // Two-pass Stage 8 uses Pass B effort; banked single-pass refs use reasoning effort.
   // Do not hard-code "Pass B" when kind is single_pass or effort is none.
-  const e = c.effort_b == null ? '—' : String(c.effort_b);
+  // Missing effort must read as unknown, never as a fabricated medium.
+  const e = (c.effort_b == null || c.effort_b === '' || c.effort_b === 'unknown')
+    ? 'unknown'
+    : String(c.effort_b);
+  if (e === 'unknown') return 'effort unknown';
   if (c.kind === 'two_pass') return 'Pass B ' + e;
   if (c.kind === 'single_pass' || e === 'none') return 'effort ' + e;
   return 'effort ' + e;
+}
+
+function isPartial(c) {
+  if (c.is_partial === true) return true;
+  return c.n_scored != null && c.n_expected != null && c.n_scored < c.n_expected;
+}
+
+function sampleCaption(c) {
+  if (c.n_scored == null && c.n_expected == null) return '';
+  if (c.n_expected != null) return String(c.n_scored ?? '?') + '/' + c.n_expected + ' scored';
+  return String(c.n_scored) + ' scored';
 }
 
 function renderLeaderboard() {
@@ -496,10 +533,14 @@ function renderLeaderboard() {
     const lat = c.latency_p50;
     const slow = lat != null && lat >= 8;
     const pillCls = slow ? 'latency-pill slow' : 'latency-pill';
+    const partial = isPartial(c);
+    const badge = partial ? '<span class="partial-badge">partial</span>' : '';
+    const nLine = sampleCaption(c);
+    const sub = [c.model + ' · ' + effortCaption(c), nLine].filter(Boolean).join(' · ');
     return '<tr>' +
       '<td class="mono">#' + (i + 1) + '</td>' +
-      '<td><div class="name-cell">' + c.label + '</div>' +
-        '<div class="sub-cell">' + c.model + ' · ' + effortCaption(c) + '</div></td>' +
+      '<td><div class="name-cell">' + c.label + badge + '</div>' +
+        '<div class="sub-cell">' + sub + '</div></td>' +
       '<td class="num"><div class="score-cell"><span class="score-val">' + pct(c.subclass_acc) + '</span>' +
         '<div class="score-bar"><span style="width:' + (100 * bar).toFixed(1) + '%"></span></div></div></td>' +
       '<td class="num mono">' + pct(c.ai_native_acc) + '</td>' +
