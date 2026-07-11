@@ -13,9 +13,12 @@ Fable either way), and 10-way subclass accuracy does not (41% vs 66%).
 
 Reuses the Stage 3 runner's reliability harness: tenacity retries, per-row
 resume keyed by custom_id, config snapshot with prompt hashes, raw responses
-banked per pass. A row is complete only when BOTH passes succeeded; a crash
-between passes re-runs Pass A on resume (a deliberate simplicity trade —
-Pass A costs a fraction of a cent).
+banked per pass. A row is complete only when BOTH passes succeeded.
+
+Stage 8 Pass B effort sweeps must bank Pass A once per model (same golden
+set) and reuse verdicts + raw logprobs via ``--reuse-pass-a-from`` so effort
+deltas are not confounded by resampling the gate. Without reuse, a crash
+between passes still re-runs Pass A on resume.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ import inspect
 import json
 import logging
 import time
+from types import SimpleNamespace
 from typing import Any, Literal, Optional
 
 from openai import OpenAI
@@ -182,7 +186,7 @@ def pass_a_kwargs(row: dict[str, Any], prompt_a: str, model: str) -> dict[str, A
         "store": False,
         "text": _text_format(BinaryResult),
         "reasoning": {"effort": cfg.PASS_A_EFFORT},
-        "top_logprobs": cfg.TOP_LOGPROBS,
+        "top_logprobs": cfg.PASS_A_TOP_LOGPROBS,
         "include": list(cfg.LOGPROB_INCLUDE),
     }
 
@@ -335,7 +339,8 @@ _RESUME_INVARIANTS = (
 
 
 def _ensure_config(run_id: str, model: str, effort_b: str, repeat: int,
-                   n_rows: int) -> None:
+                   n_rows: int,
+                   pass_a_bank_run_id: str | None = None) -> None:
     config = {
         "run_id": run_id,
         "kind": "two_pass",
@@ -344,11 +349,12 @@ def _ensure_config(run_id: str, model: str, effort_b: str, repeat: int,
         "effort_b": effort_b,
         "repeat": repeat,
         "n_rows": n_rows,
-        "top_logprobs": cfg.TOP_LOGPROBS,
+        "top_logprobs": cfg.PASS_A_TOP_LOGPROBS,
         "pass_a_max_output_tokens": cfg.PASS_A_MAX_OUTPUT_TOKENS,
         "pass_b_max_output_tokens": cfg.MAX_OUTPUT_TOKENS,
         "pass_a_cache_key": cfg.PASS_A_CACHE_KEY,
         "pass_b_cache_key": cfg.PASS_B_CACHE_KEY,
+        "pass_a_bank_run_id": pass_a_bank_run_id,
         "git_commit": _git_commit(),
         "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         **identity_hashes(),
@@ -364,6 +370,103 @@ def _ensure_config(run_id: str, model: str, effort_b: str, repeat: int,
             f"Cannot resume two-pass run {run_id}: {mismatched} changed since it "
             "started. Start a fresh run with a new --run-id."
         )
+    if prior.get("pass_a_bank_run_id") != pass_a_bank_run_id:
+        raise SystemExit(
+            f"Cannot resume two-pass run {run_id}: pass_a_bank_run_id changed "
+            f"({prior.get('pass_a_bank_run_id')!r} -> {pass_a_bank_run_id!r})."
+        )
+
+
+def load_pass_a_bank(bank_run_id: str) -> dict[str, dict[str, Any]]:
+    """Load banked Pass A verdicts + raw payloads keyed by custom_id.
+
+    Returns custom_id -> {ai_native, raw_a (dict), usage latency fields from
+    the banked prediction record}. Raises SystemExit if the bank is missing
+    completed Pass A rows or raw ``*_a.json`` files.
+    """
+    preds_path = run_predictions_path(bank_run_id)
+    if not preds_path.exists():
+        raise SystemExit(
+            f"Pass A bank {bank_run_id!r} has no predictions at {preds_path}"
+        )
+    bank_config: dict[str, Any] = {}
+    config_path = run_config_path(bank_run_id)
+    if config_path.exists():
+        bank_config = json.loads(config_path.read_text(encoding="utf-8"))
+
+    by_cid: dict[str, dict[str, Any]] = {}
+    for line in preds_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        rec = json.loads(line)
+        if rec.get("status") != "completed":
+            continue
+        cid = rec.get("custom_id")
+        verdict = rec.get("ai_native")
+        if not cid or verdict not in (0, 1):
+            continue
+        by_cid[cid] = rec
+
+    if not by_cid:
+        raise SystemExit(
+            f"Pass A bank {bank_run_id!r} has no completed rows with ai_native "
+            "in {{0,1}}"
+        )
+
+    raw_root = run_raw_dir(bank_run_id)
+    out: dict[str, dict[str, Any]] = {}
+    missing_raw: list[str] = []
+    for cid, rec in by_cid.items():
+        raw_path = raw_root / f"{cid}_a.json"
+        if not raw_path.exists():
+            missing_raw.append(cid)
+            continue
+        out[cid] = {
+            "ai_native": int(rec["ai_native"]),
+            "raw_a": json.loads(raw_path.read_text(encoding="utf-8")),
+            "record": rec,
+            "bank_model": bank_config.get("model") or rec.get("model"),
+        }
+    if missing_raw:
+        raise SystemExit(
+            f"Pass A bank {bank_run_id!r} missing raw Pass A files for "
+            f"{len(missing_raw)} row(s), e.g. {missing_raw[0]}_a.json "
+            "(raw/ is machine-local; copy it with the bank run)."
+        )
+    return out
+
+
+class _BankedPassAResponse:
+    """Duck-typed Responses API object assembled from a banked raw dump."""
+
+    def __init__(self, raw: dict[str, Any]):
+        self._raw = raw
+        self.status = raw.get("status", "completed")
+        self.output_text = ""
+        for item in raw.get("output") or []:
+            if item.get("type") != "message":
+                continue
+            for content in item.get("content") or []:
+                if content.get("type") == "output_text" and content.get("text"):
+                    self.output_text = content["text"]
+                    break
+        usage = raw.get("usage") or {}
+        details = usage.get("output_tokens_details") or {}
+        cached_details = usage.get("input_tokens_details") or {}
+        self.usage = SimpleNamespace(
+            input_tokens=usage.get("input_tokens"),
+            output_tokens=usage.get("output_tokens"),
+            output_tokens_details=SimpleNamespace(
+                reasoning_tokens=details.get("reasoning_tokens"),
+            ),
+            input_tokens_details=SimpleNamespace(
+                cached_tokens=cached_details.get("cached_tokens"),
+            ),
+        )
+
+    def model_dump(self) -> dict[str, Any]:
+        return self._raw
 
 
 def run_two_pass(model: str = cfg.EVAL_MODELS[0],
@@ -371,8 +474,15 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
                  repeat: int = 1,
                  limit: int | None = None,
                  dry_run: bool = False,
-                 run_id: str | None = None) -> str:
-    """Run Pass A + Pass B over the golden set. Returns the run_id."""
+                 run_id: str | None = None,
+                 reuse_pass_a_from: str | None = None) -> str:
+    """Run Pass A + Pass B over the golden set. Returns the run_id.
+
+    When ``reuse_pass_a_from`` is set, Pass A is not called: verdicts and raw
+    logprob payloads are copied from that banked two-pass run (same model),
+    and only Pass B is paid. Use this for Stage 8 effort arms after banking
+    Pass A once per model.
+    """
     if limit is not None and limit < 1:
         raise ValueError(f"--limit must be a positive row cap, got {limit}")
 
@@ -383,14 +493,31 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
     run_id = run_id or make_run_id(model, effort_b, repeat)
     prompt_a = load_pass_a_prompt()
 
+    bank: dict[str, dict[str, Any]] | None = None
+    if reuse_pass_a_from:
+        bank = load_pass_a_bank(reuse_pass_a_from)
+        bank_model = next(iter(bank.values()))["bank_model"]
+        if bank_model and bank_model != model:
+            raise SystemExit(
+                f"Pass A bank {reuse_pass_a_from!r} was run with model "
+                f"{bank_model!r}, but this run requested {model!r}. "
+                "Bank Pass A once per model."
+            )
+
     if dry_run:
-        _print_dry_run(rows, prompt_a, model, effort_b, run_id)
+        _print_dry_run(
+            rows, prompt_a, model, effort_b, run_id,
+            reuse_pass_a_from=reuse_pass_a_from,
+        )
         return run_id
 
     run_dir(run_id).mkdir(parents=True, exist_ok=True)
     run_raw_dir(run_id).mkdir(parents=True, exist_ok=True)
     predictions_path = run_predictions_path(run_id)
-    _ensure_config(run_id, model, effort_b, repeat, len(rows))
+    _ensure_config(
+        run_id, model, effort_b, repeat, len(rows),
+        pass_a_bank_run_id=reuse_pass_a_from,
+    )
 
     done = _completed_custom_ids(predictions_path)
     if done:
@@ -398,23 +525,43 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
 
     client = OpenAI(api_key=OPENAI_API_KEY)
     todo = [r for r in rows if f"startup-{r['org_uuid']}" not in done]
-    logger.info("Two-pass run %s: %d rows (%s, B effort=%s)",
-                run_id, len(todo), model, effort_b)
+    if bank is not None:
+        logger.info(
+            "Two-pass run %s: %d rows (%s, B effort=%s, Pass A reused from %s)",
+            run_id, len(todo), model, effort_b, reuse_pass_a_from,
+        )
+    else:
+        logger.info("Two-pass run %s: %d rows (%s, B effort=%s)",
+                    run_id, len(todo), model, effort_b)
 
     for i, row in enumerate(todo, start=1):
         cid = f"startup-{row['org_uuid']}"
         cohort = compute_cohort(row.get("founded_date", ""))
 
-        # Wall-clock latency around each API call; retry backoff is included,
-        # so this is the honest per-pass cost a production caller would feel.
-        started_a = time.monotonic()
-        resp_a = _create(client, pass_a_kwargs(row, prompt_a, model))
-        latency_a_s = round(time.monotonic() - started_a, 3)
-        (run_raw_dir(run_id) / f"{cid}_a.json").write_text(
-            json.dumps(resp_a.model_dump(), ensure_ascii=False), encoding="utf-8"
-        )
+        if bank is not None:
+            banked = bank.get(cid)
+            if banked is None:
+                raise SystemExit(
+                    f"Pass A bank {reuse_pass_a_from!r} has no completed row "
+                    f"for {cid}; refuse partial reuse (science confound)."
+                )
+            resp_a = _BankedPassAResponse(banked["raw_a"])
+            latency_a_s = banked["record"].get("a_latency_s")
+            (run_raw_dir(run_id) / f"{cid}_a.json").write_text(
+                json.dumps(banked["raw_a"], ensure_ascii=False), encoding="utf-8"
+            )
+            a = {"ai_native": banked["ai_native"]}
+        else:
+            # Wall-clock latency around each API call; retry backoff is included,
+            # so this is the honest per-pass cost a production caller would feel.
+            started_a = time.monotonic()
+            resp_a = _create(client, pass_a_kwargs(row, prompt_a, model))
+            latency_a_s = round(time.monotonic() - started_a, 3)
+            (run_raw_dir(run_id) / f"{cid}_a.json").write_text(
+                json.dumps(resp_a.model_dump(), ensure_ascii=False), encoding="utf-8"
+            )
+            a = _parse_output(resp_a)
 
-        a = _parse_output(resp_a)
         resp_b = None
         latency_b_s = None
         if a is not None and a.get("ai_native") in (0, 1):
@@ -435,6 +582,8 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
             cid, row["org_uuid"], model, effort_b, cohort, resp_a, resp_b,
             latency_a_s, latency_b_s,
         )
+        if reuse_pass_a_from:
+            record["pass_a_bank_run_id"] = reuse_pass_a_from
         with predictions_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
@@ -447,8 +596,32 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
     return run_id
 
 
+def stage8_matrix_cells() -> list[tuple[str, str]]:
+    """Locked Stage 8 (model, Pass B effort) pairs in screen order."""
+    return [
+        (model, effort)
+        for model in cfg.EVAL_MODELS
+        for effort in cfg.STAGE8_PASS_B_EFFORTS
+    ]
+
+
+def validate_stage8_cell(model: str, effort_b: str) -> None:
+    """Refuse unknown models/efforts so a typo cannot create an off-matrix paid run."""
+    if model not in cfg.EVAL_MODELS:
+        raise SystemExit(
+            f"Unknown Stage 8 model {model!r}. Locked EVAL_MODELS = "
+            f"{cfg.EVAL_MODELS}"
+        )
+    if effort_b not in cfg.STAGE8_PASS_B_EFFORTS:
+        raise SystemExit(
+            f"Unknown Stage 8 Pass B effort {effort_b!r}. Locked "
+            f"STAGE8_PASS_B_EFFORTS = {cfg.STAGE8_PASS_B_EFFORTS}"
+        )
+
+
 def _print_dry_run(rows: list[dict[str, Any]], prompt_a: str, model: str,
-                   effort_b: str, run_id: str) -> None:
+                   effort_b: str, run_id: str,
+                   reuse_pass_a_from: str | None = None) -> None:
     pricing = cfg.require_model_pricing(model)
     prompt_b1 = load_pass_b_prompt(1)
     prompt_b0 = load_pass_b_prompt(0)
@@ -456,11 +629,33 @@ def _print_dry_run(rows: list[dict[str, Any]], prompt_a: str, model: str,
     a_chars = sum(len(prompt_a) + len(pass_a_message(r)) for r in rows)
     b_prompt_mean = (len(prompt_b1) + len(prompt_b0)) / 2
     b_chars = sum(b_prompt_mean + len(format_user_message(r)) + 40 for r in rows)
-    est_tokens = (a_chars + b_chars) / 4
-    logger.info("DRY RUN %s", run_id)
+    n = len(rows)
+    if reuse_pass_a_from:
+        est_input = b_chars / 4
+        est_out = n * cfg.PASS_B_OUTPUT_TOKEN_ESTIMATE.get(effort_b, 1_000)
+        logger.info("DRY RUN %s (Pass A reused from %s; input+output for Pass B only)",
+                    run_id, reuse_pass_a_from)
+    else:
+        est_input = (a_chars + b_chars) / 4
+        est_out = (
+            n * cfg.PASS_A_OUTPUT_TOKEN_ESTIMATE
+            + n * cfg.PASS_B_OUTPUT_TOKEN_ESTIMATE.get(effort_b, 1_000)
+        )
+        logger.info("DRY RUN %s", run_id)
+    est_in_cost = est_input / 1e6 * pricing["input"]
+    est_out_cost = est_out / 1e6 * pricing["output"]
     logger.info("  model=%s pass A effort=%s, pass B effort=%s, rows=%d",
-                model, cfg.PASS_A_EFFORT, effort_b, len(rows))
-    logger.info("  est input tokens ~%d, est input cost ~$%.4f "
-                "(output/reasoning excluded)",
-                int(est_tokens), est_tokens / 1e6 * pricing["input"])
+                model, cfg.PASS_A_EFFORT, effort_b, n)
+    logger.info(
+        "  est input tokens ~%d (~$%.4f) + rough output/reasoning ~%d (~$%.4f) "
+        "→ total ~$%.4f (output estimate is order-of-magnitude only)",
+        int(est_input), est_in_cost, int(est_out), est_out_cost,
+        est_in_cost + est_out_cost,
+    )
+    if effort_b in ("medium", "high"):
+        logger.info(
+            "  WARNING: Pass B effort=%s can dominate spend via reasoning "
+            "tokens; treat the output estimate as a floor, not a cap.",
+            effort_b,
+        )
     logger.info("  identity hashes: %s", identity_hashes())
