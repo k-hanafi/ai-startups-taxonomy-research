@@ -7,6 +7,7 @@
       "model": "gpt-5.4-nano",
       "effort_b": "low",
       "n_scored": 100,
+      "n_expected": 100,
       "axes": {
         "ai_native": {"accuracy": 0.90, "accuracy_ci95": [0.84, 0.96], "macro_f1": 0.89},
         "subclass": {"accuracy": 0.68, "accuracy_ci95": [0.588, 0.772], "macro_f1": 0.62},
@@ -30,6 +31,7 @@
       "model": "gpt-5.4-nano",
       "effort_b": "medium",
       "n_scored": 100,
+      "n_expected": 100,
       "axes": {
         "ai_native": {"accuracy": 0.93, "accuracy_ci95": [0.88, 0.98], "macro_f1": 0.92},
         "subclass": {"accuracy": 0.74, "accuracy_ci95": [0.655, 0.825], "macro_f1": 0.69},
@@ -53,6 +55,7 @@
       "model": "gpt-5.4-nano",
       "effort_b": "high",
       "n_scored": 100,
+      "n_expected": 100,
       "axes": {
         "ai_native": {"accuracy": 0.94, "accuracy_ci95": [0.89, 0.99], "macro_f1": 0.93},
         "subclass": {"accuracy": 0.76, "accuracy_ci95": [0.678, 0.842], "macro_f1": 0.71},
@@ -76,6 +79,7 @@
       "model": "gpt-5.4-mini",
       "effort_b": "low",
       "n_scored": 100,
+      "n_expected": 100,
       "axes": {
         "ai_native": {"accuracy": 0.95, "accuracy_ci95": [0.91, 0.99], "macro_f1": 0.94},
         "subclass": {"accuracy": 0.78, "accuracy_ci95": [0.70, 0.86], "macro_f1": 0.74},
@@ -99,6 +103,7 @@
       "model": "gpt-5.4-mini",
       "effort_b": "medium",
       "n_scored": 100,
+      "n_expected": 100,
       "axes": {
         "ai_native": {"accuracy": 0.96, "accuracy_ci95": [0.92, 1.0], "macro_f1": 0.95},
         "subclass": {"accuracy": 0.82, "accuracy_ci95": [0.745, 0.895], "macro_f1": 0.78},
@@ -122,6 +127,7 @@
       "model": "gpt-5.4-mini",
       "effort_b": "high",
       "n_scored": 100,
+      "n_expected": 100,
       "axes": {
         "ai_native": {"accuracy": 0.97, "accuracy_ci95": [0.94, 1.0], "macro_f1": 0.96},
         "subclass": {"accuracy": 0.84, "accuracy_ci95": [0.768, 0.912], "macro_f1": 0.80},
@@ -145,6 +151,7 @@
       "model": "gpt-5.6-luna",
       "effort_b": "low",
       "n_scored": 100,
+      "n_expected": 100,
       "axes": {
         "ai_native": {"accuracy": 0.96, "accuracy_ci95": [0.92, 1.0], "macro_f1": 0.95},
         "subclass": {"accuracy": 0.81, "accuracy_ci95": [0.734, 0.886], "macro_f1": 0.77},
@@ -168,6 +175,7 @@
       "model": "gpt-5.6-luna",
       "effort_b": "medium",
       "n_scored": 100,
+      "n_expected": 100,
       "axes": {
         "ai_native": {"accuracy": 0.97, "accuracy_ci95": [0.94, 1.0], "macro_f1": 0.96},
         "subclass": {"accuracy": 0.85, "accuracy_ci95": [0.78, 0.92], "macro_f1": 0.81},
@@ -191,6 +199,7 @@
       "model": "gpt-5.6-luna",
       "effort_b": "high",
       "n_scored": 100,
+      "n_expected": 100,
       "axes": {
         "ai_native": {"accuracy": 0.98, "accuracy_ci95": [0.95, 1.0], "macro_f1": 0.97},
         "subclass": {"accuracy": 0.86, "accuracy_ci95": [0.792, 0.928], "macro_f1": 0.82},
