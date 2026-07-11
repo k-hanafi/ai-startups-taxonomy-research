@@ -10,13 +10,12 @@ from __future__ import annotations
 # Benchmark matrix
 # ---------------------------------------------------------------------------
 
-# Screened at SCREEN_REASONING_EFFORT first; effort sweep + repeats follow
-# only for models on the cost-accuracy frontier (staged matrix design).
+# Locked Stage 8 screen matrix: nano / mini / luna × Pass B low/medium/high.
+# gpt-5.4 / gpt-5.5 stay in EVAL_MODEL_PRICING for scoring older banked runs.
 EVAL_MODELS: list[str] = [
     "gpt-5.4-nano",   # current production model
     "gpt-5.4-mini",
-    "gpt-5.4",
-    "gpt-5.5",
+    "gpt-5.6-luna",
 ]
 
 SCREEN_REASONING_EFFORT: str = "medium"
@@ -132,7 +131,20 @@ EVAL_MODEL_PRICING: dict[str, dict[str, float]] = {
     "gpt-5.4-mini": {"input": 0.75, "output": 4.50},
     "gpt-5.4":      {"input": 2.50, "output": 15.00},
     "gpt-5.5":      {"input": 5.00, "output": 30.00},
+    # gpt-5.6-luna: OpenAI GPT-5.6 launch pricing (July 2026), $1.00/$6.00 per 1M.
+    "gpt-5.6-luna": {"input": 1.00, "output": 6.00},
 }
+
+
+def require_model_pricing(model: str) -> dict[str, float]:
+    """Return pricing for *model*, or refuse rather than silently estimate $0."""
+    pricing = EVAL_MODEL_PRICING.get(model)
+    if pricing is None:
+        raise SystemExit(
+            f"Unknown model pricing for {model!r}. Add it to EVAL_MODEL_PRICING "
+            "before dry-run or cost estimates (refusing a silent $0 figure)."
+        )
+    return pricing
 
 # ---------------------------------------------------------------------------
 # Production cost extrapolation (pivot 8)
