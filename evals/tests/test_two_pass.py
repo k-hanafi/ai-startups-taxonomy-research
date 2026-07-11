@@ -213,3 +213,12 @@ def test_resume_config_refuses_repeat_or_row_count_changes(tmp_path, monkeypatch
     two_pass._ensure_config("limit-run", "gpt-5.4-nano", "high", repeat=1, n_rows=10)
     with pytest.raises(SystemExit, match="n_rows"):
         two_pass._ensure_config("limit-run", "gpt-5.4-nano", "high", repeat=1, n_rows=20)
+
+
+def test_dry_run_refuses_unknown_model_pricing(monkeypatch):
+    monkeypatch.setattr(two_pass, "load_golden_rows", lambda: [
+        {"org_uuid": "u1", "name": "Acme", "short_description": "x",
+         "website_evidence": "y", "founded_on": "2024-01-01"},
+    ])
+    with pytest.raises(SystemExit, match="Unknown model pricing"):
+        two_pass.run_two_pass(model="gpt-not-a-real-model", dry_run=True, limit=1)

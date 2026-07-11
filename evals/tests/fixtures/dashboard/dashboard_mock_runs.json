@@ -1,0 +1,222 @@
+{
+  "synthetic": true,
+  "note": "SYNTHETIC Stage 8 matrix mock for the Stage 9 dashboard skeleton. Numbers are design placeholders, not measured eval results. Replace by loading real evals/runs/*/scored.json after the paid sweep.",
+  "scored_runs": [
+    {
+      "run_id": "mock_gpt-5.4-nano_low_r1",
+      "model": "gpt-5.4-nano",
+      "effort_b": "low",
+      "n_scored": 100,
+      "n_expected": 100,
+      "axes": {
+        "ai_native": {"accuracy": 0.90, "accuracy_ci95": [0.84, 0.96], "macro_f1": 0.89},
+        "subclass": {"accuracy": 0.68, "accuracy_ci95": [0.588, 0.772], "macro_f1": 0.62},
+        "rad": {"accuracy": 0.76, "accuracy_ci95": [0.68, 0.84], "macro_f1": 0.74}
+      },
+      "production_cost_estimate": {
+        "available": true,
+        "steps": {"4_scale": {"available": true, "estimated_production_usd": 95}}
+      },
+      "latency": {"latency_s": {"p50": 2.4, "p95": 5.9, "mean": 2.8, "n": 100}},
+      "calibration": {"reliability": {"ece": 0.088, "bins": []}},
+      "screen": {
+        "id": "nano-low",
+        "label": "nano / low",
+        "mean_confidence": 0.78,
+        "share_above_90": 0.38
+      }
+    },
+    {
+      "run_id": "mock_gpt-5.4-nano_medium_r1",
+      "model": "gpt-5.4-nano",
+      "effort_b": "medium",
+      "n_scored": 100,
+      "n_expected": 100,
+      "axes": {
+        "ai_native": {"accuracy": 0.93, "accuracy_ci95": [0.88, 0.98], "macro_f1": 0.92},
+        "subclass": {"accuracy": 0.74, "accuracy_ci95": [0.655, 0.825], "macro_f1": 0.69},
+        "rad": {"accuracy": 0.81, "accuracy_ci95": [0.74, 0.88], "macro_f1": 0.78}
+      },
+      "production_cost_estimate": {
+        "available": true,
+        "steps": {"4_scale": {"available": true, "estimated_production_usd": 118}}
+      },
+      "latency": {"latency_s": {"p50": 3.1, "p95": 7.8, "mean": 3.6, "n": 100}},
+      "calibration": {"reliability": {"ece": 0.071, "bins": []}},
+      "screen": {
+        "id": "nano-med",
+        "label": "nano / medium",
+        "mean_confidence": 0.83,
+        "share_above_90": 0.46
+      }
+    },
+    {
+      "run_id": "mock_gpt-5.4-nano_high_r1",
+      "model": "gpt-5.4-nano",
+      "effort_b": "high",
+      "n_scored": 100,
+      "n_expected": 100,
+      "axes": {
+        "ai_native": {"accuracy": 0.94, "accuracy_ci95": [0.89, 0.99], "macro_f1": 0.93},
+        "subclass": {"accuracy": 0.76, "accuracy_ci95": [0.678, 0.842], "macro_f1": 0.71},
+        "rad": {"accuracy": 0.82, "accuracy_ci95": [0.75, 0.89], "macro_f1": 0.79}
+      },
+      "production_cost_estimate": {
+        "available": true,
+        "steps": {"4_scale": {"available": true, "estimated_production_usd": 175}}
+      },
+      "latency": {"latency_s": {"p50": 4.0, "p95": 9.6, "mean": 4.7, "n": 100}},
+      "calibration": {"reliability": {"ece": 0.064, "bins": []}},
+      "screen": {
+        "id": "nano-high",
+        "label": "nano / high",
+        "mean_confidence": 0.85,
+        "share_above_90": 0.51
+      }
+    },
+    {
+      "run_id": "mock_gpt-5.4-mini_low_r1",
+      "model": "gpt-5.4-mini",
+      "effort_b": "low",
+      "n_scored": 100,
+      "n_expected": 100,
+      "axes": {
+        "ai_native": {"accuracy": 0.95, "accuracy_ci95": [0.91, 0.99], "macro_f1": 0.94},
+        "subclass": {"accuracy": 0.78, "accuracy_ci95": [0.70, 0.86], "macro_f1": 0.74},
+        "rad": {"accuracy": 0.83, "accuracy_ci95": [0.76, 0.90], "macro_f1": 0.80}
+      },
+      "production_cost_estimate": {
+        "available": true,
+        "steps": {"4_scale": {"available": true, "estimated_production_usd": 290}}
+      },
+      "latency": {"latency_s": {"p50": 3.8, "p95": 9.1, "mean": 4.4, "n": 100}},
+      "calibration": {"reliability": {"ece": 0.052, "bins": []}},
+      "screen": {
+        "id": "mini-low",
+        "label": "mini / low",
+        "mean_confidence": 0.85,
+        "share_above_90": 0.54
+      }
+    },
+    {
+      "run_id": "mock_gpt-5.4-mini_medium_r1",
+      "model": "gpt-5.4-mini",
+      "effort_b": "medium",
+      "n_scored": 100,
+      "n_expected": 100,
+      "axes": {
+        "ai_native": {"accuracy": 0.96, "accuracy_ci95": [0.92, 1.0], "macro_f1": 0.95},
+        "subclass": {"accuracy": 0.82, "accuracy_ci95": [0.745, 0.895], "macro_f1": 0.78},
+        "rad": {"accuracy": 0.85, "accuracy_ci95": [0.78, 0.92], "macro_f1": 0.82}
+      },
+      "production_cost_estimate": {
+        "available": true,
+        "steps": {"4_scale": {"available": true, "estimated_production_usd": 412}}
+      },
+      "latency": {"latency_s": {"p50": 4.6, "p95": 11.2, "mean": 5.5, "n": 100}},
+      "calibration": {"reliability": {"ece": 0.038, "bins": []}},
+      "screen": {
+        "id": "mini-med",
+        "label": "mini / medium",
+        "mean_confidence": 0.88,
+        "share_above_90": 0.61
+      }
+    },
+    {
+      "run_id": "mock_gpt-5.4-mini_high_r1",
+      "model": "gpt-5.4-mini",
+      "effort_b": "high",
+      "n_scored": 100,
+      "n_expected": 100,
+      "axes": {
+        "ai_native": {"accuracy": 0.97, "accuracy_ci95": [0.94, 1.0], "macro_f1": 0.96},
+        "subclass": {"accuracy": 0.84, "accuracy_ci95": [0.768, 0.912], "macro_f1": 0.80},
+        "rad": {"accuracy": 0.86, "accuracy_ci95": [0.79, 0.93], "macro_f1": 0.83}
+      },
+      "production_cost_estimate": {
+        "available": true,
+        "steps": {"4_scale": {"available": true, "estimated_production_usd": 580}}
+      },
+      "latency": {"latency_s": {"p50": 5.8, "p95": 13.4, "mean": 6.9, "n": 100}},
+      "calibration": {"reliability": {"ece": 0.035, "bins": []}},
+      "screen": {
+        "id": "mini-high",
+        "label": "mini / high",
+        "mean_confidence": 0.89,
+        "share_above_90": 0.66
+      }
+    },
+    {
+      "run_id": "mock_gpt-5.6-luna_low_r1",
+      "model": "gpt-5.6-luna",
+      "effort_b": "low",
+      "n_scored": 100,
+      "n_expected": 100,
+      "axes": {
+        "ai_native": {"accuracy": 0.96, "accuracy_ci95": [0.92, 1.0], "macro_f1": 0.95},
+        "subclass": {"accuracy": 0.81, "accuracy_ci95": [0.734, 0.886], "macro_f1": 0.77},
+        "rad": {"accuracy": 0.84, "accuracy_ci95": [0.77, 0.91], "macro_f1": 0.81}
+      },
+      "production_cost_estimate": {
+        "available": true,
+        "steps": {"4_scale": {"available": true, "estimated_production_usd": 980}}
+      },
+      "latency": {"latency_s": {"p50": 6.2, "p95": 14.8, "mean": 7.4, "n": 100}},
+      "calibration": {"reliability": {"ece": 0.045, "bins": []}},
+      "screen": {
+        "id": "luna-low",
+        "label": "luna / low",
+        "mean_confidence": 0.88,
+        "share_above_90": 0.63
+      }
+    },
+    {
+      "run_id": "mock_gpt-5.6-luna_medium_r1",
+      "model": "gpt-5.6-luna",
+      "effort_b": "medium",
+      "n_scored": 100,
+      "n_expected": 100,
+      "axes": {
+        "ai_native": {"accuracy": 0.97, "accuracy_ci95": [0.94, 1.0], "macro_f1": 0.96},
+        "subclass": {"accuracy": 0.85, "accuracy_ci95": [0.78, 0.92], "macro_f1": 0.81},
+        "rad": {"accuracy": 0.87, "accuracy_ci95": [0.81, 0.93], "macro_f1": 0.84}
+      },
+      "production_cost_estimate": {
+        "available": true,
+        "steps": {"4_scale": {"available": true, "estimated_production_usd": 1450}}
+      },
+      "latency": {"latency_s": {"p50": 7.9, "p95": 18.2, "mean": 9.5, "n": 100}},
+      "calibration": {"reliability": {"ece": 0.041, "bins": []}},
+      "screen": {
+        "id": "luna-med",
+        "label": "luna / medium",
+        "mean_confidence": 0.90,
+        "share_above_90": 0.70
+      }
+    },
+    {
+      "run_id": "mock_gpt-5.6-luna_high_r1",
+      "model": "gpt-5.6-luna",
+      "effort_b": "high",
+      "n_scored": 100,
+      "n_expected": 100,
+      "axes": {
+        "ai_native": {"accuracy": 0.98, "accuracy_ci95": [0.95, 1.0], "macro_f1": 0.97},
+        "subclass": {"accuracy": 0.86, "accuracy_ci95": [0.792, 0.928], "macro_f1": 0.82},
+        "rad": {"accuracy": 0.88, "accuracy_ci95": [0.82, 0.94], "macro_f1": 0.85}
+      },
+      "production_cost_estimate": {
+        "available": true,
+        "steps": {"4_scale": {"available": true, "estimated_production_usd": 2100}}
+      },
+      "latency": {"latency_s": {"p50": 9.8, "p95": 22.5, "mean": 11.8, "n": 100}},
+      "calibration": {"reliability": {"ece": 0.048, "bins": []}},
+      "screen": {
+        "id": "luna-high",
+        "label": "luna / high",
+        "mean_confidence": 0.92,
+        "share_above_90": 0.74
+      }
+    }
+  ]
+}

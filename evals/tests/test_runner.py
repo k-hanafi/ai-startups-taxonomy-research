@@ -117,6 +117,11 @@ def test_negative_limit_rejected():
         runner.run(limit=-1, dry_run=True)
 
 
+def test_dry_run_refuses_unknown_model_pricing():
+    with pytest.raises(SystemExit, match="Unknown model pricing"):
+        runner.run(model="gpt-not-a-real-model", dry_run=True, limit=1)
+
+
 def test_resume_config_mismatch_refused(tmp_path, monkeypatch):
     from evals import paths
 
