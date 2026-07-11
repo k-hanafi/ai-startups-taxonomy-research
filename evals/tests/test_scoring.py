@@ -274,9 +274,87 @@ def test_score_run_end_to_end(mini_run):
     assert report["cost"]["total_input_tokens"] == 300
     # Legacy records carry no latency fields: summary degrades to None.
     assert report["latency"] is None
+    # Without config.json, model still comes from prediction records.
+    assert report["model"] == "gpt-5.4-nano"
+    assert report["kind"] == "single_pass"
 
     scored = json.loads((run_dir / "scored.json").read_text(encoding="utf-8"))
     assert scored["run_id"] == run_id
+    assert scored["model"] == "gpt-5.4-nano"
+    assert scored["kind"] == "single_pass"
+
+
+def test_score_run_writes_two_pass_metadata_from_config(mini_run):
+    run_id, run_dir = mini_run
+    (run_dir / "config.json").write_text(
+        json.dumps({
+            "kind": "two_pass",
+            "model": "gpt-5.6-luna",
+            "effort_b": "medium",
+            "n_rows": 3,
+        }),
+        encoding="utf-8",
+    )
+    report = scoring.score_run(run_id, write=False)
+    assert report["model"] == "gpt-5.6-luna"
+    assert report["effort_b"] == "medium"
+    assert report["kind"] == "two_pass"
+    assert "effort" not in report
+
+
+def test_score_run_refuses_partial_by_default(mini_run):
+    run_id, run_dir = mini_run
+    # Keep only one completed prediction against a 3-row gold set.
+    records = [
+        json.loads(l)
+        for l in (run_dir / "predictions.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    kept = next(r for r in records if r.get("org_uuid") == "u1")
+    (run_dir / "predictions.jsonl").write_text(
+        json.dumps(kept) + "\n", encoding="utf-8"
+    )
+    with pytest.raises(SystemExit, match="scored 1/3"):
+        scoring.score_run(run_id, write=False)
+
+
+def test_score_run_allow_partial_scores_incomplete(mini_run):
+    run_id, run_dir = mini_run
+    records = [
+        json.loads(l)
+        for l in (run_dir / "predictions.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    kept = next(r for r in records if r.get("org_uuid") == "u1")
+    (run_dir / "predictions.jsonl").write_text(
+        json.dumps(kept) + "\n", encoding="utf-8"
+    )
+    report = scoring.score_run(run_id, write=False, allow_partial=True)
+    assert report["n_scored"] == 1
+    assert report["n_expected"] == 3
+
+
+def test_score_run_honors_config_n_rows_as_expected(mini_run):
+    """A --limit smoke writes n_rows=2; scoring 2/2 must pass without --allow-partial."""
+    run_id, run_dir = mini_run
+    (run_dir / "config.json").write_text(
+        json.dumps({"kind": "two_pass", "model": "gpt-5.4-nano",
+                    "effort_b": "low", "n_rows": 2}),
+        encoding="utf-8",
+    )
+    lines = (run_dir / "predictions.jsonl").read_text(encoding="utf-8").splitlines()
+    # Keep two completed gold rows (u1, u2).
+    kept = []
+    for line in lines:
+        rec = json.loads(line)
+        if rec.get("status") == "completed" and rec.get("org_uuid") in ("u1", "u2"):
+            kept.append(line)
+    (run_dir / "predictions.jsonl").write_text(
+        "".join(l + "\n" for l in kept), encoding="utf-8"
+    )
+    report = scoring.score_run(run_id, write=False)
+    assert report["n_scored"] == 2
+    assert report["n_expected"] == 2
+    assert report["effort_b"] == "low"
+    assert report["kind"] == "two_pass"
 
 
 def test_score_run_surfaces_latency_when_recorded(mini_run):

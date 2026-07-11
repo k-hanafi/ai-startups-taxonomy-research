@@ -310,6 +310,7 @@ def _build_config(run_id: str, model: str, effort: str, repeat: int,
                   n_rows: int) -> dict[str, Any]:
     return {
         "run_id": run_id,
+        "kind": "single_pass",
         "model": model,
         "reasoning_effort": effort,
         "repeat": repeat,
@@ -351,12 +352,12 @@ def _ensure_config(run_id: str, model: str, effort: str, repeat: int,
 def _print_dry_run(rows: Iterable[dict[str, Any]], system_prompt: str,
                    schema: dict, model: str, effort: str, run_id: str) -> None:
     rows = list(rows)
-    pricing = cfg.EVAL_MODEL_PRICING.get(model, {})
+    pricing = cfg.require_model_pricing(model)
     # Rough input-token proxy: 1 token ~= 4 chars of prompt + formatted row.
     prompt_chars = len(system_prompt) + len(json.dumps(schema))
     row_chars = sum(len(format_user_message(r)) for r in rows)
     est_input_tokens = (prompt_chars * len(rows) + row_chars) / 4
-    in_cost = est_input_tokens / 1e6 * pricing.get("input", 0.0)
+    in_cost = est_input_tokens / 1e6 * pricing["input"]
     logger.info("DRY RUN %s", run_id)
     logger.info("  model=%s effort=%s rows=%d", model, effort, len(rows))
     logger.info("  est input tokens ~%d, est input cost ~$%.4f "

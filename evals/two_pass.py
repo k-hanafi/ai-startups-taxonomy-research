@@ -449,7 +449,7 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
 
 def _print_dry_run(rows: list[dict[str, Any]], prompt_a: str, model: str,
                    effort_b: str, run_id: str) -> None:
-    pricing = cfg.EVAL_MODEL_PRICING.get(model, {})
+    pricing = cfg.require_model_pricing(model)
     prompt_b1 = load_pass_b_prompt(1)
     prompt_b0 = load_pass_b_prompt(0)
     # ~4 chars/token; Pass B prompt size depends on the family, use the mean.
@@ -462,5 +462,5 @@ def _print_dry_run(rows: list[dict[str, Any]], prompt_a: str, model: str,
                 model, cfg.PASS_A_EFFORT, effort_b, len(rows))
     logger.info("  est input tokens ~%d, est input cost ~$%.4f "
                 "(output/reasoning excluded)",
-                int(est_tokens), est_tokens / 1e6 * pricing.get("input", 0.0))
+                int(est_tokens), est_tokens / 1e6 * pricing["input"])
     logger.info("  identity hashes: %s", identity_hashes())
