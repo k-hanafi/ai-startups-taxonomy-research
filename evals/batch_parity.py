@@ -85,6 +85,14 @@ def _binary_verdict(response_body: dict[str, Any]) -> Any:
 def _logprob_shape_checks(
     side: str, entries: list[dict[str, Any]], requested_top: int
 ) -> list[dict[str, Any]]:
+    """Shape checks for one side's logprob list.
+
+    Success is presence + entry keys + sync≈batch shape elsewhere. We do NOT
+    require returning ~requested_top alternatives: Pass A only needs {0,1}
+    evidence at the decision token, and constrained decoding often returns
+    fewer alternatives than requested (especially mini/luna).
+    """
+    del requested_top  # retained in signature for call-site compatibility
     checks = [_check(f"{side}_logprobs_present", bool(entries),
                      f"{len(entries)} token entries")]
     if not entries:
@@ -101,18 +109,30 @@ def _logprob_shape_checks(
         all(top_keys <= set(t) for e in entries for t in e.get("top_logprobs") or []),
         f"expected keys {sorted(top_keys)}",
     ))
-    # Every token must carry the requested depth. Tolerance of one: the API
-    # omits the chosen token from its own alternatives list on some positions
-    # (observed live on BOTH sync and batch: first token returns 14 of 15).
-    # A payload where only some tokens reach full depth still fails.
-    lengths = [len(e.get("top_logprobs") or []) for e in entries]
-    checks.append(_check(
-        f"{side}_top_logprobs_honored",
-        max(lengths) == requested_top and min(lengths) >= requested_top - 1,
-        f"per-token alternatives min {min(lengths)} / max {max(lengths)}, "
-        f"requested {requested_top}",
-    ))
     return checks
+
+
+def _decision_binary_pool_ok(response_body: dict[str, Any]) -> tuple[bool, str]:
+    """Whether the decision token carries unmasked evidence for both {0,1}."""
+    from evals.logprob_extract import (
+        LogprobExtractionError,
+        binary_candidate_pool,
+        candidate_value,
+        find_decision_entry,
+        output_text_content,
+    )
+
+    try:
+        content = output_text_content(response_body)
+        text = content["text"]
+        logprobs = content["logprobs"]
+        _, entry = find_decision_entry(text, logprobs)
+    except LogprobExtractionError as exc:
+        return False, str(exc)
+    pool = binary_candidate_pool(entry)
+    values = {candidate_value(t) for t in pool}
+    ok = 0 in values and 1 in values
+    return ok, f"pool values={sorted(v for v in values if v is not None)}"
 
 
 def parity_checks(
@@ -165,6 +185,13 @@ def parity_checks(
     batch_entries = extract_logprob_entries(batch_body)
     checks.extend(_logprob_shape_checks("sync", sync_entries, requested_top))
     checks.extend(_logprob_shape_checks("batch", batch_entries, requested_top))
+    # Sync≈batch shape: same token count when both sides have logprobs.
+    if sync_entries and batch_entries:
+        checks.append(_check(
+            "logprob_token_count_parity",
+            len(sync_entries) == len(batch_entries),
+            f"sync {len(sync_entries)} vs batch {len(batch_entries)}",
+        ))
 
     # Both sides produce a usable binary verdict.
     for side, body in (("sync", sync_body), ("batch", batch_body)):
@@ -172,6 +199,17 @@ def parity_checks(
         checks.append(_check(
             f"{side}_binary_verdict_valid", verdict in (0, 1),
             f"ai_native={verdict}",
+        ))
+
+    # When logprobs are present, require {0,1} evidence at the decision token
+    # (calibration availability). Cardinality of top_logprobs is not scored.
+    for side, body in (("sync", sync_body), ("batch", batch_body)):
+        entries = extract_logprob_entries(body)
+        if not entries:
+            continue
+        ok, detail = _decision_binary_pool_ok(body)
+        checks.append(_check(
+            f"{side}_binary_candidates_present", ok, detail,
         ))
     return checks
 
