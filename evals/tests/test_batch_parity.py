@@ -33,27 +33,43 @@ def sample_row() -> dict[str, str]:
     }
 
 
-def _logprob_entry(token: str, n_top: int) -> dict:
+def _logprob_entry(token: str, n_top: int, *, decision: bool = False) -> dict:
+    if decision:
+        # Decision token must carry both {0,1} for calibration availability.
+        opposing = "0" if token.strip().startswith("1") else "1"
+        alts = [
+            {"token": token, "bytes": [ord(c) for c in token], "logprob": -0.01},
+            {"token": opposing, "bytes": [ord(c) for c in opposing], "logprob": -2.0},
+        ]
+        # Pad with filler only if a test asks for depth > 2 (legacy).
+        for i in range(max(0, n_top - 2)):
+            alts.append({"token": f"alt{i}", "bytes": [65], "logprob": -3.0 - i})
+        top = alts[: max(n_top, 2)]
+    else:
+        top = [
+            {"token": f"alt{i}", "bytes": [65], "logprob": -0.5 - i}
+            for i in range(n_top)
+        ]
     return {
         "token": token,
         "bytes": [ord(c) for c in token],
         "logprob": -0.01,
-        "top_logprobs": [
-            {"token": f"alt{i}", "bytes": [65], "logprob": -0.5 - i}
-            for i in range(n_top)
-        ],
+        "top_logprobs": top,
     }
 
 
-def _response_body(verdict: int = 1, n_top: int = cfg.TOP_LOGPROBS,
+def _response_body(verdict: int = 1, n_top: int = cfg.PASS_A_TOP_LOGPROBS,
                    status: str = "completed") -> dict:
     """A payload dict shaped like a real Pass A Responses API body."""
-    text = json.dumps({"ai_native": verdict})
+    # Compact JSON (no spaces) so token bytes reconstruct exactly.
+    text = json.dumps({"ai_native": verdict}, separators=(",", ":"))
+    tokens = ("{\"", "ai", "_native", "\":", str(verdict), "}")
+    assert "".join(tokens) == text
     return {
         "status": status,
         "model": "gpt-5.4-nano",
         "temperature": 1.0,
-        "top_logprobs": cfg.TOP_LOGPROBS,
+        "top_logprobs": cfg.PASS_A_TOP_LOGPROBS,
         "reasoning": {"effort": "none"},
         "usage": {
             "input_tokens": 1000,
@@ -67,9 +83,10 @@ def _response_body(verdict: int = 1, n_top: int = cfg.TOP_LOGPROBS,
                 "content": [{
                     "type": "output_text",
                     "text": text,
-                    "logprobs": [_logprob_entry(tok, n_top)
-                                 for tok in ("{\"", "ai", "_native", "\":",
-                                             str(verdict), "}")],
+                    "logprobs": [
+                        _logprob_entry(tok, n_top, decision=(tok == str(verdict)))
+                        for tok in tokens
+                    ],
                 }],
             },
         ],
@@ -79,7 +96,7 @@ def _response_body(verdict: int = 1, n_top: int = cfg.TOP_LOGPROBS,
 def _request_body() -> dict:
     return {
         "model": "gpt-5.4-nano",
-        "top_logprobs": cfg.TOP_LOGPROBS,
+        "top_logprobs": cfg.PASS_A_TOP_LOGPROBS,
         "reasoning": {"effort": "none"},
         "include": list(cfg.LOGPROB_INCLUDE),
     }
@@ -145,36 +162,29 @@ def test_parity_fails_when_batch_drops_logprobs():
     assert "sync_logprobs_present" not in failed
 
 
-def test_parity_fails_when_batch_truncates_top_logprobs():
-    batch_body = _response_body(n_top=5)
+def test_parity_fails_when_decision_token_missing_opposing_digit():
+    batch_body = _response_body()
+    # Strip opposing digit from the decision token's top_logprobs.
+    entries = batch_body["output"][1]["content"][0]["logprobs"]
+    decision = next(e for e in entries if e["token"] in ("0", "1"))
+    decision["top_logprobs"] = [
+        t for t in decision["top_logprobs"] if t["token"] == decision["token"]
+    ]
     checks = batch_parity.parity_checks(
         _request_body(), _response_body(), batch_body
     )
     failed = {c["name"] for c in checks if not c["ok"]}
-    assert "batch_top_logprobs_honored" in failed
+    assert "batch_binary_candidates_present" in failed
 
 
-def test_top_logprobs_check_is_per_token_not_just_max():
-    # One full-depth token must not mask truncation on the others.
-    batch_body = _response_body(n_top=cfg.TOP_LOGPROBS)
-    entries = batch_body["output"][1]["content"][0]["logprobs"]
-    for entry in entries[1:]:
-        entry["top_logprobs"] = entry["top_logprobs"][:3]
-    checks = batch_parity.parity_checks(
-        _request_body(), _response_body(), batch_body
-    )
-    assert "batch_top_logprobs_honored" in {c["name"] for c in checks if not c["ok"]}
-
-
-def test_top_logprobs_tolerates_chosen_token_omission():
-    # Observed live on both sync and batch: a position can return
-    # requested-1 alternatives because the chosen token is omitted from
-    # its own list. That is not a parity failure.
-    body = _response_body(n_top=cfg.TOP_LOGPROBS)
-    body["output"][1]["content"][0]["logprobs"][0]["top_logprobs"].pop()
+def test_parity_accepts_shallow_top_logprobs_when_both_digits_present():
+    # Cardinality is no longer a success criterion: depth=1 in the
+    # alternatives list is fine if the chosen token + one opposing digit
+    # still yield {0,1} after merge.
+    body = _response_body(n_top=1)
     checks = batch_parity.parity_checks(_request_body(), body, body)
-    assert all(c["ok"] for c in checks)
-
+    assert "top_logprobs_honored" not in {c["name"] for c in checks}
+    assert _all_ok(checks)
 
 def test_parity_fails_when_batch_ignores_reasoning_effort():
     batch_body = _response_body()

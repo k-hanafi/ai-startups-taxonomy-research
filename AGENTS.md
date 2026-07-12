@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-11 · Active branch: `eval-harness/dashboard` (Stage 9 mock viewer + Stage 8 preflight fixes; Stage 8 paid 9-cell sweep next)
+Last updated: 2026-07-11 · Active branch: `eval-harness/research-direction-fixes` (Stage 8 science blockers: Pass A bank reuse, binary logprobs, Pass B metrics; stacks on PR #22 dashboard)
 
 ---
 
@@ -49,7 +49,7 @@ Authoritative plans (read when resuming a strand; committed under **`.cursor/pla
 - `.cursor/plans/survivorship_bias_wayback_*.plan.md` — death-anchored CDX probe (active survivorship strand).
 - `.cursor/plans/survivorship_tavily_pipeline_*.plan.md` — post-probe Tavily extract + classify pipeline.
 - `.cursor/plans/logprob_confidence_classifier_*.plan.md` — logprob-based confidence methodology (active).
-- `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; two-pass committed; pivot 8 cost extrapolation merged; Stage 9 mock dashboard + config filter on PR #22; Stage 8 next = locked nano/mini/luna × Pass B low/medium/high).
+- `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; two-pass committed; Stage 9 mock on PR #22; research-direction blockers on `eval-harness/research-direction-fixes`; Stage 8 next = paid 9-cell with Pass A banked once per model).
 
 Cursor writes new plans to `~/.cursor/plans/` by default; copy or sync them into **`.cursor/plans/`** in this repo so they are version-controlled. Legacy copies may still exist in **`plans/`** at repo root. Repo agent skills (committed): **`portfolio-git-messages`**, **`git-commit-batch-plan`**, **`code-structure`**, **`clean-my-repo`** under **`.cursor/skills/`**. **`.cursor/rules/`** stays local.
 
@@ -174,10 +174,13 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 ### `evals/` — golden-set eval harness
 | Path | Purpose |
 |------|---------|
-| `dashboard_metrics.py` | Stage 9: load scored.json or mock fixture → chart-ready metrics dict (configs + model-group filter keys). Prefers top-level `model` / `effort_b` / `kind` on scored.json when present. No OpenAI import. |
-| `tests/fixtures/dashboard/dashboard_mock_runs.json` | Synthetic Stage 8 matrix (9 configs: nano/mini/luna × Pass B low/medium/high) for the dashboard skeleton (subdir so logprob tests do not glob it) |
-| `config.py` | Locked Stage 8 `EVAL_MODELS` = nano/mini/luna; pricing table includes luna + legacy gpt-5.4/5.5 for old runs |
-| `__main__.py` | CLI: `sample`, `run`, `run-two-pass`, `score` (`--confidence-from-raw`, `--allow-partial`), `batch-parity`, `report`, `dashboard` (`--runs`/`--scored` required for real data) |
+| `dashboard_metrics.py` | Stage 9: scored.json/fixture → chart metrics (ECE, selective@50, vs_baseline, Pass B isolating fields, finalist mean±range aggregates). No OpenAI import. |
+| `tests/fixtures/dashboard/dashboard_mock_runs.json` | Synthetic Stage 8 matrix; Pass A metrics identical across efforts within each model (bank-once design) |
+| `config.py` | Locked Stage 8 `EVAL_MODELS` + `STAGE8_PASS_B_EFFORTS`; `PASS_A_TOP_LOGPROBS=2` (binary); legacy `TOP_LOGPROBS` for old single-pass only |
+| `two_pass.py` | Two-pass runner; `--reuse-pass-a-from` banks Pass A once per model across Pass B efforts |
+| `logprob_extract.py` | Pass A confidence; requires both `{0,1}` candidates or marks unavailable |
+| `scoring.py` | End-to-end axes + `pass_b_metrics` (family-conditional subclass, AI-native-only RAD, boundary_disagreement); `--baseline` paired deltas; refuses partial confidence unless `--allow-partial-confidence` |
+| `__main__.py` | CLI: `run-two-pass` (Stage 8), `matrix` (9-cell dry-run), `score`, `dashboard`; legacy `run` warns and is not the Stage 8 path |
 
 ### Other
 | Path | Purpose |
@@ -186,7 +189,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `data visualization/02_Analysis_Code/*.py` | Scripts that build those dashboards |
 | `data visualization/02_Analysis_Code/survivorship_analysis.py` | Survivorship findings compute: survivor-vs-dead cohorts + 2 logistic models (pure metrics dict; PREVIEW from production if `survivorship_corrected.csv` absent) |
 | `data visualization/02_Analysis_Code/build_survivorship_insights_dashboard.py` | Renders `survivorship_insights.html` from that compute module (reuses house STYLE) |
-| `data visualization/02_Analysis_Code/build_eval_dashboard.py` | Stage 9 eval viewer (LangSmith-light UX): Pareto / leaderboard / confidence / latency + **config filter** (model groups + per-config pills). Defaults to mock fixture; pass `--runs`/`--scored` for real runs. Writes `eval_dashboard.html`. |
+| `data visualization/02_Analysis_Code/build_eval_dashboard.py` | Stage 9 eval viewer: Pareto / leaderboard / ECE+selective / reliability / vs_baseline / latency + config filter. Defaults to mock fixture; `--runs`/`--scored` for real runs. |
 | `tests/` | pytest for the live pipeline (schema, formatter, tokens, enrichment, tavily runner) |
 | `wayback_machine/tests/` | pytest for wayback (golden cleaner, cohort, state, config, budget, probe) |
 | `keys/` | API key env files, e.g. `keys/openai.env` (`OPENAI_API_KEY`). Git-ignored + cursor-ignored. **Never commit.** |
@@ -241,11 +244,15 @@ python scripts/run_tavily_crawl.py             # live homepage crawl
 
 pytest evals/tests -q                       # full eval harness (use OPENAI_API_KEY=placeholder)
 pytest evals/tests/test_dashboard_metrics.py   # Stage 9 metrics (no OpenAI key)
+python -m evals matrix                          # list locked 9-cell Stage 8 commands (dry-run)
+python -m evals run-two-pass --model gpt-5.4-nano --effort-b low --require-stage8-cell
+# later cells: --reuse-pass-a-from <first-cell-run-id>  (bank Pass A once per model)
 python -m evals dashboard                       # build eval_dashboard.html from mock Stage 8 matrix (default)
 python -m evals dashboard --runs <run_id>...    # real scored.json only (no auto-discovery)
-python -m evals score <run_id> --confidence-from-raw   # Stage 8 scoring with Pass A calibration
-python -m evals score <run_id> --allow-partial          # mid-flight resume only; default refuses n_scored < expected
-```
+python -m evals score <run_id> --confidence-from-raw [--baseline <run_id>]
+python -m evals score <run_id> --allow-partial                 # incomplete n_scored only
+python -m evals score <run_id> --allow-partial-confidence      # incomplete raw confidence only
+# legacy: python -m evals run  (single-pass; retired for Stage 8; warns)```
 
 ## Conventions & invariants (don't break these)
 
@@ -273,8 +280,8 @@ python -m evals score <run_id> --allow-partial          # mid-flight resume only
 | Survivorship death probe | `wayback_machine/scripts/probe_death_coverage.py` + `wayback_machine/cdx.py` |
 | Survivorship extract→classify→merge | `wayback_machine/extract_dead.py` + `scripts/{build_targets_dead,run_extract_dead,build_classifier_input_dead,classify_dead,merge_survivorship}.py` |
 | Dashboards | `data visualization/02_Analysis_Code/` |
-| Eval Stage 9 viewer / config filter | `evals/dashboard_metrics.py` + `build_eval_dashboard.py` (LangSmith-light HTML; mock fixture until Stage 8; `--runs` for real data) |
-| Eval Stage 8 matrix / scoring | `evals/config.py` (`EVAL_MODELS` = nano/mini/luna); `score --confidence-from-raw`; `score --allow-partial` for incomplete runs |
+| Eval Stage 9 viewer / config filter | `evals/dashboard_metrics.py` + `build_eval_dashboard.py` (ECE/selective/vs_baseline; mock fixture until Stage 8; `--runs` for real data) |
+| Eval Stage 8 matrix / scoring | `evals/config.py` (`EVAL_MODELS` + `STAGE8_PASS_B_EFFORTS`); `run-two-pass --reuse-pass-a-from`; `matrix`; `score --confidence-from-raw [--baseline]` |
 
 ## Maintaining this file
 
