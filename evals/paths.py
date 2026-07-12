@@ -25,6 +25,13 @@ EVALS_DIR = PROJECT_ROOT / "evals"
 GOLDEN_DIR = EVALS_DIR / "golden"
 GOLDEN_SET_CSV = GOLDEN_DIR / "golden_set.csv"          # committed (no evidence text)
 RUNS_DIR = EVALS_DIR / "runs"                            # runs/<run_id>/raw/ git-ignored
+# Stable Pass A banks: runs/pass_a_banks/<model>/ (git-ignored with runs/).
+PASS_A_BANKS_DIRNAME = "pass_a_banks"
+
+
+def pass_a_bank_run_id(model: str) -> str:
+    """Stable run_id for the per-model Pass A bank under evals/runs/."""
+    return f"{PASS_A_BANKS_DIRNAME}/{model}"
 
 
 def run_dir(run_id: str) -> Path:

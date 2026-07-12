@@ -15,10 +15,12 @@ Reuses the Stage 3 runner's reliability harness: tenacity retries, per-row
 resume keyed by custom_id, config snapshot with prompt hashes, raw responses
 banked per pass. A row is complete only when BOTH passes succeeded.
 
-Stage 8 Pass B effort sweeps must bank Pass A once per model (same golden
-set) and reuse verdicts + raw logprobs via ``--reuse-pass-a-from`` so effort
-deltas are not confounded by resampling the gate. Without reuse, a crash
-between passes still re-runs Pass A on resume.
+Stage 8 Pass B effort sweeps bank Pass A once per model by default into
+``evals/runs/pass_a_banks/<model>/``. Later efforts auto-reuse that bank so
+effort deltas are not confounded by resampling the gate. Escape hatches:
+``--rerun-pass-a`` (invalidate / rebuild) and ``--pass-a-from`` (pin a
+historical run). Without a bank, a crash between passes still re-runs Pass A
+on resume of the cell run.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ import datetime
 import inspect
 import json
 import logging
+import shutil
 import time
 from types import SimpleNamespace
 from typing import Any, Literal, Optional
@@ -44,6 +47,7 @@ from evals.paths import (
     FAMILY_BLOCK_AI,
     FAMILY_BLOCK_NOT,
     SUBCLASS_RAD_PROMPT,
+    pass_a_bank_run_id,
     run_config_path,
     run_dir,
     run_predictions_path,
@@ -437,6 +441,186 @@ def load_pass_a_bank(bank_run_id: str) -> dict[str, dict[str, Any]]:
     return out
 
 
+def _assert_bank_model(bank: dict[str, dict[str, Any]], bank_id: str,
+                       model: str) -> None:
+    bank_model = next(iter(bank.values()))["bank_model"]
+    if not bank_model:
+        raise SystemExit(
+            f"Pass A bank {bank_id!r} has no model recorded in "
+            "config.json or prediction rows. Cannot verify same-model "
+            "reuse. Re-bank Pass A with --rerun-pass-a or fix the bank "
+            "metadata."
+        )
+    if bank_model != model:
+        raise SystemExit(
+            f"Pass A bank {bank_id!r} was run with model "
+            f"{bank_model!r}, but this run requested {model!r}. "
+            "Bank Pass A once per model."
+        )
+
+
+def pass_a_bank_covers(bank_run_id: str, custom_ids: list[str]) -> bool:
+    """True when bank_run_id has completed Pass A + raw for every custom_id."""
+    preds_path = run_predictions_path(bank_run_id)
+    if not preds_path.exists():
+        return False
+    have: set[str] = set()
+    for line in preds_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        rec = json.loads(line)
+        if rec.get("status") != "completed":
+            continue
+        cid = rec.get("custom_id")
+        if cid and rec.get("ai_native") in (0, 1):
+            raw = run_raw_dir(bank_run_id) / f"{cid}_a.json"
+            if raw.exists():
+                have.add(cid)
+    return all(cid in have for cid in custom_ids)
+
+
+def clear_pass_a_bank(model: str) -> str:
+    """Remove the stable per-model Pass A bank directory. Returns bank run_id."""
+    bank_id = pass_a_bank_run_id(model)
+    path = run_dir(bank_id)
+    if path.exists():
+        shutil.rmtree(path)
+    return bank_id
+
+
+def _ensure_pass_a_bank_config(bank_id: str, model: str, n_rows: int) -> None:
+    """Write or validate the stable Pass A bank config snapshot."""
+    hashes = identity_hashes()
+    config = {
+        "run_id": bank_id,
+        "kind": "pass_a_bank",
+        "model": model,
+        "effort_a": cfg.PASS_A_EFFORT,
+        "n_rows": n_rows,
+        "top_logprobs": cfg.PASS_A_TOP_LOGPROBS,
+        "pass_a_max_output_tokens": cfg.PASS_A_MAX_OUTPUT_TOKENS,
+        "pass_a_cache_key": cfg.PASS_A_CACHE_KEY,
+        "git_commit": _git_commit(),
+        "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "prompt_a_sha256": hashes["prompt_a_sha256"],
+        "schema_a_sha256": hashes["schema_a_sha256"],
+        "formatter_sha256": hashes["formatter_sha256"],
+    }
+    path = run_config_path(bank_id)
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        return
+    prior = json.loads(path.read_text(encoding="utf-8"))
+    for key in ("model", "n_rows", "prompt_a_sha256", "schema_a_sha256",
+                "formatter_sha256"):
+        if prior.get(key) != config[key]:
+            raise SystemExit(
+                f"Cannot extend Pass A bank {bank_id!r}: {key} changed "
+                f"({prior.get(key)!r} -> {config[key]!r}). Pass --rerun-pass-a "
+                "to rebuild the bank."
+            )
+
+
+def _persist_pass_a_bank_row(bank_id: str, model: str, cid: str, org_uuid: str,
+                             resp_a: Any, latency_a_s: float | None,
+                             raw_a: dict[str, Any]) -> None:
+    """Append one completed Pass A row into the stable bank (idempotent skip)."""
+    preds_path = run_predictions_path(bank_id)
+    if preds_path.exists():
+        for line in preds_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            if rec.get("custom_id") == cid and rec.get("status") == "completed":
+                return
+    a = _parse_output(resp_a)
+    if a is None or a.get("ai_native") not in (0, 1):
+        return
+    run_raw_dir(bank_id).mkdir(parents=True, exist_ok=True)
+    (run_raw_dir(bank_id) / f"{cid}_a.json").write_text(
+        json.dumps(raw_a, ensure_ascii=False), encoding="utf-8"
+    )
+    record = {
+        "custom_id": cid,
+        "org_uuid": org_uuid,
+        "model": model,
+        "status": "completed",
+        "ai_native": a["ai_native"],
+        "a_latency_s": latency_a_s,
+        **_usage_fields(resp_a, "a"),
+    }
+    with preds_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _assert_bank_identity(bank_id: str) -> None:
+    """Refuse a stable bank whose Pass A prompt/schema no longer match."""
+    path = run_config_path(bank_id)
+    if not path.exists():
+        return
+    prior = json.loads(path.read_text(encoding="utf-8"))
+    if prior.get("kind") != "pass_a_bank":
+        # Historical cell runs used as --pass-a-from pins skip this check.
+        return
+    hashes = identity_hashes()
+    for key in ("prompt_a_sha256", "schema_a_sha256", "formatter_sha256"):
+        if prior.get(key) is None:
+            continue
+        if prior.get(key) != hashes[key]:
+            raise SystemExit(
+                f"Pass A bank {bank_id!r} was built with a different {key}. "
+                "Pass --rerun-pass-a to rebuild (refusing silent reuse of a "
+                "stale bank)."
+            )
+
+
+def resolve_pass_a_source(
+    model: str,
+    custom_ids: list[str],
+    *,
+    pass_a_from: str | None = None,
+    rerun_pass_a: bool = False,
+) -> tuple[str, dict[str, dict[str, Any]] | None, bool]:
+    """Decide which Pass A bank to use.
+
+    Returns (bank_id, bank_or_None, creating).
+    bank is loaded when reusing; None when this run must call Pass A and
+    persist into the stable bank. creating is True only for the stable-bank
+    write path (not for --pass-a-from pins).
+    """
+    if pass_a_from and rerun_pass_a:
+        raise SystemExit(
+            "Pass only one of --pass-a-from and --rerun-pass-a "
+            "(cannot pin a historical bank and rebuild at once)."
+        )
+    if pass_a_from:
+        bank = load_pass_a_bank(pass_a_from)
+        _assert_bank_model(bank, pass_a_from, model)
+        missing = [cid for cid in custom_ids if cid not in bank]
+        if missing:
+            raise SystemExit(
+                f"Pass A bank {pass_a_from!r} has no completed row for "
+                f"{missing[0]}; refuse partial reuse (science confound)."
+            )
+        return pass_a_from, bank, False
+
+    bank_id = pass_a_bank_run_id(model)
+    if rerun_pass_a:
+        clear_pass_a_bank(model)
+        return bank_id, None, True
+
+    if pass_a_bank_covers(bank_id, custom_ids):
+        _assert_bank_identity(bank_id)
+        bank = load_pass_a_bank(bank_id)
+        _assert_bank_model(bank, bank_id, model)
+        return bank_id, bank, False
+
+    return bank_id, None, True
+
+
 class _BankedPassAResponse:
     """Duck-typed Responses API object assembled from a banked raw dump."""
 
@@ -475,16 +659,30 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
                  limit: int | None = None,
                  dry_run: bool = False,
                  run_id: str | None = None,
+                 pass_a_from: str | None = None,
+                 rerun_pass_a: bool = False,
                  reuse_pass_a_from: str | None = None) -> str:
     """Run Pass A + Pass B over the golden set. Returns the run_id.
 
-    When ``reuse_pass_a_from`` is set, Pass A is not called: verdicts and raw
-    logprob payloads are copied from that banked two-pass run (same model),
-    and only Pass B is paid. Use this for Stage 8 effort arms after banking
-    Pass A once per model.
+    Pass A is banked once per model under ``pass_a_banks/<model>/`` and
+    reused by default for later Pass B efforts. ``--rerun-pass-a`` rebuilds
+    that bank. ``--pass-a-from`` pins a historical bank (override).
+    ``reuse_pass_a_from`` is a deprecated alias for ``pass_a_from``.
     """
     if limit is not None and limit < 1:
         raise ValueError(f"--limit must be a positive row cap, got {limit}")
+
+    if reuse_pass_a_from and pass_a_from:
+        raise SystemExit(
+            "Pass only one of --pass-a-from and --reuse-pass-a-from "
+            "(the latter is a deprecated alias)."
+        )
+    if reuse_pass_a_from:
+        logger.warning(
+            "--reuse-pass-a-from is deprecated. Pass A banks auto-reuse per "
+            "model by default. Use --pass-a-from only to pin a historical bank."
+        )
+        pass_a_from = reuse_pass_a_from
 
     rows = load_golden_rows()
     if limit is not None:
@@ -492,28 +690,18 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
 
     run_id = run_id or make_run_id(model, effort_b, repeat)
     prompt_a = load_pass_a_prompt()
+    custom_ids = [f"startup-{r['org_uuid']}" for r in rows]
 
-    bank: dict[str, dict[str, Any]] | None = None
-    if reuse_pass_a_from:
-        bank = load_pass_a_bank(reuse_pass_a_from)
-        bank_model = next(iter(bank.values()))["bank_model"]
-        if not bank_model:
-            raise SystemExit(
-                f"Pass A bank {reuse_pass_a_from!r} has no model recorded in "
-                "config.json or prediction rows. Cannot verify same-model "
-                "reuse. Re-bank Pass A or fix the bank metadata."
-            )
-        if bank_model != model:
-            raise SystemExit(
-                f"Pass A bank {reuse_pass_a_from!r} was run with model "
-                f"{bank_model!r}, but this run requested {model!r}. "
-                "Bank Pass A once per model."
-            )
+    bank_id, bank, creating_bank = resolve_pass_a_source(
+        model, custom_ids,
+        pass_a_from=pass_a_from,
+        rerun_pass_a=rerun_pass_a,
+    )
 
     if dry_run:
         _print_dry_run(
             rows, prompt_a, model, effort_b, run_id,
-            reuse_pass_a_from=reuse_pass_a_from,
+            pass_a_bank_id=bank_id if bank is not None else None,
         )
         return run_id
 
@@ -522,8 +710,13 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
     predictions_path = run_predictions_path(run_id)
     _ensure_config(
         run_id, model, effort_b, repeat, len(rows),
-        pass_a_bank_run_id=reuse_pass_a_from,
+        pass_a_bank_run_id=bank_id,
     )
+
+    if creating_bank:
+        run_dir(bank_id).mkdir(parents=True, exist_ok=True)
+        run_raw_dir(bank_id).mkdir(parents=True, exist_ok=True)
+        _ensure_pass_a_bank_config(bank_id, model, len(rows))
 
     done = _completed_custom_ids(predictions_path)
     if done:
@@ -534,11 +727,13 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
     if bank is not None:
         logger.info(
             "Two-pass run %s: %d rows (%s, B effort=%s, Pass A reused from %s)",
-            run_id, len(todo), model, effort_b, reuse_pass_a_from,
+            run_id, len(todo), model, effort_b, bank_id,
         )
     else:
-        logger.info("Two-pass run %s: %d rows (%s, B effort=%s)",
-                    run_id, len(todo), model, effort_b)
+        logger.info(
+            "Two-pass run %s: %d rows (%s, B effort=%s, banking Pass A to %s)",
+            run_id, len(todo), model, effort_b, bank_id,
+        )
 
     for i, row in enumerate(todo, start=1):
         cid = f"startup-{row['org_uuid']}"
@@ -548,7 +743,7 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
             banked = bank.get(cid)
             if banked is None:
                 raise SystemExit(
-                    f"Pass A bank {reuse_pass_a_from!r} has no completed row "
+                    f"Pass A bank {bank_id!r} has no completed row "
                     f"for {cid}; refuse partial reuse (science confound)."
                 )
             resp_a = _BankedPassAResponse(banked["raw_a"])
@@ -558,15 +753,34 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
             )
             a = {"ai_native": banked["ai_native"]}
         else:
-            # Wall-clock latency around each API call; retry backoff is included,
-            # so this is the honest per-pass cost a production caller would feel.
-            started_a = time.monotonic()
-            resp_a = _create(client, pass_a_kwargs(row, prompt_a, model))
-            latency_a_s = round(time.monotonic() - started_a, 3)
+            # Prefer a row already in the (partial) stable bank on resume.
+            if pass_a_bank_covers(bank_id, [cid]):
+                partial = load_pass_a_bank(bank_id)
+                banked = partial[cid]
+                resp_a = _BankedPassAResponse(banked["raw_a"])
+                latency_a_s = banked["record"].get("a_latency_s")
+                raw_a = banked["raw_a"]
+            else:
+                # Wall-clock latency around each API call; retry backoff is
+                # included, so this is the honest per-pass cost a production
+                # caller would feel.
+                started_a = time.monotonic()
+                resp_a = _create(client, pass_a_kwargs(row, prompt_a, model))
+                latency_a_s = round(time.monotonic() - started_a, 3)
+                raw_a = resp_a.model_dump()
             (run_raw_dir(run_id) / f"{cid}_a.json").write_text(
-                json.dumps(resp_a.model_dump(), ensure_ascii=False), encoding="utf-8"
+                json.dumps(
+                    raw_a if isinstance(raw_a, dict) else resp_a.model_dump(),
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
             )
             a = _parse_output(resp_a)
+            if creating_bank and a is not None and a.get("ai_native") in (0, 1):
+                _persist_pass_a_bank_row(
+                    bank_id, model, cid, row["org_uuid"], resp_a, latency_a_s,
+                    raw_a if isinstance(raw_a, dict) else resp_a.model_dump(),
+                )
 
         resp_b = None
         latency_b_s = None
@@ -588,8 +802,7 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
             cid, row["org_uuid"], model, effort_b, cohort, resp_a, resp_b,
             latency_a_s, latency_b_s,
         )
-        if reuse_pass_a_from:
-            record["pass_a_bank_run_id"] = reuse_pass_a_from
+        record["pass_a_bank_run_id"] = bank_id
         with predictions_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
@@ -627,7 +840,7 @@ def validate_stage8_cell(model: str, effort_b: str) -> None:
 
 def _print_dry_run(rows: list[dict[str, Any]], prompt_a: str, model: str,
                    effort_b: str, run_id: str,
-                   reuse_pass_a_from: str | None = None) -> None:
+                   pass_a_bank_id: str | None = None) -> None:
     pricing = cfg.require_model_pricing(model)
     prompt_b1 = load_pass_b_prompt(1)
     prompt_b0 = load_pass_b_prompt(0)
@@ -636,18 +849,18 @@ def _print_dry_run(rows: list[dict[str, Any]], prompt_a: str, model: str,
     b_prompt_mean = (len(prompt_b1) + len(prompt_b0)) / 2
     b_chars = sum(b_prompt_mean + len(format_user_message(r)) + 40 for r in rows)
     n = len(rows)
-    if reuse_pass_a_from:
+    if pass_a_bank_id:
         est_input = b_chars / 4
         est_out = n * cfg.PASS_B_OUTPUT_TOKEN_ESTIMATE.get(effort_b, 1_000)
         logger.info("DRY RUN %s (Pass A reused from %s; input+output for Pass B only)",
-                    run_id, reuse_pass_a_from)
+                    run_id, pass_a_bank_id)
     else:
         est_input = (a_chars + b_chars) / 4
         est_out = (
             n * cfg.PASS_A_OUTPUT_TOKEN_ESTIMATE
             + n * cfg.PASS_B_OUTPUT_TOKEN_ESTIMATE.get(effort_b, 1_000)
         )
-        logger.info("DRY RUN %s", run_id)
+        logger.info("DRY RUN %s (Pass A + Pass B; no bank yet)", run_id)
     est_in_cost = est_input / 1e6 * pricing["input"]
     est_out_cost = est_out / 1e6 * pricing["output"]
     logger.info("  model=%s pass A effort=%s, pass B effort=%s, rows=%d",

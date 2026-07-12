@@ -27,7 +27,7 @@ todos:
     content: "Stage 7: Batch parity smoke (gate Q4, PASS) + evals/scoring.py scorer — MERGED #16. Calibration wire-up (score --confidence-from-raw, chosen-digit confidence per pivot 6) — MERGED #18"
     status: completed
   - id: stage8-experiments
-    content: "Stage 8 (paid CLI): locked 9-cell matrix nano/mini/luna x Pass B low/medium/high; bank Pass A once per model (--reuse-pass-a-from); PASS_A_TOP_LOGPROBS=2 + both {0,1} required; pass_b_metrics + score --baseline. Science contracts on main via #25. Paid sweep next from main."
+    content: "Stage 8 (paid CLI): locked 9-cell matrix nano/mini/luna x Pass B low/medium/high; Pass A auto-banks once per model (evals/runs/pass_a_banks/<model>/, --rerun-pass-a escape); PASS_A_TOP_LOGPROBS=2 + both {0,1} required; pass_b_metrics + score --baseline. Science contracts on main via #25. Paid sweep next from main after auto-bank UX lands."
     status: pending
   - id: stage9-dashboard
     content: "Stage 9: LangSmith-light HTML dashboard: Pareto, ECE/selective/reliability, vs_baseline, finalist mean±range, config filter. Skeleton + mock (#22) + science charts (#24/#25) on main; real charts after Stage 8 runs"
@@ -42,14 +42,14 @@ isProject: false
 
 ## STATUS (source of truth — update after every PR merge / pivot)
 
-Last updated: **2026-07-11** (PR **#25** merged science stack to `main` (#22 dashboard + #24 Pass A bank / binary logprobs / Pass B metrics). Provisional `draft_*` gold accepted for the paid sweep. Next = Stage 8 paid 9-cell from `main`.)
+Last updated: **2026-07-11** (Pass A auto-bank UX: default reuse per model under `evals/runs/pass_a_banks/<model>/`. Provisional `draft_*` gold accepted. Next = merge auto-bank PR, then Stage 8 paid 9-cell from `main`.)
 
 | Field | Value |
 |-------|--------|
-| **Last merged** | PR **#25** — Stage 8 science on `main`: Pass A bank reuse (`--reuse-pass-a-from`), `PASS_A_TOP_LOGPROBS=2` + both `{0,1}` required, Pass B isolating metrics, `--baseline`/vs_baseline, ECE/selective dashboard, `matrix`. Includes #22 dashboard + #24 research-direction fixes. Merged 2026-07-11 (`4644bf9` on `main`). |
-| **Open now** | PR **#23** (`cursor/eval-dashboard-langsmith-ux-0263`) — separate LangSmith UX branch (do not delete). No open science/dashboard stack PRs. |
-| **Working branch** | `main` (paid Stage 8 runs from here). |
-| **Next** | **Stage 8** paid 9-cell from `main`: for each model, bank Pass A once (`run-two-pass --effort-b low`), then `--reuse-pass-a-from` for medium/high. Score with `--confidence-from-raw` and `--baseline`. Use `python -m evals matrix` for the command list. Then Stage 9 real dashboard → Stage 10 report. |
+| **Last merged** | PR **#25** — Stage 8 science on `main`: Pass A bank reuse, `PASS_A_TOP_LOGPROBS=2` + both `{0,1}` required, Pass B isolating metrics, `--baseline`/vs_baseline, ECE/selective dashboard, `matrix`. Includes #22 dashboard + #24 research-direction fixes. Merged 2026-07-11 (`4644bf9` on `main`). |
+| **Open now** | Pass A auto-bank default (`eval/auto-pass-a-bank-default`). PR **#23** (`cursor/eval-dashboard-langsmith-ux-0263`) — separate LangSmith UX branch (do not delete). |
+| **Working branch** | `eval/auto-pass-a-bank-default` → merge to `main` before paid Stage 8. |
+| **Next** | **Stage 8** paid 9-cell from `main`: for each model, run three `run-two-pass --effort-b {low,medium,high} --require-stage8-cell` (first cell creates the Pass A bank; later efforts auto-reuse). Score with `--confidence-from-raw` and `--baseline`. Use `python -m evals matrix` for the command list. Then Stage 9 real dashboard → Stage 10 report. |
 | **Gold labels** | Fable `draft_*` = provisional gold **accepted for the paid Stage 8 sweep** (user 2026-07-11; pivot 4; human review waived, `gold_verdict` stays 0/100 by design). No gold CSV edits this session. ONE full agent re-draft deferred to end of pipeline (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
 | **Architecture reminder** | Two-pass is COMMITTED for production promotion (pivots 7–8). Pass A is banked once per model across Pass B effort arms (science invariant). `src/` classifier is still historically one-pass. Banked single-pass runs are reference points only. Do **not** start `src/` two-pass promotion until Stage 8–9 insights land. |
@@ -76,7 +76,7 @@ Last updated: **2026-07-11** (PR **#25** merged science stack to `main` (#22 das
 
 ### In progress
 
-- **Stage 8 (paid, next from `main`):** `python -m evals matrix` then `run-two-pass` with `--reuse-pass-a-from`. Provisional `draft_*` gold accepted for this sweep.
+- **Stage 8 (paid, next from `main` after auto-bank merge):** `python -m evals matrix` then `run-two-pass` per cell (Pass A auto-banks once per model). Provisional `draft_*` gold accepted for this sweep.
 
 ### Pending (in order) — NEXT STEPS
 

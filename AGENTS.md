@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-11 · Active branch: `main` (eval science stack merged via PR #25; next = paid Stage 8 9-cell with Pass A banked once per model)
+Last updated: 2026-07-11 · Active branch: `eval/auto-pass-a-bank-default` (Pass A auto-bank per model; next = merge then paid Stage 8 9-cell)
 
 ---
 
@@ -49,7 +49,7 @@ Authoritative plans (read when resuming a strand; committed under **`.cursor/pla
 - `.cursor/plans/survivorship_bias_wayback_*.plan.md` — death-anchored CDX probe (active survivorship strand).
 - `.cursor/plans/survivorship_tavily_pipeline_*.plan.md` — post-probe Tavily extract + classify pipeline.
 - `.cursor/plans/logprob_confidence_classifier_*.plan.md` — logprob-based confidence methodology (active).
-- `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; two-pass committed; #22 dashboard + #24/#25 science on `main`; provisional `draft_*` gold accepted for paid sweep; Stage 8 next = paid 9-cell with Pass A banked once per model).
+- `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; two-pass committed; #22 dashboard + #24/#25 science on `main`; provisional `draft_*` gold accepted for paid sweep; Stage 8 next = paid 9-cell with Pass A auto-banked once per model).
 
 Cursor writes new plans to `~/.cursor/plans/` by default; copy or sync them into **`.cursor/plans/`** in this repo so they are version-controlled. Legacy copies may still exist in **`plans/`** at repo root. Repo agent skills (committed): **`portfolio-git-messages`**, **`git-commit-batch-plan`**, **`code-structure`**, **`clean-my-repo`** under **`.cursor/skills/`**. **`.cursor/rules/`** stays local.
 
@@ -177,7 +177,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `dashboard_metrics.py` | Stage 9: scored.json/fixture → chart metrics (ECE, selective@50, vs_baseline, Pass B isolating fields, finalist mean±range aggregates). No OpenAI import. |
 | `tests/fixtures/dashboard/dashboard_mock_runs.json` | Synthetic Stage 8 matrix; Pass A metrics identical across efforts within each model (bank-once design) |
 | `config.py` | Locked Stage 8 `EVAL_MODELS` + `STAGE8_PASS_B_EFFORTS`; `PASS_A_TOP_LOGPROBS=2` (binary); legacy `TOP_LOGPROBS` for old single-pass only |
-| `two_pass.py` | Two-pass runner; `--reuse-pass-a-from` banks Pass A once per model across Pass B efforts |
+| `two_pass.py` | Two-pass runner; Pass A auto-banks under `evals/runs/pass_a_banks/<model>/` (reuse by default; `--rerun-pass-a` / `--pass-a-from` escapes) |
 | `logprob_extract.py` | Pass A confidence; requires both `{0,1}` candidates or marks unavailable |
 | `scoring.py` | End-to-end axes + `pass_b_metrics` (family-conditional subclass, AI-native-only RAD, boundary_disagreement); `--baseline` paired deltas; refuses partial confidence unless `--allow-partial-confidence` |
 | `__main__.py` | CLI: `run-two-pass` (Stage 8), `matrix` (9-cell dry-run), `score`, `dashboard`; legacy `run` warns and is not the Stage 8 path |
@@ -246,7 +246,8 @@ pytest evals/tests -q                       # full eval harness (use OPENAI_API_
 pytest evals/tests/test_dashboard_metrics.py   # Stage 9 metrics (no OpenAI key)
 python -m evals matrix                          # list locked 9-cell Stage 8 commands (dry-run)
 python -m evals run-two-pass --model gpt-5.4-nano --effort-b low --require-stage8-cell
-# later cells: --reuse-pass-a-from <first-cell-run-id>  (bank Pass A once per model)
+# later efforts for the same model auto-reuse Pass A (bank at evals/runs/pass_a_banks/<model>/)
+# escape: --rerun-pass-a  |  advanced pin: --pass-a-from <run_id>
 python -m evals dashboard                       # build eval_dashboard.html from mock Stage 8 matrix (default)
 python -m evals dashboard --runs <run_id>...    # real scored.json only (no auto-discovery)
 python -m evals score <run_id> --confidence-from-raw [--baseline <run_id>]
@@ -281,7 +282,7 @@ python -m evals score <run_id> --allow-partial-confidence      # incomplete raw 
 | Survivorship extract→classify→merge | `wayback_machine/extract_dead.py` + `scripts/{build_targets_dead,run_extract_dead,build_classifier_input_dead,classify_dead,merge_survivorship}.py` |
 | Dashboards | `data visualization/02_Analysis_Code/` |
 | Eval Stage 9 viewer / config filter | `evals/dashboard_metrics.py` + `build_eval_dashboard.py` (ECE/selective/vs_baseline; mock fixture until Stage 8; `--runs` for real data) |
-| Eval Stage 8 matrix / scoring | `evals/config.py` (`EVAL_MODELS` + `STAGE8_PASS_B_EFFORTS`); `run-two-pass --reuse-pass-a-from`; `matrix`; `score --confidence-from-raw [--baseline]` |
+| Eval Stage 8 matrix / scoring | `evals/config.py` (`EVAL_MODELS` + `STAGE8_PASS_B_EFFORTS`); `run-two-pass` (auto Pass A bank); `matrix`; `score --confidence-from-raw [--baseline]` |
 
 ## Maintaining this file
 
