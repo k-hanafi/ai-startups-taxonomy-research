@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-11 · Active branch: `eval/auto-pass-a-bank-default` (Pass A auto-bank per model; next = merge then paid Stage 8 9-cell)
+Last updated: 2026-07-11 · Active branch: `main` (Pass A auto-bank default merged via PR #26; next = paid Stage 8 9-cell)
 
 ---
 

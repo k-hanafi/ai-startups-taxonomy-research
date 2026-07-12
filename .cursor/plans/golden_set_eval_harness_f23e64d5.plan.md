@@ -42,13 +42,13 @@ isProject: false
 
 ## STATUS (source of truth — update after every PR merge / pivot)
 
-Last updated: **2026-07-11** (Pass A auto-bank UX: default reuse per model under `evals/runs/pass_a_banks/<model>/`. Provisional `draft_*` gold accepted. Next = merge auto-bank PR, then Stage 8 paid 9-cell from `main`.)
+Last updated: **2026-07-11** (PR **#26** merged: Pass A auto-bank per model under `evals/runs/pass_a_banks/<model>/`. Provisional `draft_*` gold accepted. Next = Stage 8 paid 9-cell from `main`.)
 
 | Field | Value |
 |-------|--------|
-| **Last merged** | PR **#25** — Stage 8 science on `main`: Pass A bank reuse, `PASS_A_TOP_LOGPROBS=2` + both `{0,1}` required, Pass B isolating metrics, `--baseline`/vs_baseline, ECE/selective dashboard, `matrix`. Includes #22 dashboard + #24 research-direction fixes. Merged 2026-07-11 (`4644bf9` on `main`). |
-| **Open now** | Pass A auto-bank default (`eval/auto-pass-a-bank-default`). PR **#23** (`cursor/eval-dashboard-langsmith-ux-0263`) — separate LangSmith UX branch (do not delete). |
-| **Working branch** | `eval/auto-pass-a-bank-default` → merge to `main` before paid Stage 8. |
+| **Last merged** | PR **#26** — Pass A auto-bank default on `main` (stable `pass_a_banks/<model>/`, `--rerun-pass-a` / `--pass-a-from` escapes, `matrix` without reuse flag). Prior: PR **#25** Stage 8 science stack. |
+| **Open now** | PR **#23** (`cursor/eval-dashboard-langsmith-ux-0263`) — separate LangSmith UX branch (do not delete). |
+| **Working branch** | `main` (paid Stage 8 runs from here). |
 | **Next** | **Stage 8** paid 9-cell from `main`: for each model, run three `run-two-pass --effort-b {low,medium,high} --require-stage8-cell` (first cell creates the Pass A bank; later efforts auto-reuse). Score with `--confidence-from-raw` and `--baseline`. Use `python -m evals matrix` for the command list. Then Stage 9 real dashboard → Stage 10 report. |
 | **Gold labels** | Fable `draft_*` = provisional gold **accepted for the paid Stage 8 sweep** (user 2026-07-11; pivot 4; human review waived, `gold_verdict` stays 0/100 by design). No gold CSV edits this session. ONE full agent re-draft deferred to end of pipeline (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
@@ -76,7 +76,7 @@ Last updated: **2026-07-11** (Pass A auto-bank UX: default reuse per model under
 
 ### In progress
 
-- **Stage 8 (paid, next from `main` after auto-bank merge):** `python -m evals matrix` then `run-two-pass` per cell (Pass A auto-banks once per model). Provisional `draft_*` gold accepted for this sweep.
+- **Stage 8 (paid, next from `main`):** `python -m evals matrix` then `run-two-pass` per cell (Pass A auto-banks once per model). Provisional `draft_*` gold accepted for this sweep.
 
 ### Pending (in order) — NEXT STEPS
 
