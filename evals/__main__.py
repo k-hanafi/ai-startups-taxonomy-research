@@ -1,4 +1,4 @@
-"""CLI entry point: python -m evals <sample|run|score|report|dashboard>."""
+"""CLI entry point: python -m evals <sample|run-two-pass|score|matrix|…>."""
 
 from __future__ import annotations
 
@@ -12,7 +12,10 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(
         prog="python -m evals",
-        description="Golden-set evaluation harness for the startup classifier.",
+        description=(
+            "Golden-set evaluation harness for the startup classifier. "
+            "Stage 8 uses two-pass only (run-two-pass / matrix)."
+        ),
     )
     subs = parser.add_subparsers(dest="command", required=True)
 
@@ -26,7 +29,11 @@ def main() -> None:
     p_drafts.add_argument("drafts_json", help="Path to a drafts JSON batch")
     subs.add_parser("review-page", help="Render the human-review HTML page (Stage 2)")
     p_run = subs.add_parser(
-        "run", help="Run one model config against the golden set (Stage 3)"
+        "run",
+        help=(
+            "LEGACY single-pass runner (retired for Stage 8). Prefer "
+            "run-two-pass. Kept only to rescore old banked runs."
+        ),
     )
     p_run.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
     p_run.add_argument("--effort", default=None, help="Reasoning effort (default: screen effort)")
@@ -36,21 +43,66 @@ def main() -> None:
     p_run.add_argument("--dry-run", action="store_true", help="Print plan + cost, no API call")
     p_run2 = subs.add_parser(
         "run-two-pass",
-        help="Run the two-pass classifier (binary gate + family-constrained subclass) (Stage 5)",
+        help=(
+            "Run the two-pass classifier (Pass A binary gate + Pass B "
+            "family-constrained subclass). Stage 8 paid path."
+        ),
     )
     p_run2.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
-    p_run2.add_argument("--effort-b", default=None, help="Pass B reasoning effort (default: high)")
+    p_run2.add_argument(
+        "--effort-b",
+        default=None,
+        help="Pass B reasoning effort (default: high). Stage 8 uses low/medium/high.",
+    )
     p_run2.add_argument("--repeat", type=int, default=1, help="Repeat index for the run_id")
     p_run2.add_argument("--run-id", default=None, help="Override run_id to resume a partial run")
     p_run2.add_argument("--limit", type=int, default=None, help="Cap rows (cheap smoke test)")
     p_run2.add_argument("--dry-run", action="store_true", help="Print plan + cost, no API call")
+    p_run2.add_argument(
+        "--reuse-pass-a-from",
+        default=None,
+        metavar="RUN_ID",
+        help=(
+            "Reuse banked Pass A verdicts + raw logprobs from RUN_ID (same "
+            "model). Required for Stage 8 effort arms after the first cell "
+            "per model so Pass B deltas are not confounded by resampling "
+            "the gate."
+        ),
+    )
+    p_run2.add_argument(
+        "--require-stage8-cell",
+        action="store_true",
+        help="Refuse models/efforts outside the locked Stage 8 matrix.",
+    )
+    p_matrix = subs.add_parser(
+        "matrix",
+        help=(
+            "Enumerate the locked Stage 8 9-cell matrix "
+            "(EVAL_MODELS × low/medium/high). Default is dry-run commands."
+        ),
+    )
+    p_matrix.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=True,
+        help="Print planned commands only (default).",
+    )
+    p_matrix.add_argument(
+        "--pass-a-bank-template",
+        default="<pass-a-bank-run-id-for-MODEL>",
+        help="Placeholder shown for --reuse-pass-a-from on effort arms 2–3.",
+    )
     p_score = subs.add_parser(
         "score", help="Score run predictions against gold labels (Stage 7)"
     )
     p_score.add_argument("run_id", help="Run directory name under evals/runs/")
     p_score.add_argument(
         "--baseline", default=None,
-        help="Baseline run_id for paired-bootstrap deltas",
+        help=(
+            "Baseline run_id for paired-bootstrap deltas (same golden rows). "
+            "Use for Stage 8 model/config comparisons; surfaces as "
+            "vs_baseline in scored.json and the dashboard when present."
+        ),
     )
     conf_src = p_score.add_mutually_exclusive_group()
     conf_src.add_argument(
@@ -69,6 +121,13 @@ def main() -> None:
         help="Score even when n_scored < expected rows (config n_rows or full "
              "golden set). Default refuses so a mid-flight resume cannot look "
              "like a finished screen.",
+    )
+    p_score.add_argument(
+        "--allow-partial-confidence",
+        action="store_true",
+        help="Allow calibration when confidence covers fewer than all "
+             "eligible rows (incomplete raw/ or one-sided binary pools). "
+             "Default refuses incomplete confidence coverage.",
     )
     p_parity = subs.add_parser(
         "batch-parity",
@@ -143,6 +202,10 @@ def main() -> None:
         render_review_page()
         return
     if args.command == "run":
+        logging.warning(
+            "Single-pass `run` is LEGACY. Stage 8 science uses "
+            "`run-two-pass` (bank Pass A once per model, sweep Pass B effort)."
+        )
         from evals import config as cfg
         from evals.runner import run
 
@@ -157,15 +220,61 @@ def main() -> None:
         return
     if args.command == "run-two-pass":
         from evals import config as cfg
-        from evals.two_pass import run_two_pass
+        from evals.two_pass import run_two_pass, validate_stage8_cell
 
+        model = args.model or cfg.EVAL_MODELS[0]
+        effort_b = args.effort_b or cfg.PASS_B_EFFORT
+        if args.require_stage8_cell:
+            validate_stage8_cell(model, effort_b)
         run_two_pass(
-            model=args.model or cfg.EVAL_MODELS[0],
-            effort_b=args.effort_b or cfg.PASS_B_EFFORT,
+            model=model,
+            effort_b=effort_b,
             repeat=args.repeat,
             limit=args.limit,
             dry_run=args.dry_run,
             run_id=args.run_id,
+            reuse_pass_a_from=args.reuse_pass_a_from,
+        )
+        return
+
+    if args.command == "matrix":
+        from evals import config as cfg
+        from evals.two_pass import stage8_matrix_cells
+
+        cells = stage8_matrix_cells()
+        print(f"Stage 8 locked matrix: {len(cells)} cells")
+        print(f"  models = {cfg.EVAL_MODELS}")
+        print(f"  Pass B efforts = {cfg.STAGE8_PASS_B_EFFORTS}")
+        print()
+        print("Bank Pass A once per model (first effort arm), then reuse:")
+        by_model: dict[str, list[str]] = {}
+        for model, effort in cells:
+            by_model.setdefault(model, []).append(effort)
+        for model, efforts in by_model.items():
+            bank_placeholder = args.pass_a_bank_template.replace("MODEL", model)
+            first, *rest = efforts
+            print(
+                f"  # {model}: bank Pass A on {first}, reuse for "
+                + ", ".join(rest)
+            )
+            print(
+                f"  python -m evals run-two-pass --model {model} "
+                f"--effort-b {first} --require-stage8-cell"
+            )
+            for effort in rest:
+                print(
+                    f"  python -m evals run-two-pass --model {model} "
+                    f"--effort-b {effort} --require-stage8-cell "
+                    f"--reuse-pass-a-from {bank_placeholder}"
+                )
+            print(
+                f"  python -m evals score <run_id> --confidence-from-raw "
+                f"[--baseline <other_run_id>]"
+            )
+            print()
+        print(
+            "Dry-run cost preflight (no API): add --dry-run to any "
+            "run-two-pass line above."
         )
         return
 
@@ -188,6 +297,7 @@ def main() -> None:
             args.baseline,
             confidence,
             allow_partial=args.allow_partial,
+            allow_partial_confidence=args.allow_partial_confidence,
         )
         return
     if args.command == "batch-parity":

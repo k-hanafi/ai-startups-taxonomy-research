@@ -552,22 +552,83 @@ function renderLeaderboard() {
 }
 
 function renderConfidence() {
-  const runs = visibleConfigs();
+  const runs = visibleConfigs().filter(c => !c.is_aggregate);
   const host = document.getElementById('chart-confidence');
   if (!host) return;
-  if (!runs.length) { emptyChart('chart-confidence', 'Turn on a config above to show confidence.'); return; }
+  if (!runs.length) { emptyChart('chart-confidence', 'Turn on a config above to show calibration.'); return; }
   host.innerHTML = '';
-  Plotly.newPlot('chart-confidence', [{
+  const eceTrace = {
     type: 'bar',
+    name: 'ECE (lower better)',
     x: runs.map(c => c.label),
-    y: runs.map(c => c.share_above_90 == null ? null : 100 * c.share_above_90),
+    y: runs.map(c => c.ece == null ? null : 100 * c.ece),
     marker: {color: runs.map(c => colorFor(c)), opacity: 0.85},
-    hovertemplate: '%{x}<br>≥90% conf: %{y:.1f}%<extra></extra>',
-  }], layout({
-    yaxis: {title: {text: 'Share of rows ≥ 90% confidence (%)', font: {size: 11, color: '#9ca3af'}}, gridcolor: '#f3f4f6'},
+    hovertemplate: '%{x}<br>ECE %{y:.2f}%<extra></extra>',
+  };
+  const selTrace = {
+    type: 'scatter',
+    mode: 'lines+markers',
+    name: 'Selective @50% cov',
+    x: runs.map(c => c.label),
+    y: runs.map(c => c.selective_acc_50 == null ? null : 100 * c.selective_acc_50),
+    yaxis: 'y2',
+    line: {color: '#64748b', width: 2},
+    marker: {size: 7, color: '#334155'},
+    hovertemplate: '%{x}<br>selective@50 %{y:.1f}%<extra></extra>',
+  };
+  Plotly.newPlot('chart-confidence', [eceTrace, selTrace], layout({
+    yaxis: {title: {text: 'ECE (%)', font: {size: 11, color: '#9ca3af'}}, gridcolor: '#f3f4f6'},
+    yaxis2: {
+      title: {text: 'Selective accuracy @50% coverage (%)', font: {size: 11, color: '#9ca3af'}},
+      overlaying: 'y',
+      side: 'right',
+      showgrid: false,
+      range: [50, 105],
+    },
     xaxis: {tickangle: -30, gridcolor: 'rgba(0,0,0,0)'},
-    margin: {l: 52, r: 12, t: 12, b: 80},
-    showlegend: false,
+    margin: {l: 52, r: 56, t: 28, b: 80},
+    legend: {orientation: 'h', y: 1.15},
+  }), cfg);
+}
+
+function renderReliability() {
+  const runs = visibleConfigs().filter(c => !c.is_aggregate && c.reliability_bins && c.reliability_bins.length);
+  const host = document.getElementById('chart-reliability');
+  if (!host) return;
+  if (!runs.length) {
+    emptyChart('chart-reliability', 'Reliability bins appear when scored.json carries calibration.reliability.bins.');
+    return;
+  }
+  host.innerHTML = '';
+  // Show the first visible config with bins (one diagram; filter to compare).
+  const c = runs[0];
+  const bins = c.reliability_bins.filter(b => b.count > 0 && b.mean_confidence != null);
+  Plotly.newPlot('chart-reliability', [
+    {
+      type: 'scatter',
+      mode: 'lines',
+      name: 'perfect',
+      x: [0, 1],
+      y: [0, 1],
+      line: {dash: 'dash', color: '#d1d5db', width: 1},
+      hoverinfo: 'skip',
+    },
+    {
+      type: 'scatter',
+      mode: 'markers+lines',
+      name: c.label,
+      x: bins.map(b => b.mean_confidence),
+      y: bins.map(b => b.accuracy),
+      marker: {size: bins.map(b => 6 + Math.sqrt(b.count)), color: colorFor(c)},
+      line: {color: colorFor(c), width: 1.5},
+      text: bins.map(b => 'n=' + b.count),
+      hovertemplate: 'conf %{x:.2f}<br>acc %{y:.2f}<br>%{text}<extra></extra>',
+    },
+  ], layout({
+    xaxis: {title: {text: 'Mean confidence', font: {size: 11, color: '#9ca3af'}}, range: [0, 1], gridcolor: '#f3f4f6'},
+    yaxis: {title: {text: 'Accuracy', font: {size: 11, color: '#9ca3af'}}, range: [0, 1], gridcolor: '#f3f4f6'},
+    margin: {l: 52, r: 12, t: 12, b: 48},
+    showlegend: true,
   }), cfg);
 }
 
@@ -604,7 +665,29 @@ function renderAll() {
   renderPareto();
   renderLeaderboard();
   renderConfidence();
+  renderReliability();
   renderLatency();
+  renderBaseline();
+}
+
+function renderBaseline() {
+  const host = document.getElementById('baseline-table');
+  if (!host) return;
+  const runs = visibleConfigs().filter(c => c.vs_baseline);
+  if (!runs.length) {
+    host.innerHTML = '<p class="stub-note">No vs_baseline blocks yet. Score with <code>--baseline &lt;run_id&gt;</code> for paired bootstrap deltas.</p>';
+    return;
+  }
+  host.innerHTML = '<table class="ls"><thead><tr><th>Config</th><th>Baseline</th><th class="num">Δ subclass</th><th class="num">95% CI</th><th>Sig?</th></tr></thead><tbody>' +
+    runs.map(c => {
+      const v = c.vs_baseline;
+      const d = v.delta_accuracy;
+      const ci = v.ci95 || [];
+      return '<tr><td>' + c.label + '</td><td class="mono">' + (v.baseline_run_id || '') +
+        '</td><td class="num mono">' + (d == null ? '—' : ((d >= 0 ? '+' : '') + (100 * d).toFixed(1) + '%')) +
+        '</td><td class="num mono">' + (ci.length === 2 ? ((100 * ci[0]).toFixed(1) + ' … ' + (100 * ci[1]).toFixed(1) + '%') : '—') +
+        '</td><td>' + (v.significant ? 'yes' : 'no') + '</td></tr>';
+    }).join('') + '</tbody></table>';
 }
 
 function showTab(name) {
@@ -616,7 +699,7 @@ function showTab(name) {
   });
   // Re-layout Plotly when a chart panel becomes visible.
   if (name === 'charts') {
-    setTimeout(() => { renderPareto(); renderConfidence(); renderLatency(); }, 30);
+    setTimeout(() => { renderPareto(); renderConfidence(); renderReliability(); renderLatency(); renderBaseline(); }, 30);
   }
 }
 
@@ -743,9 +826,19 @@ def build_html(metrics: dict) -> str:
       <div id="chart-pareto" class="chart"></div>
     </div>
     <div class="card">
-      <div class="card-title">High-confidence share</div>
-      <div class="card-desc">Share of rows with binary confidence ≥ 90%.</div>
+      <div class="card-title">Calibration (ECE + selective)</div>
+      <div class="card-desc">Expected Calibration Error (lower is better) and accuracy when answering only on the top 50% most confident rows. Share ≥90% is secondary.</div>
       <div id="chart-confidence" class="chart short"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Reliability curve</div>
+      <div class="card-desc">Mean confidence vs accuracy per bin for the first visible config that carries bins. Filter to one config to inspect it.</div>
+      <div id="chart-reliability" class="chart short"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Paired vs baseline</div>
+      <div class="card-desc">Paired-bootstrap subclass deltas when scored.json includes vs_baseline (score --baseline).</div>
+      <div id="baseline-table"></div>
     </div>
     <div class="card">
       <div class="card-title">Latency</div>

@@ -73,6 +73,27 @@ def test_fixture_rows_carry_chart_fields():
     assert row["is_partial"] is False
 
 
+def test_fixture_pass_a_metrics_identical_within_model():
+    """Banked Pass A design: ai_native / ECE / confidence do not vary with Pass B effort."""
+    metrics = load_fixture(MOCK)
+    by_model: dict[str, list] = {}
+    for c in metrics["configs"]:
+        by_model.setdefault(c["model"], []).append(c)
+    for model, rows in by_model.items():
+        assert len(rows) == 3
+        ai = {r["ai_native_acc"] for r in rows}
+        ece = {r["ece"] for r in rows}
+        conf = {r["mean_confidence"] for r in rows}
+        share = {r["share_above_90"] for r in rows}
+        assert len(ai) == 1, model
+        assert len(ece) == 1, model
+        assert len(conf) == 1, model
+        assert len(share) == 1, model
+        # Pass B axes may still differ across efforts.
+        subclass = {r["subclass_acc"] for r in rows}
+        assert len(subclass) >= 2, model
+
+
 def test_config_row_prefers_scored_metadata_over_run_id_parse():
     """Explicit scored.json fields win when run_id would parse differently."""
     stub = {
@@ -155,21 +176,27 @@ def test_duplicate_model_effort_keeps_distinct_filter_ids():
         {**base, "run_id": "2026-07-10_gpt-5.4-mini_medium_r3"},
     ]
     metrics = build_metrics(runs, synthetic=True, source="finalist-repeats")
-    assert metrics["n_configs"] == 3
-    assert len(set(metrics["config_ids"])) == 3
-    assert metrics["config_ids"] == [
+    # 3 individual repeats + 1 mean±range aggregate.
+    assert metrics["n_configs"] == 4
+    assert len(set(metrics["config_ids"])) == 4
+    assert metrics["config_ids"][:3] == [
         "2026-07-10_gpt-5.4-mini_medium_r1",
         "2026-07-10_gpt-5.4-mini_medium_r2",
         "2026-07-10_gpt-5.4-mini_medium_r3",
     ]
+    assert metrics["config_ids"][3] == "agg_gpt-5.4-mini_medium"
     # Colliding model×effort labels get · rN so chart pills/axes stay distinct.
-    assert [c["label"] for c in metrics["configs"]] == [
+    assert [c["label"] for c in metrics["configs"] if not c.get("is_aggregate")] == [
         "mini / medium · r1",
         "mini / medium · r2",
         "mini / medium · r3",
     ]
-    # Group pill still lists every repeat (not collapsed to one mini-med id).
-    assert len(metrics["model_groups"]["mini"]["ids"]) == 3
+    agg = next(c for c in metrics["configs"] if c.get("is_aggregate"))
+    assert agg["n_repeats"] == 3
+    assert agg["subclass_acc"] == pytest.approx(0.85)
+    assert agg["subclass_acc_range"] == [0.85, 0.85]
+    # Group pill lists repeats + aggregate.
+    assert len(metrics["model_groups"]["mini"]["ids"]) == 4
 
 
 def test_single_pass_kind_for_banked_none_effort():
