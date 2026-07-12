@@ -24,6 +24,7 @@ from typing import Any
 from openai import OpenAI
 
 from src.config import OPENAI_API_KEY
+from src.formatter import build_custom_id
 
 from evals import config as cfg
 from evals.paths import parity_report_path, run_dir, run_raw_dir
@@ -83,16 +84,15 @@ def _binary_verdict(response_body: dict[str, Any]) -> Any:
 
 
 def _logprob_shape_checks(
-    side: str, entries: list[dict[str, Any]], requested_top: int
+    side: str, entries: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     """Shape checks for one side's logprob list.
 
     Success is presence + entry keys + sync≈batch shape elsewhere. We do NOT
-    require returning ~requested_top alternatives: Pass A only needs {0,1}
-    evidence at the decision token, and constrained decoding often returns
-    fewer alternatives than requested (especially mini/luna).
+    require returning ~N alternatives: Pass A only needs {0,1} evidence at
+    the decision token, and constrained decoding often returns fewer
+    alternatives than requested (especially mini/luna).
     """
-    del requested_top  # retained in signature for call-site compatibility
     checks = [_check(f"{side}_logprobs_present", bool(entries),
                      f"{len(entries)} token entries")]
     if not entries:
@@ -183,8 +183,8 @@ def parity_checks(
     # Logprob payload shape parity (the include param is honored iff present).
     sync_entries = extract_logprob_entries(sync_body)
     batch_entries = extract_logprob_entries(batch_body)
-    checks.extend(_logprob_shape_checks("sync", sync_entries, requested_top))
-    checks.extend(_logprob_shape_checks("batch", batch_entries, requested_top))
+    checks.extend(_logprob_shape_checks("sync", sync_entries))
+    checks.extend(_logprob_shape_checks("batch", batch_entries))
     # Sync≈batch shape: same token count when both sides have logprobs.
     if sync_entries and batch_entries:
         checks.append(_check(
@@ -335,7 +335,7 @@ def run_parity(model: str = cfg.EVAL_MODELS[0]) -> dict[str, Any]:
     rows = load_golden_rows()[:cfg.PARITY_ROWS]
     prompt_a = load_pass_a_prompt()
     requests = {
-        f"startup-{row['org_uuid']}": pass_a_kwargs(row, prompt_a, model)
+        build_custom_id(row["org_uuid"]): pass_a_kwargs(row, prompt_a, model)
         for row in rows
     }
 

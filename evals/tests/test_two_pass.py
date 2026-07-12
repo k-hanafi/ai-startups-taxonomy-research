@@ -470,6 +470,29 @@ def test_rerun_pass_a_forces_new_bank(tmp_path, monkeypatch):
     assert bank["startup-u1"]["ai_native"] == 1
 
 
+def test_dry_run_rerun_pass_a_leaves_bank_intact(tmp_path, monkeypatch):
+    """--dry-run --rerun-pass-a must not delete an existing Pass A bank."""
+    from evals.paths import pass_a_bank_run_id
+
+    model = "gpt-5.4-nano"
+    bank_id = pass_a_bank_run_id(model)
+    _write_mini_bank(tmp_path, bank_id, model, verdict=0)
+    _patch_run_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(two_pass, "load_golden_rows", _golden_one_row)
+    monkeypatch.setattr(two_pass, "identity_hashes", _identity_hashes)
+
+    two_pass.run_two_pass(
+        model=model,
+        effort_b="low",
+        run_id="dry-rerun",
+        dry_run=True,
+        rerun_pass_a=True,
+    )
+    bank = two_pass.load_pass_a_bank(bank_id)
+    assert bank["startup-u1"]["ai_native"] == 0
+    assert (tmp_path / "runs" / bank_id / "config.json").exists()
+
+
 def test_pass_a_from_pins_historical_bank(tmp_path, monkeypatch):
     """--pass-a-from loads a historical run_id instead of the stable bank."""
     hist = "historical-nano"
