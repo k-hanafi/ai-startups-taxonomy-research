@@ -3,7 +3,7 @@
 The eval harness runs everything through the sync Responses API, but the
 production pipeline lives on the Batch API. Before trusting either side, this
 smoke submits a handful of Pass A rows BOTH ways with byte-identical request
-bodies (built by evals.two_pass.pass_a_kwargs in both cases) and asserts that
+bodies (built by evals.classification.pass_a_kwargs in both cases) and asserts that
 the Batch API returns the same logprob payload shape and honors the same
 parameters (top_logprobs, reasoning effort, temperature, include). If parity
 fails, logprob confidence measured sync would not transfer to production.
@@ -29,7 +29,7 @@ from src.formatter import build_custom_id
 from evals import config as cfg
 from evals.paths import parity_report_path, run_dir, run_raw_dir
 from evals.runner import _RETRIABLE, _git_commit, load_golden_rows
-from evals.two_pass import _parse_output, load_pass_a_prompt, pass_a_kwargs
+from evals.classification import _parse_output, load_pass_a_prompt, pass_a_kwargs
 
 logger = logging.getLogger(__name__)
 

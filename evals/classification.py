@@ -1,15 +1,15 @@
-"""Stage 5: the two-pass split-reasoning classifier over the golden set.
+"""Stage 5: Pass A/B classification runner over the golden set.
 
 Pass A (reasoning off, logprobs on) answers the binary "AI-native or not?"
 with a one-field JSON, putting the whole confidence signal on a handful of
 tokens. Pass B (reasoning high, no logprobs) assigns the fine-grained
-subclass — hard-constrained by the response schema to the family Pass A
-chose — plus RAD when the family is AI-native. Cohort never touches an LLM:
+subclass, hard-constrained by the response schema to the family Pass A
+chose, plus RAD when the family is AI-native. Cohort never touches an LLM:
 it is a pure function of founded_date.
 
-Empirical basis (see the two-pass plan): logprobs and reasoning are mutually
-exclusive per request, binary accuracy survives without reasoning (93% vs
-Fable either way), and 10-way subclass accuracy does not (41% vs 66%).
+Empirical basis (see the split-reasoning plan): logprobs and reasoning are
+mutually exclusive per request, binary accuracy survives without reasoning
+(93% vs Fable either way), and 10-way subclass accuracy does not (41% vs 66%).
 
 Reuses the Stage 3 runner's reliability harness: tenacity retries, per-row
 resume keyed by custom_id, config snapshot with prompt hashes, raw responses
@@ -212,7 +212,7 @@ def pass_b_kwargs(row: dict[str, Any], verdict: int, cohort: str,
 
 
 def identity_hashes() -> dict[str, str]:
-    """SHA-256 of every artifact that defines the two-pass request identity."""
+    """SHA-256 of every artifact that defines the classification request identity."""
     return {
         "prompt_a_sha256": _sha256(load_pass_a_prompt()),
         "prompt_b_family1_sha256": _sha256(load_pass_b_prompt(1)),
@@ -326,7 +326,7 @@ def assemble_record(custom_id: str, org_uuid: str, model: str, effort_b: str,
 
 def make_run_id(model: str, effort_b: str, repeat: int) -> str:
     date = datetime.date.today().isoformat()
-    return f"{date}_2pass_{model}_{effort_b}_r{repeat}"
+    return f"{date}_classification_{model}_{effort_b}_r{repeat}"
 
 
 @_RETRIABLE
@@ -348,7 +348,7 @@ def _ensure_config(run_id: str, model: str, effort_b: str, repeat: int,
                    pass_a_bank_run_id: str | None = None) -> None:
     config = {
         "run_id": run_id,
-        "kind": "two_pass",
+        "kind": "classification",
         "model": model,
         "effort_a": cfg.PASS_A_EFFORT,
         "effort_b": effort_b,
@@ -372,12 +372,12 @@ def _ensure_config(run_id: str, model: str, effort_b: str, repeat: int,
     mismatched = [k for k in _RESUME_INVARIANTS if prior.get(k) != config[k]]
     if mismatched:
         raise SystemExit(
-            f"Cannot resume two-pass run {run_id}: {mismatched} changed since it "
+            f"Cannot resume classification run {run_id}: {mismatched} changed since it "
             "started. Start a fresh run with a new --run-id."
         )
     if prior.get("pass_a_bank_run_id") != pass_a_bank_run_id:
         raise SystemExit(
-            f"Cannot resume two-pass run {run_id}: pass_a_bank_run_id changed "
+            f"Cannot resume classification run {run_id}: pass_a_bank_run_id changed "
             f"({prior.get('pass_a_bank_run_id')!r} -> {pass_a_bank_run_id!r})."
         )
 
@@ -683,7 +683,7 @@ class _BankedPassAResponse:
         return self._raw
 
 
-def run_two_pass(model: str = cfg.EVAL_MODELS[0],
+def run_classification(model: str = cfg.EVAL_MODELS[0],
                  effort_b: str = cfg.PASS_B_EFFORT,
                  repeat: int = 1,
                  limit: int | None = None,

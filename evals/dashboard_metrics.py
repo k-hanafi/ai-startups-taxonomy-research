@@ -83,12 +83,19 @@ def _parse_model_from_run_id(run_id: str) -> str:
 
 
 def _infer_kind(scored: dict[str, Any], run_id: str, effort: str) -> Optional[str]:
-    """Architecture label for leaderboard captions (two_pass vs single_pass)."""
+    """Architecture label for leaderboard captions (classification vs single_pass)."""
     kind = scored.get("kind")
+    if kind == "two_pass":
+        return "classification"
     if kind:
         return str(kind)
-    if "2pass" in run_id or run_id.startswith("mock_"):
-        return "two_pass"
+    # New run ids use _classification_; older ones used _2pass_.
+    if (
+        "classification" in run_id
+        or "2pass" in run_id
+        or run_id.startswith("mock_")
+    ):
+        return "classification"
     if effort == "none":
         return "single_pass"
     return None

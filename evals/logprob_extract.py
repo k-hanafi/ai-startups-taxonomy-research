@@ -1,6 +1,6 @@
 """Stage 6: logprob -> binary-confidence extraction for Pass A responses.
 
-Pass A of the two-pass classifier answers {"ai_native": 0|1} in ~6 output
+Pass A of the classification runner answers {"ai_native": 0|1} in ~6 output
 tokens with logprobs on. This module turns one raw Responses API payload into
 a calibrated per-row confidence record: p(ai_native=1), top-1 probability,
 margin, entropy, and valid_mass (the probability mass the model put on the

@@ -99,7 +99,7 @@ def test_cost_from_actual_usage_single_pass():
     assert cost["reasoning_tokens"]["max"] == 400
 
 
-def test_cost_sums_two_pass_usage_fields():
+def test_cost_sums_classification_usage_fields():
     records = [{
         "a_input_tokens": 100, "a_output_tokens": 10, "a_reasoning_tokens": 0,
         "b_input_tokens": 200, "b_output_tokens": 40, "b_reasoning_tokens": 30,
@@ -135,7 +135,7 @@ def test_latency_summary_known_answer():
     assert "a_latency_s" not in summary and "b_latency_s" not in summary
 
 
-def test_latency_summary_two_pass_per_pass_breakdown():
+def test_latency_summary_classification_per_pass_breakdown():
     records = [
         {"latency_s": 10.0, "a_latency_s": 1.0, "b_latency_s": 9.0},
         {"latency_s": 20.0, "a_latency_s": 2.0, "b_latency_s": 18.0},
@@ -284,11 +284,11 @@ def test_score_run_end_to_end(mini_run):
     assert scored["kind"] == "single_pass"
 
 
-def test_score_run_writes_two_pass_metadata_from_config(mini_run):
+def test_score_run_writes_classification_metadata_from_config(mini_run):
     run_id, run_dir = mini_run
     (run_dir / "config.json").write_text(
         json.dumps({
-            "kind": "two_pass",
+            "kind": "classification",
             "model": "gpt-5.6-luna",
             "effort_b": "medium",
             "n_rows": 3,
@@ -298,8 +298,24 @@ def test_score_run_writes_two_pass_metadata_from_config(mini_run):
     report = scoring.score_run(run_id, write=False)
     assert report["model"] == "gpt-5.6-luna"
     assert report["effort_b"] == "medium"
-    assert report["kind"] == "two_pass"
+    assert report["kind"] == "classification"
     assert "effort" not in report
+
+
+def test_score_run_normalizes_legacy_two_pass_kind(mini_run):
+    run_id, run_dir = mini_run
+    (run_dir / "config.json").write_text(
+        json.dumps({
+            "kind": "two_pass",
+            "model": "gpt-5.4-nano",
+            "effort_b": "low",
+            "n_rows": 3,
+        }),
+        encoding="utf-8",
+    )
+    report = scoring.score_run(run_id, write=False)
+    assert report["kind"] == "classification"
+    assert report["effort_b"] == "low"
 
 
 def test_score_run_refuses_partial_by_default(mini_run):
@@ -336,7 +352,7 @@ def test_score_run_honors_config_n_rows_as_expected(mini_run):
     """A --limit smoke writes n_rows=2; scoring 2/2 must pass without --allow-partial."""
     run_id, run_dir = mini_run
     (run_dir / "config.json").write_text(
-        json.dumps({"kind": "two_pass", "model": "gpt-5.4-nano",
+        json.dumps({"kind": "classification", "model": "gpt-5.4-nano",
                     "effort_b": "low", "n_rows": 2}),
         encoding="utf-8",
     )
@@ -354,7 +370,7 @@ def test_score_run_honors_config_n_rows_as_expected(mini_run):
     assert report["n_scored"] == 2
     assert report["n_expected"] == 2
     assert report["effort_b"] == "low"
-    assert report["kind"] == "two_pass"
+    assert report["kind"] == "classification"
 
 
 def test_score_run_surfaces_latency_when_recorded(mini_run):

@@ -62,7 +62,7 @@ def test_fixture_rows_carry_chart_fields():
     assert row["model"] == "gpt-5.4-mini"
     assert row["effort_b"] == "medium"
     assert row["model_group"] == "mini"
-    assert row["kind"] == "two_pass"
+    assert row["kind"] == "classification"
     assert 0.8 < row["subclass_acc"] < 0.9
     assert row["projected_usd"] == 412
     assert row["latency_p50"] == 4.6
@@ -100,7 +100,7 @@ def test_config_row_prefers_scored_metadata_over_run_id_parse():
         "run_id": "mock_gpt-5.4-nano_high_r1",  # would parse nano/high
         "model": "gpt-5.6-luna",
         "effort_b": "low",
-        "kind": "two_pass",
+        "kind": "classification",
         "n_scored": 100,
         "axes": {
             "subclass": {"accuracy": 0.8, "accuracy_ci95": [0.7, 0.9], "macro_f1": 0.75},
@@ -120,7 +120,7 @@ def test_config_row_from_minimal_scored_stub():
         "run_id": "2026-07-10_gpt-5.4-nano_high_r1",
         "model": "gpt-5.4-nano",
         "effort_b": "high",
-        "kind": "two_pass",
+        "kind": "classification",
         "n_scored": 10,
         "axes": {
             "subclass": {
@@ -142,7 +142,7 @@ def test_config_row_from_minimal_scored_stub():
     assert row["id"] == "2026-07-10_gpt-5.4-nano_high_r1"
     assert row["label"] == "nano / high"
     assert row["model_group"] == "nano"
-    assert row["kind"] == "two_pass"
+    assert row["kind"] == "classification"
     assert row["subclass_acc"] == 0.7
     assert row["subclass_ci"] == pytest.approx(0.1)
     assert row["projected_usd"] == 120.5

@@ -630,9 +630,12 @@ def score_run(
 
     model = run_config.get("model") or predictions[scored_uuids[0]].get("model") or ""
     kind = run_config.get("kind")
+    if kind == "two_pass":
+        # Pre-rename artifact label; normalize for scored.json / dashboard.
+        kind = "classification"
     if kind is None:
         if "effort_b" in run_config:
-            kind = "two_pass"
+            kind = "classification"
         elif run_config or model:
             kind = "single_pass"
         else:
@@ -671,7 +674,7 @@ def score_run(
         ),
         "vs_baseline": None,
     }
-    if kind == "two_pass" or "effort_b" in run_config:
+    if kind == "classification" or "effort_b" in run_config:
         report["effort_b"] = run_config.get("effort_b")
         if run_config.get("pass_a_bank_run_id"):
             report["pass_a_bank_run_id"] = run_config["pass_a_bank_run_id"]

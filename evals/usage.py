@@ -36,7 +36,7 @@ def cached_tokens_from_usage(usage: Any) -> int:
 def token_totals(record: dict[str, Any]) -> dict[str, int]:
     """input/output/reasoning/cached totals for one prediction record.
 
-    Single-pass records use flat fields; two-pass records use a_/b_
+    Single-pass records use flat fields; classification records use a_/b_
     prefixes (summed). Missing fields default to 0. Callers that need
     "was cached_tokens recorded at all?" use
     ``evals.cost_extrapolate._records_have_cached_field`` separately.

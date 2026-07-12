@@ -1,4 +1,4 @@
-"""Offline tests for the Stage 5 two-pass classifier. No API key, no big CSVs."""
+"""Offline tests for the Stage 5 classification classifier. No API key, no big CSVs."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from evals import config as cfg
-from evals import two_pass
+from evals import classification
 
 
 @pytest.fixture
@@ -42,20 +42,20 @@ def sample_row() -> dict[str, str]:
     ("nan", "PRE-GENAI"),
 ])
 def test_compute_cohort(founded, expected):
-    assert two_pass.compute_cohort(founded) == expected
+    assert classification.compute_cohort(founded) == expected
 
 
 # --- messages ---------------------------------------------------------------
 
 def test_pass_a_message_drops_website_pages(sample_row):
-    msg = two_pass.pass_a_message(sample_row)
+    msg = classification.pass_a_message(sample_row)
     assert "Website Pages Used" not in msg
     assert "Website Evidence:" in msg
     assert sample_row["website_pages_used"] not in msg
 
 
 def test_pass_b_message_appends_conditioning_fields(sample_row):
-    msg = two_pass.pass_b_message(sample_row, 1, "GENAI-ERA")
+    msg = classification.pass_b_message(sample_row, 1, "GENAI-ERA")
     assert msg.endswith("PriorBinaryVerdict: 1\nCohort: GENAI-ERA")
     assert "Website Evidence:" in msg
 
@@ -63,8 +63,8 @@ def test_pass_b_message_appends_conditioning_fields(sample_row):
 # --- schemas / family constraint --------------------------------------------
 
 def test_family_schema_selection(sample_row):
-    kw1 = two_pass.pass_b_kwargs(sample_row, 1, "GENAI-ERA", "gpt-5.4-nano", "high")
-    kw0 = two_pass.pass_b_kwargs(sample_row, 0, "GENAI-ERA", "gpt-5.4-nano", "high")
+    kw1 = classification.pass_b_kwargs(sample_row, 1, "GENAI-ERA", "gpt-5.4-nano", "high")
+    kw0 = classification.pass_b_kwargs(sample_row, 0, "GENAI-ERA", "gpt-5.4-nano", "high")
 
     subs1 = kw1["text"]["format"]["schema"]["properties"]["subclass"]["enum"]
     subs0 = kw0["text"]["format"]["schema"]["properties"]["subclass"]["enum"]
@@ -78,24 +78,24 @@ def test_family_schema_selection(sample_row):
 
 
 def test_pass_b_prompt_embeds_matching_family_block():
-    p1 = two_pass.load_pass_b_prompt(1)
-    p0 = two_pass.load_pass_b_prompt(0)
+    p1 = classification.load_pass_b_prompt(1)
+    p0 = classification.load_pass_b_prompt(0)
     assert "{family_block}" not in p1 and "{family_block}" not in p0
     assert "1A | Foundation Layer" in p1 and "0A |" not in p1.split("ANALYTICAL")[0][:2000]
     assert "0A | Traditional Tech / SaaS" in p0 and "1A | Foundation Layer" not in p0
 
 
 def test_strict_schemas_forbid_extra_properties():
-    for cls in (two_pass.BinaryResult, two_pass.SubclassResultAI,
-                two_pass.SubclassResultNot):
-        assert two_pass.strict_schema(cls)["additionalProperties"] is False
+    for cls in (classification.BinaryResult, classification.SubclassResultAI,
+                classification.SubclassResultNot):
+        assert classification.strict_schema(cls)["additionalProperties"] is False
 
 
 # --- request params -----------------------------------------------------------
 
 def test_pass_a_sends_logprobs_pass_b_does_not(sample_row):
-    ka = two_pass.pass_a_kwargs(sample_row, "PROMPT", "gpt-5.4-nano")
-    kb = two_pass.pass_b_kwargs(sample_row, 1, "GENAI-ERA", "gpt-5.4-nano", "high")
+    ka = classification.pass_a_kwargs(sample_row, "PROMPT", "gpt-5.4-nano")
+    kb = classification.pass_b_kwargs(sample_row, 1, "GENAI-ERA", "gpt-5.4-nano", "high")
 
     assert ka["reasoning"] == {"effort": cfg.PASS_A_EFFORT}
     assert ka["top_logprobs"] == cfg.PASS_A_TOP_LOGPROBS
@@ -141,7 +141,7 @@ def test_assemble_record_ai_native_family():
         "conf_rad": 3, "reasons_3_points": "a | b | c", "sources_used": "keywords",
         "verification_critique": "ok", "boundary_disagreement": False,
     }, reasoning=500, cached=40)
-    rec = two_pass.assemble_record("startup-x", "x", "gpt-5.4-nano", "high",
+    rec = classification.assemble_record("startup-x", "x", "gpt-5.4-nano", "high",
                                    "GENAI-ERA", ra, rb,
                                    latency_a_s=0.8, latency_b_s=12.4)
     assert rec["status"] == "completed"
@@ -166,7 +166,7 @@ def test_assemble_record_zero_family_forces_rad_na():
         "sources_used": "keywords", "verification_critique": "ok",
         "boundary_disagreement": True,
     })
-    rec = two_pass.assemble_record("startup-y", "y", "gpt-5.4-nano", "high",
+    rec = classification.assemble_record("startup-y", "y", "gpt-5.4-nano", "high",
                                    "PRE-GENAI", ra, rb)
     assert rec["rad_score"] == "RAD-NA"
     assert rec["conf_rad"] is None
@@ -175,7 +175,7 @@ def test_assemble_record_zero_family_forces_rad_na():
 
 def test_assemble_record_failed_pass_a_not_completed():
     ra = _resp("incomplete", None)
-    rec = two_pass.assemble_record("startup-z", "z", "gpt-5.4-nano", "high",
+    rec = classification.assemble_record("startup-z", "z", "gpt-5.4-nano", "high",
                                    "PRE-GENAI", ra, None, latency_a_s=1.5)
     assert rec["status"] != "completed"
     assert rec["subclass"] is None and rec["rad_score"] is None
@@ -189,22 +189,22 @@ def test_assemble_record_parse_failure_never_marked_completed():
     # Pass A API-completed but output unparseable, Pass B never ran: the row
     # must stay retryable on resume.
     ra = SimpleNamespace(status="completed", output_text="not json", usage=None)
-    rec = two_pass.assemble_record("startup-w", "w", "gpt-5.4-nano", "high",
+    rec = classification.assemble_record("startup-w", "w", "gpt-5.4-nano", "high",
                                    "PRE-GENAI", ra, None)
     assert rec["status"] != "completed"
 
     # Both passes API-completed but Pass B output unparseable: same rule.
     ra2 = _resp("completed", {"ai_native": 1})
     rb2 = SimpleNamespace(status="completed", output_text="{broken", usage=None)
-    rec2 = two_pass.assemble_record("startup-v", "v", "gpt-5.4-nano", "high",
+    rec2 = classification.assemble_record("startup-v", "v", "gpt-5.4-nano", "high",
                                     "PRE-GENAI", ra2, rb2)
     assert rec2["status"] == "parse_failed"
 
 
 def test_resume_config_refuses_repeat_or_row_count_changes(tmp_path, monkeypatch):
-    monkeypatch.setattr(two_pass, "run_config_path",
+    monkeypatch.setattr(classification, "run_config_path",
                         lambda rid: tmp_path / rid / "config.json")
-    monkeypatch.setattr(two_pass, "identity_hashes", lambda: {
+    monkeypatch.setattr(classification, "identity_hashes", lambda: {
         "prompt_a_sha256": "pa",
         "prompt_b_family1_sha256": "pb1",
         "prompt_b_family0_sha256": "pb0",
@@ -213,37 +213,37 @@ def test_resume_config_refuses_repeat_or_row_count_changes(tmp_path, monkeypatch
         "schema_b0_sha256": "sb0",
         "formatter_sha256": "fmt",
     })
-    monkeypatch.setattr(two_pass, "_git_commit", lambda: "abc123")
+    monkeypatch.setattr(classification, "_git_commit", lambda: "abc123")
 
     (tmp_path / "repeat-run").mkdir()
-    two_pass._ensure_config("repeat-run", "gpt-5.4-nano", "high", repeat=1, n_rows=10)
+    classification._ensure_config("repeat-run", "gpt-5.4-nano", "high", repeat=1, n_rows=10)
     with pytest.raises(SystemExit, match="repeat"):
-        two_pass._ensure_config("repeat-run", "gpt-5.4-nano", "high", repeat=2, n_rows=10)
+        classification._ensure_config("repeat-run", "gpt-5.4-nano", "high", repeat=2, n_rows=10)
 
     (tmp_path / "limit-run").mkdir()
-    two_pass._ensure_config("limit-run", "gpt-5.4-nano", "high", repeat=1, n_rows=10)
+    classification._ensure_config("limit-run", "gpt-5.4-nano", "high", repeat=1, n_rows=10)
     with pytest.raises(SystemExit, match="n_rows"):
-        two_pass._ensure_config("limit-run", "gpt-5.4-nano", "high", repeat=1, n_rows=20)
+        classification._ensure_config("limit-run", "gpt-5.4-nano", "high", repeat=1, n_rows=20)
 
 
 def test_dry_run_refuses_unknown_model_pricing(monkeypatch):
-    monkeypatch.setattr(two_pass, "load_golden_rows", lambda: [
+    monkeypatch.setattr(classification, "load_golden_rows", lambda: [
         {"org_uuid": "u1", "name": "Acme", "short_description": "x",
          "website_evidence": "y", "founded_on": "2024-01-01"},
     ])
     with pytest.raises(SystemExit, match="Unknown model pricing"):
-        two_pass.run_two_pass(model="gpt-not-a-real-model", dry_run=True, limit=1)
+        classification.run_classification(model="gpt-not-a-real-model", dry_run=True, limit=1)
 
 
 def test_stage8_matrix_cells_locked():
-    cells = two_pass.stage8_matrix_cells()
+    cells = classification.stage8_matrix_cells()
     assert len(cells) == 9
     assert cells[0] == ("gpt-5.4-nano", "low")
     assert cells[-1] == ("gpt-5.6-luna", "high")
     with pytest.raises(SystemExit, match="Unknown Stage 8 model"):
-        two_pass.validate_stage8_cell("gpt-4o", "low")
+        classification.validate_stage8_cell("gpt-4o", "low")
     with pytest.raises(SystemExit, match="Unknown Stage 8 Pass B effort"):
-        two_pass.validate_stage8_cell("gpt-5.4-nano", "none")
+        classification.validate_stage8_cell("gpt-5.4-nano", "none")
 
 
 def _write_mini_bank(tmp_path, bank_id: str, model: str, cid: str = "startup-u1",
@@ -293,14 +293,14 @@ def _write_mini_bank(tmp_path, bank_id: str, model: str, cid: str = "startup-u1"
 
 
 def _patch_run_paths(monkeypatch, tmp_path):
-    monkeypatch.setattr(two_pass, "run_dir", lambda rid: tmp_path / "runs" / rid)
-    monkeypatch.setattr(two_pass, "run_raw_dir", lambda rid: tmp_path / "runs" / rid / "raw")
+    monkeypatch.setattr(classification, "run_dir", lambda rid: tmp_path / "runs" / rid)
+    monkeypatch.setattr(classification, "run_raw_dir", lambda rid: tmp_path / "runs" / rid / "raw")
     monkeypatch.setattr(
-        two_pass, "run_predictions_path",
+        classification, "run_predictions_path",
         lambda rid: tmp_path / "runs" / rid / "predictions.jsonl",
     )
     monkeypatch.setattr(
-        two_pass, "run_config_path",
+        classification, "run_config_path",
         lambda rid: tmp_path / "runs" / rid / "config.json",
     )
 
@@ -358,10 +358,10 @@ def test_load_pass_a_bank_and_auto_reuse(tmp_path, monkeypatch):
     bank_id = pass_a_bank_run_id(model)
     _write_mini_bank(tmp_path, bank_id, model)
     _patch_run_paths(monkeypatch, tmp_path)
-    monkeypatch.setattr(two_pass, "load_golden_rows", _golden_one_row)
-    monkeypatch.setattr(two_pass, "identity_hashes", _identity_hashes)
-    monkeypatch.setattr(two_pass, "_git_commit", lambda: "abc")
-    monkeypatch.setattr(two_pass, "OPENAI_API_KEY", "placeholder")
+    monkeypatch.setattr(classification, "load_golden_rows", _golden_one_row)
+    monkeypatch.setattr(classification, "identity_hashes", _identity_hashes)
+    monkeypatch.setattr(classification, "_git_commit", lambda: "abc")
+    monkeypatch.setattr(classification, "OPENAI_API_KEY", "placeholder")
 
     pass_calls: list[str] = []
 
@@ -370,13 +370,13 @@ def test_load_pass_a_bank_and_auto_reuse(tmp_path, monkeypatch):
         pass_calls.append("b")
         return _pass_b_resp()
 
-    monkeypatch.setattr(two_pass, "_create", fake_create)
-    monkeypatch.setattr(two_pass, "OpenAI", lambda api_key: object())
+    monkeypatch.setattr(classification, "_create", fake_create)
+    monkeypatch.setattr(classification, "OpenAI", lambda api_key: object())
 
-    bank = two_pass.load_pass_a_bank(bank_id)
+    bank = classification.load_pass_a_bank(bank_id)
     assert bank["startup-u1"]["ai_native"] == 1
 
-    run_id = two_pass.run_two_pass(
+    run_id = classification.run_classification(
         model=model,
         effort_b="high",
         run_id="reuse-high",
@@ -393,7 +393,7 @@ def test_load_pass_a_bank_and_auto_reuse(tmp_path, monkeypatch):
         (tmp_path / "runs" / "reuse-high" / "config.json").read_text(encoding="utf-8")
     )
     assert cfg_out["pass_a_bank_run_id"] == bank_id
-    assert cfg_out["top_logprobs"] == two_pass.cfg.PASS_A_TOP_LOGPROBS
+    assert cfg_out["top_logprobs"] == classification.cfg.PASS_A_TOP_LOGPROBS
 
 
 def test_creates_pass_a_bank_when_missing(tmp_path, monkeypatch):
@@ -403,10 +403,10 @@ def test_creates_pass_a_bank_when_missing(tmp_path, monkeypatch):
     model = "gpt-5.4-nano"
     bank_id = pass_a_bank_run_id(model)
     _patch_run_paths(monkeypatch, tmp_path)
-    monkeypatch.setattr(two_pass, "load_golden_rows", _golden_one_row)
-    monkeypatch.setattr(two_pass, "identity_hashes", _identity_hashes)
-    monkeypatch.setattr(two_pass, "_git_commit", lambda: "abc")
-    monkeypatch.setattr(two_pass, "OPENAI_API_KEY", "placeholder")
+    monkeypatch.setattr(classification, "load_golden_rows", _golden_one_row)
+    monkeypatch.setattr(classification, "identity_hashes", _identity_hashes)
+    monkeypatch.setattr(classification, "_git_commit", lambda: "abc")
+    monkeypatch.setattr(classification, "OPENAI_API_KEY", "placeholder")
 
     pass_calls: list[str] = []
 
@@ -417,15 +417,15 @@ def test_creates_pass_a_bank_when_missing(tmp_path, monkeypatch):
         pass_calls.append("b")
         return _pass_b_resp()
 
-    monkeypatch.setattr(two_pass, "_create", fake_create)
-    monkeypatch.setattr(two_pass, "OpenAI", lambda api_key: object())
+    monkeypatch.setattr(classification, "_create", fake_create)
+    monkeypatch.setattr(classification, "OpenAI", lambda api_key: object())
 
-    run_id = two_pass.run_two_pass(
+    run_id = classification.run_classification(
         model=model, effort_b="low", run_id="first-low",
     )
     assert run_id == "first-low"
     assert pass_calls == ["a", "b"]
-    assert two_pass.pass_a_bank_covers(bank_id, ["startup-u1"])
+    assert classification.pass_a_bank_covers(bank_id, ["startup-u1"])
     bank_cfg = json.loads(
         (tmp_path / "runs" / bank_id / "config.json").read_text(encoding="utf-8")
     )
@@ -434,7 +434,7 @@ def test_creates_pass_a_bank_when_missing(tmp_path, monkeypatch):
 
     # Second effort auto-reuses: Pass B only.
     pass_calls.clear()
-    two_pass.run_two_pass(model=model, effort_b="medium", run_id="second-med")
+    classification.run_classification(model=model, effort_b="medium", run_id="second-med")
     assert pass_calls == ["b"]
 
 
@@ -445,10 +445,10 @@ def test_rerun_pass_a_forces_new_bank(tmp_path, monkeypatch):
     bank_id = pass_a_bank_run_id(model)
     _write_mini_bank(tmp_path, bank_id, model, verdict=0)
     _patch_run_paths(monkeypatch, tmp_path)
-    monkeypatch.setattr(two_pass, "load_golden_rows", _golden_one_row)
-    monkeypatch.setattr(two_pass, "identity_hashes", _identity_hashes)
-    monkeypatch.setattr(two_pass, "_git_commit", lambda: "abc")
-    monkeypatch.setattr(two_pass, "OPENAI_API_KEY", "placeholder")
+    monkeypatch.setattr(classification, "load_golden_rows", _golden_one_row)
+    monkeypatch.setattr(classification, "identity_hashes", _identity_hashes)
+    monkeypatch.setattr(classification, "_git_commit", lambda: "abc")
+    monkeypatch.setattr(classification, "OPENAI_API_KEY", "placeholder")
 
     pass_calls: list[str] = []
 
@@ -459,14 +459,14 @@ def test_rerun_pass_a_forces_new_bank(tmp_path, monkeypatch):
         pass_calls.append("b")
         return _pass_b_resp()
 
-    monkeypatch.setattr(two_pass, "_create", fake_create)
-    monkeypatch.setattr(two_pass, "OpenAI", lambda api_key: object())
+    monkeypatch.setattr(classification, "_create", fake_create)
+    monkeypatch.setattr(classification, "OpenAI", lambda api_key: object())
 
-    two_pass.run_two_pass(
+    classification.run_classification(
         model=model, effort_b="low", run_id="rerun-low", rerun_pass_a=True,
     )
     assert pass_calls == ["a", "b"]
-    bank = two_pass.load_pass_a_bank(bank_id)
+    bank = classification.load_pass_a_bank(bank_id)
     assert bank["startup-u1"]["ai_native"] == 1
 
 
@@ -478,17 +478,17 @@ def test_dry_run_rerun_pass_a_leaves_bank_intact(tmp_path, monkeypatch):
     bank_id = pass_a_bank_run_id(model)
     _write_mini_bank(tmp_path, bank_id, model, verdict=0)
     _patch_run_paths(monkeypatch, tmp_path)
-    monkeypatch.setattr(two_pass, "load_golden_rows", _golden_one_row)
-    monkeypatch.setattr(two_pass, "identity_hashes", _identity_hashes)
+    monkeypatch.setattr(classification, "load_golden_rows", _golden_one_row)
+    monkeypatch.setattr(classification, "identity_hashes", _identity_hashes)
 
-    two_pass.run_two_pass(
+    classification.run_classification(
         model=model,
         effort_b="low",
         run_id="dry-rerun",
         dry_run=True,
         rerun_pass_a=True,
     )
-    bank = two_pass.load_pass_a_bank(bank_id)
+    bank = classification.load_pass_a_bank(bank_id)
     assert bank["startup-u1"]["ai_native"] == 0
     assert (tmp_path / "runs" / bank_id / "config.json").exists()
 
@@ -498,10 +498,10 @@ def test_pass_a_from_pins_historical_bank(tmp_path, monkeypatch):
     hist = "historical-nano"
     _write_mini_bank(tmp_path, hist, "gpt-5.4-nano")
     _patch_run_paths(monkeypatch, tmp_path)
-    monkeypatch.setattr(two_pass, "load_golden_rows", _golden_one_row)
-    monkeypatch.setattr(two_pass, "identity_hashes", _identity_hashes)
-    monkeypatch.setattr(two_pass, "_git_commit", lambda: "abc")
-    monkeypatch.setattr(two_pass, "OPENAI_API_KEY", "placeholder")
+    monkeypatch.setattr(classification, "load_golden_rows", _golden_one_row)
+    monkeypatch.setattr(classification, "identity_hashes", _identity_hashes)
+    monkeypatch.setattr(classification, "_git_commit", lambda: "abc")
+    monkeypatch.setattr(classification, "OPENAI_API_KEY", "placeholder")
 
     pass_calls: list[str] = []
 
@@ -510,10 +510,10 @@ def test_pass_a_from_pins_historical_bank(tmp_path, monkeypatch):
         pass_calls.append("b")
         return _pass_b_resp()
 
-    monkeypatch.setattr(two_pass, "_create", fake_create)
-    monkeypatch.setattr(two_pass, "OpenAI", lambda api_key: object())
+    monkeypatch.setattr(classification, "_create", fake_create)
+    monkeypatch.setattr(classification, "OpenAI", lambda api_key: object())
 
-    two_pass.run_two_pass(
+    classification.run_classification(
         model="gpt-5.4-nano",
         effort_b="high",
         pass_a_from=hist,
@@ -530,12 +530,12 @@ def test_reuse_pass_a_refuses_model_mismatch(tmp_path, monkeypatch):
     bank_id = "bank-mini"
     _write_mini_bank(tmp_path, bank_id, "gpt-5.4-mini", verdict=0)
     _patch_run_paths(monkeypatch, tmp_path)
-    monkeypatch.setattr(two_pass, "load_golden_rows", lambda: [
+    monkeypatch.setattr(classification, "load_golden_rows", lambda: [
         {"org_uuid": "u1", "name": "x", "founded_date": "2020-01",
          "website_evidence": "e", "short_description": "s"},
     ])
     with pytest.raises(SystemExit, match="Bank Pass A once per model"):
-        two_pass.run_two_pass(
+        classification.run_classification(
             model="gpt-5.4-nano",
             effort_b="low",
             pass_a_from=bank_id,
@@ -562,15 +562,15 @@ def test_reuse_pass_a_refuses_missing_bank_model(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     (bank_dir / "config.json").write_text(
-        json.dumps({"kind": "two_pass", "effort_b": "low"}), encoding="utf-8"
+        json.dumps({"kind": "classification", "effort_b": "low"}), encoding="utf-8"
     )
     _patch_run_paths(monkeypatch, tmp_path)
-    monkeypatch.setattr(two_pass, "load_golden_rows", lambda: [
+    monkeypatch.setattr(classification, "load_golden_rows", lambda: [
         {"org_uuid": "u1", "name": "x", "founded_date": "2020-01",
          "website_evidence": "e", "short_description": "s"},
     ])
     with pytest.raises(SystemExit, match="no model recorded"):
-        two_pass.run_two_pass(
+        classification.run_classification(
             model="gpt-5.4-nano",
             effort_b="low",
             pass_a_from=bank_id,

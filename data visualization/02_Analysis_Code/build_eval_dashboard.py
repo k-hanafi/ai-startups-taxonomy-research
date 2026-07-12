@@ -504,7 +504,7 @@ function effortCaption(c) {
     ? 'unknown'
     : String(c.effort_b);
   if (e === 'unknown') return 'effort unknown';
-  if (c.kind === 'two_pass') return 'Pass B ' + e;
+  if (c.kind === 'classification' || c.kind === 'two_pass') return 'Pass B ' + e;
   if (c.kind === 'single_pass' || e === 'none') return 'effort ' + e;
   return 'effort ' + e;
 }

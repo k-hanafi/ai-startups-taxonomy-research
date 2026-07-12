@@ -6,7 +6,7 @@
       "run_id": "mock_gpt-5.4-nano_low_r1",
       "model": "gpt-5.4-nano",
       "effort_b": "low",
-      "kind": "two_pass",
+      "kind": "classification",
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
@@ -43,7 +43,7 @@
       "run_id": "mock_gpt-5.4-nano_medium_r1",
       "model": "gpt-5.4-nano",
       "effort_b": "medium",
-      "kind": "two_pass",
+      "kind": "classification",
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
@@ -80,7 +80,7 @@
       "run_id": "mock_gpt-5.4-nano_high_r1",
       "model": "gpt-5.4-nano",
       "effort_b": "high",
-      "kind": "two_pass",
+      "kind": "classification",
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
@@ -117,7 +117,7 @@
       "run_id": "mock_gpt-5.4-mini_low_r1",
       "model": "gpt-5.4-mini",
       "effort_b": "low",
-      "kind": "two_pass",
+      "kind": "classification",
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
@@ -154,7 +154,7 @@
       "run_id": "mock_gpt-5.4-mini_medium_r1",
       "model": "gpt-5.4-mini",
       "effort_b": "medium",
-      "kind": "two_pass",
+      "kind": "classification",
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
@@ -191,7 +191,7 @@
       "run_id": "mock_gpt-5.4-mini_high_r1",
       "model": "gpt-5.4-mini",
       "effort_b": "high",
-      "kind": "two_pass",
+      "kind": "classification",
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
@@ -228,7 +228,7 @@
       "run_id": "mock_gpt-5.6-luna_low_r1",
       "model": "gpt-5.6-luna",
       "effort_b": "low",
-      "kind": "two_pass",
+      "kind": "classification",
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
@@ -265,7 +265,7 @@
       "run_id": "mock_gpt-5.6-luna_medium_r1",
       "model": "gpt-5.6-luna",
       "effort_b": "medium",
-      "kind": "two_pass",
+      "kind": "classification",
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
@@ -302,7 +302,7 @@
       "run_id": "mock_gpt-5.6-luna_high_r1",
       "model": "gpt-5.6-luna",
       "effort_b": "high",
-      "kind": "two_pass",
+      "kind": "classification",
       "n_scored": 100,
       "n_expected": 100,
       "axes": {

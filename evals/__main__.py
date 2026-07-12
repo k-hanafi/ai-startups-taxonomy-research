@@ -1,4 +1,4 @@
-"""CLI entry point: python -m evals <sample|run-two-pass|score|matrix|…>."""
+"""CLI entry point: python -m evals <sample|run-classification|score|matrix|…>."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ def main() -> None:
         prog="python -m evals",
         description=(
             "Golden-set evaluation harness for the startup classifier. "
-            "Stage 8 uses two-pass only (run-two-pass / matrix)."
+            "Stage 8 path: run-classification / matrix."
         ),
     )
     subs = parser.add_subparsers(dest="command", required=True)
@@ -32,7 +32,7 @@ def main() -> None:
         "run",
         help=(
             "LEGACY single-pass runner (retired for Stage 8). Prefer "
-            "run-two-pass. Kept only to rescore old banked runs."
+            "run-classification. Kept only to rescore old banked runs."
         ),
     )
     p_run.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
@@ -41,55 +41,64 @@ def main() -> None:
     p_run.add_argument("--run-id", default=None, help="Override run_id to resume a partial run")
     p_run.add_argument("--limit", type=int, default=None, help="Cap rows (cheap smoke test)")
     p_run.add_argument("--dry-run", action="store_true", help="Print plan + cost, no API call")
-    p_run2 = subs.add_parser(
+
+    def _add_classification_run_args(p: argparse.ArgumentParser) -> None:
+        p.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
+        p.add_argument(
+            "--effort-b",
+            default=None,
+            help="Pass B reasoning effort (default: high). Stage 8 uses low/medium/high.",
+        )
+        p.add_argument("--repeat", type=int, default=1, help="Repeat index for the run_id")
+        p.add_argument("--run-id", default=None, help="Override run_id to resume a partial run")
+        p.add_argument("--limit", type=int, default=None, help="Cap rows (cheap smoke test)")
+        p.add_argument("--dry-run", action="store_true", help="Print plan + cost, no API call")
+        p.add_argument(
+            "--pass-a-from",
+            default=None,
+            metavar="RUN_ID",
+            help=(
+                "Advanced override: pin Pass A to a specific historical run_id "
+                "instead of the stable per-model bank under "
+                "evals/runs/pass_a_banks/<model>/."
+            ),
+        )
+        p.add_argument(
+            "--rerun-pass-a",
+            action="store_true",
+            help=(
+                "Invalidate the stable per-model Pass A bank and run Pass A "
+                "again (escape hatch). Default is to reuse an existing bank."
+            ),
+        )
+        p.add_argument(
+            "--reuse-pass-a-from",
+            default=None,
+            metavar="RUN_ID",
+            help=(
+                "Deprecated alias for --pass-a-from. Pass A auto-reuses the "
+                "per-model bank by default; do not use this for normal Stage 8."
+            ),
+        )
+        p.add_argument(
+            "--require-stage8-cell",
+            action="store_true",
+            help="Refuse models/efforts outside the locked Stage 8 matrix.",
+        )
+
+    p_run_cls = subs.add_parser(
+        "run-classification",
+        help=(
+            "Run Pass A (binary gate) + Pass B (family-constrained subclass). "
+            "Stage 8 paid path."
+        ),
+    )
+    _add_classification_run_args(p_run_cls)
+    p_run_legacy = subs.add_parser(
         "run-two-pass",
-        help=(
-            "Run the two-pass classifier (Pass A binary gate + Pass B "
-            "family-constrained subclass). Stage 8 paid path."
-        ),
+        help="Deprecated alias for run-classification.",
     )
-    p_run2.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
-    p_run2.add_argument(
-        "--effort-b",
-        default=None,
-        help="Pass B reasoning effort (default: high). Stage 8 uses low/medium/high.",
-    )
-    p_run2.add_argument("--repeat", type=int, default=1, help="Repeat index for the run_id")
-    p_run2.add_argument("--run-id", default=None, help="Override run_id to resume a partial run")
-    p_run2.add_argument("--limit", type=int, default=None, help="Cap rows (cheap smoke test)")
-    p_run2.add_argument("--dry-run", action="store_true", help="Print plan + cost, no API call")
-    p_run2.add_argument(
-        "--pass-a-from",
-        default=None,
-        metavar="RUN_ID",
-        help=(
-            "Advanced override: pin Pass A to a specific historical run_id "
-            "instead of the stable per-model bank under "
-            "evals/runs/pass_a_banks/<model>/."
-        ),
-    )
-    p_run2.add_argument(
-        "--rerun-pass-a",
-        action="store_true",
-        help=(
-            "Invalidate the stable per-model Pass A bank and run Pass A "
-            "again (escape hatch). Default is to reuse an existing bank."
-        ),
-    )
-    p_run2.add_argument(
-        "--reuse-pass-a-from",
-        default=None,
-        metavar="RUN_ID",
-        help=(
-            "Deprecated alias for --pass-a-from. Pass A auto-reuses the "
-            "per-model bank by default; do not use this for normal Stage 8."
-        ),
-    )
-    p_run2.add_argument(
-        "--require-stage8-cell",
-        action="store_true",
-        help="Refuse models/efforts outside the locked Stage 8 matrix.",
-    )
+    _add_classification_run_args(p_run_legacy)
     p_matrix = subs.add_parser(
         "matrix",
         help=(
@@ -209,7 +218,8 @@ def main() -> None:
     if args.command == "run":
         logging.warning(
             "Single-pass `run` is LEGACY. Stage 8 science uses "
-            "`run-two-pass` (bank Pass A once per model, sweep Pass B effort)."
+            "`run-classification` (bank Pass A once per model, sweep Pass B "
+            "effort)."
         )
         from evals import config as cfg
         from evals.runner import run
@@ -223,15 +233,19 @@ def main() -> None:
             run_id=args.run_id,
         )
         return
-    if args.command == "run-two-pass":
+    if args.command in ("run-classification", "run-two-pass"):
+        if args.command == "run-two-pass":
+            logging.warning(
+                "`run-two-pass` is deprecated; use `run-classification`."
+            )
         from evals import config as cfg
-        from evals.two_pass import run_two_pass, validate_stage8_cell
+        from evals.classification import run_classification, validate_stage8_cell
 
         model = args.model or cfg.EVAL_MODELS[0]
         effort_b = args.effort_b or cfg.PASS_B_EFFORT
         if args.require_stage8_cell:
             validate_stage8_cell(model, effort_b)
-        run_two_pass(
+        run_classification(
             model=model,
             effort_b=effort_b,
             repeat=args.repeat,
@@ -246,7 +260,7 @@ def main() -> None:
 
     if args.command == "matrix":
         from evals import config as cfg
-        from evals.two_pass import stage8_matrix_cells
+        from evals.classification import stage8_matrix_cells
 
         cells = stage8_matrix_cells()
         print(f"Stage 8 locked matrix: {len(cells)} cells")
@@ -268,7 +282,7 @@ def main() -> None:
             )
             for effort in efforts:
                 print(
-                    f"  python -m evals run-two-pass --model {model} "
+                    f"  python -m evals run-classification --model {model} "
                     f"--effort-b {effort} --require-stage8-cell"
                 )
             print(
@@ -282,7 +296,7 @@ def main() -> None:
         )
         print(
             "Dry-run cost preflight (no API): add --dry-run to any "
-            "run-two-pass line above."
+            "run-classification line above."
         )
         return
 
