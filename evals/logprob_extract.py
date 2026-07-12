@@ -265,13 +265,16 @@ def extract_binary_confidence(response: dict[str, Any]) -> BinaryConfidence:
     for token, logprob in pool.items():
         mass[candidate_value(token)] += math.exp(logprob)  # type: ignore[index]
 
-    valid_mass = mass[0] + mass[1]
-    if valid_mass <= 0.0:
+    # Both legal digits must carry evidence. A one-sided pool (API returned
+    # only the chosen digit, or the opposing digit was grammar-masked) would
+    # renormalize to fake p=0 or p=1 and poison calibration. Mark unavailable.
+    if mass[0] <= 0.0 or mass[1] <= 0.0:
         raise LogprobExtractionError(
-            "no unmasked {0,1} candidates at the decision token; "
-            "cannot renormalize"
+            "binary confidence unavailable: need unmasked evidence for both "
+            "{0,1} at the decision token (opposing digit missing from pool)"
         )
 
+    valid_mass = mass[0] + mass[1]
     p_one = mass[1] / valid_mass
     top1 = max(p_one, 1.0 - p_one)
     return BinaryConfidence(
@@ -296,13 +299,20 @@ def extract_run(raw_dir: Path) -> list[dict[str, Any]]:
 
     Two-pass runs bank Pass A as <custom_id>_a.json (preferred when present);
     single-pass effort=none runs bank <custom_id>.json. Returns one dict per
-    row, sorted by custom_id, ready for the scorer to consume as plain data.
+    extractable row, sorted by custom_id. Rows whose opposing digit is missing
+    are omitted (confidence unavailable); callers that require full coverage
+    must compare against the file count.
     """
     files = sorted(raw_dir.glob("*_a.json")) or sorted(raw_dir.glob("*.json"))
     rows: list[dict[str, Any]] = []
     for path in files:
         custom_id = path.stem.removesuffix("_a")
-        rows.append({"custom_id": custom_id, **extract_raw_file(path).as_dict()})
+        try:
+            rows.append({"custom_id": custom_id, **extract_raw_file(path).as_dict()})
+        except LogprobExtractionError as exc:
+            if "unavailable" in str(exc):
+                continue
+            raise
     return rows
 
 

@@ -27,10 +27,10 @@ todos:
     content: "Stage 7: Batch parity smoke (gate Q4, PASS) + evals/scoring.py scorer — MERGED #16. Calibration wire-up (score --confidence-from-raw, chosen-digit confidence per pivot 6) — MERGED #18"
     status: completed
   - id: stage8-experiments
-    content: "Stage 8 (paid CLI): locked 9-cell matrix nano/mini/luna x Pass B low/medium/high on the COMMITTED two-pass architecture (pivot 7); measure accuracy, calibration, cost, latency; Stage-2 finalist repeats after screen. Latency in #19; cost extrapolation in #21; preflight fixes on PR #22. Banked single-pass runs are reference points, not competitors"
+    content: "Stage 8 (paid CLI): locked 9-cell matrix nano/mini/luna x Pass B low/medium/high; bank Pass A once per model (--reuse-pass-a-from); PASS_A_TOP_LOGPROBS=2 + both {0,1} required; pass_b_metrics + score --baseline. Science blockers on eval-harness/research-direction-fixes. Paid sweep next."
     status: pending
   - id: stage9-dashboard
-    content: "Stage 9: LangSmith-light static HTML dashboard (not navy/Cormorant): Pareto, per-axis metrics + CIs, confusion, calibration, disagreement browser; config filter. Skeleton + mock 9-cell fixture on PR #22; real charts after Stage 8 runs"
+    content: "Stage 9: LangSmith-light HTML dashboard: Pareto, ECE/selective/reliability, vs_baseline, finalist mean±range, config filter. Skeleton + mock on PR #22; calibration charts + Pass A-invariant fixture on research-direction-fixes; real charts after Stage 8 runs"
     status: pending
   - id: stage10-wrapup
     content: "Stage 10 (PR 10): evals/tests/, AGENTS.md updates, written report answering the three eval questions (pivot 7: calibration, model selection, implementation robustness) + model recommendation"
@@ -42,17 +42,18 @@ isProject: false
 
 ## STATUS (source of truth — update after every PR merge / pivot)
 
-Last updated: **2026-07-11** (PR **#22** open on `eval-harness/dashboard`: Stage 9 mock viewer + Stage 8 preflight fixes. Next = Stage 8 paid 9-cell sweep.)
+Last updated: **2026-07-11** (research-direction kill-list on `eval-harness/research-direction-fixes`, stacks on PR **#22**. Next = Stage 8 paid 9-cell with Pass A banked once per model.)
 
 | Field | Value |
 |-------|--------|
 | **Last merged** | PR **#21** — pivot 8: `cached_tokens` in eval runners + `evals/cost_extrapolate.py` ladder into `scored.json` / `python -m evals report` (production cost extrapolation on the committed two-pass path). Merged 2026-07-09 (`72ceeee` on `main`). |
-| **Open now** | PR **#22** (`eval-harness/dashboard`) — Stage 9 LangSmith-light mock viewer + config filter; Stage 8 preflight (locked `EVAL_MODELS` nano/mini/luna, luna pricing, scored.json metadata, `--allow-partial`, fixture isolation). |
-| **Working branch** | `eval-harness/dashboard` (do not merge until Stage 8 preflight is green). |
-| **Next** | **Stage 8** paid model/config selection on the committed two-pass architecture: locked matrix = **nano / mini / luna × Pass B low / medium / high** (9 screens), then finalist repeats. Score with `--confidence-from-raw`. Cost axis uses measured two-pass cache rates (pivot 8). Then Stage 9 real dashboard data → Stage 10 written report. Production `src/` two-pass + logprob promotion stays gated until after dashboard insights. Paid — USER runs CLI or delegates. |
+| **Open now** | PR **#22** (`eval-harness/dashboard`) — Stage 9 mock viewer + Stage 8 preflight. Follow-up: `eval-harness/research-direction-fixes` (Pass A bank reuse, `PASS_A_TOP_LOGPROBS=2`, both `{0,1}` required, Pass B isolating metrics, `--baseline`/vs_baseline, ECE/selective dashboard, `matrix`, `--allow-partial-confidence`). |
+| **Working branch** | `eval-harness/research-direction-fixes` (PR into `eval-harness/dashboard` so #22 stays the integration base). |
+| **Next** | **Stage 8** paid 9-cell: for each model, bank Pass A once (`run-two-pass --effort-b low`), then `--reuse-pass-a-from` for medium/high. Score with `--confidence-from-raw` and `--baseline` for paired model deltas. Use `python -m evals matrix` for the command list. Then Stage 9 real dashboard → Stage 10 report. |
 | **Gold labels** | Fable `draft_*` = provisional gold (pivot 4; human review waived, `gold_verdict` stays 0/100 by design). ONE full agent re-draft deferred to end of pipeline, after all design decisions lock (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
-| **Architecture reminder** | Two-pass is COMMITTED for production promotion (pivots 7–8). `src/` classifier is still historically one-pass; eval/cost projections assume two-pass. Banked single-pass runs are reference points only. Do **not** start `src/` two-pass promotion until Stage 8–9 insights land. |
+| **Architecture reminder** | Two-pass is COMMITTED for production promotion (pivots 7–8). Pass A is banked once per model across Pass B effort arms (science invariant). `src/` classifier is still historically one-pass. Banked single-pass runs are reference points only. Do **not** start `src/` two-pass promotion until Stage 8–9 insights land. |
+| **Kill-list (landed)** | Pass A reuse; binary top_logprobs=2 + both candidates; Pass B isolating metrics; score `--baseline` + dashboard vs_baseline; ECE/selective/reliability; fixture Pass A invariant; refuse partial confidence; deprecate single-pass `run` guidance; `matrix` helper; dry-run output estimate; finalist mean±range. |
 
 ### Done
 
@@ -72,14 +73,15 @@ Last updated: **2026-07-11** (PR **#22** open on `eval-harness/dashboard`: Stage
 
 ### In progress
 
-- **PR #22 / Stage 9 skeleton + Stage 8 preflight:** mock dashboard + locked 9-cell matrix config. Not a substitute for paid Stage 8 runs.
-- **Stage 8 (paid, next):** `python -m evals run-two-pass` over nano/mini/luna × low/medium/high.
+- **PR #22 / Stage 9 skeleton + Stage 8 preflight:** mock dashboard + locked 9-cell matrix config.
+- **Research-direction fixes (stacks on #22):** Pass A bank, binary logprobs science, Pass B metrics, calibration dashboard. Unblocks sound Stage 8.
+- **Stage 8 (paid, next):** `python -m evals matrix` then `run-two-pass` with `--reuse-pass-a-from`.
 
 ### Pending (in order) — NEXT STEPS
 
-1. **Stage 8** — paid locked 9-cell sweep (nano/mini/luna × Pass B low/medium/high); score with `--confidence-from-raw`; cost axis uses measured two-pass cache rates (pivot 8). Banked single-pass nano runs = reference only. Provisionally scored vs current Fable drafts.
-2. **Stage 9** — point the LangSmith-light dashboard at real `scored.json` via `--runs` (skeleton already on PR #22). Until Stage 8 lands: mock fixture default; `python -m evals report <run_id>` remains the interim cost-ladder view.
-3. **Stage 10** — written report answering the three eval questions (calibration, model selection, implementation robustness) + model recommendation + `AGENTS.md`.
+1. **Stage 8** — paid locked 9-cell sweep with Pass A banked once per model; score `--confidence-from-raw [--baseline]`; cost axis uses measured two-pass cache rates (pivot 8). Banked single-pass nano runs = reference only.
+2. **Stage 9** — point the dashboard at real `scored.json` via `--runs`. Until Stage 8 lands: mock fixture default.
+3. **Stage 10** — written report answering the three eval questions + model recommendation + `AGENTS.md`.
 4. **After insights (NOT today):** plan two-pass + logprob promotion into `src/` for ~40k production (alive+dead). Gated on Stage 8–9.
 5. **Pivot 5 (timing TBD):** final gold re-draft + offline re-score of all banked runs.
 

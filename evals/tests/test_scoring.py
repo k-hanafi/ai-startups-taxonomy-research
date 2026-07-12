@@ -406,19 +406,48 @@ def test_score_run_paired_baseline_delta(mini_run, tmp_path):
     assert vs["deltas"]["ai_native"]["delta_accuracy"] == pytest.approx(2 / 3)
 
 
-def test_calibration_reports_partial_confidence_coverage(mini_run, caplog):
-    # raw/ is git-ignored and machine-local, so a confidence mapping can
-    # silently cover fewer rows than were scored. The gap must be visible.
+def test_calibration_refuses_partial_confidence_by_default(mini_run):
+    run_id, _ = mini_run
+    with pytest.raises(SystemExit, match="Confidence covers only 2 of 3"):
+        scoring.score_run(
+            run_id, confidence={"u1": 0.95, "u3": 0.2}, write=False
+        )
+
+
+def test_calibration_allow_partial_confidence(mini_run, caplog):
     run_id, _ = mini_run
     import logging
     with caplog.at_level(logging.WARNING, logger="evals.scoring"):
         report = scoring.score_run(
-            run_id, confidence={"u1": 0.95, "u3": 0.2}, write=False
+            run_id,
+            confidence={"u1": 0.95, "u3": 0.2},
+            write=False,
+            allow_partial_confidence=True,
         )
     cal = report["calibration"]
     assert cal["n"] == 2
     assert cal["n_eligible"] == 3
-    assert any("2 of 3" in r.message for r in caplog.records)
+    assert any("allow-partial-confidence" in r.message for r in caplog.records)
+
+
+def test_pass_b_isolating_metrics_in_scored_report(mini_run):
+    run_id, run_dir = mini_run
+    # Mark boundary_disagreement on completed rows.
+    path = run_dir / "predictions.jsonl"
+    records = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
+    for rec in records:
+        if rec.get("status") == "completed":
+            rec["boundary_disagreement"] = rec.get("org_uuid") == "u2"
+    path.write_text(
+        "".join(json.dumps(r) + "\n" for r in records), encoding="utf-8"
+    )
+    report = scoring.score_run(run_id, write=False)
+    pbm = report["pass_b_metrics"]
+    assert "subclass_family_conditional" in pbm
+    assert "rad_ai_native_only" in pbm
+    assert pbm["boundary_disagreement"]["n"] == 3
+    assert pbm["boundary_disagreement"]["rate"] == pytest.approx(1 / 3)
+    assert "definitions" in pbm
 
 
 def test_calibration_full_coverage_matches_eligible(mini_run):
