@@ -39,9 +39,10 @@ from pydantic import BaseModel, Field
 
 from src.builder import _add_additional_properties_false
 from src.config import OPENAI_API_KEY
-from src.formatter import _normalize_founded_date, format_user_message
+from src.formatter import _normalize_founded_date, build_custom_id, format_user_message
 
 from evals import config as cfg
+from evals.jsonl_io import append_jsonl, iter_jsonl
 from evals.paths import (
     BINARY_GATE_PROMPT,
     FAMILY_BLOCK_AI,
@@ -381,6 +382,46 @@ def _ensure_config(run_id: str, model: str, effort_b: str, repeat: int,
         )
 
 
+def _index_banked_pass_a(bank_run_id: str) -> dict[str, dict[str, Any]]:
+    """Load completed Pass A rows that have raw on disk (empty if none).
+
+    Soft index for resume / coverage checks: does not raise on empty or
+    partial banks. ``load_pass_a_bank`` wraps this and fails loudly when
+    the bank is empty or missing raw for a completed prediction row.
+    """
+    preds_path = run_predictions_path(bank_run_id)
+    if not preds_path.exists():
+        return {}
+    bank_config: dict[str, Any] = {}
+    config_path = run_config_path(bank_run_id)
+    if config_path.exists():
+        bank_config = json.loads(config_path.read_text(encoding="utf-8"))
+
+    by_cid: dict[str, dict[str, Any]] = {}
+    for rec in iter_jsonl(preds_path, tolerate_truncated_final=True):
+        if rec.get("status") != "completed":
+            continue
+        cid = rec.get("custom_id")
+        verdict = rec.get("ai_native")
+        if not cid or verdict not in (0, 1):
+            continue
+        by_cid[cid] = rec
+
+    raw_root = run_raw_dir(bank_run_id)
+    out: dict[str, dict[str, Any]] = {}
+    for cid, rec in by_cid.items():
+        raw_path = raw_root / f"{cid}_a.json"
+        if not raw_path.exists():
+            continue
+        out[cid] = {
+            "ai_native": int(rec["ai_native"]),
+            "raw_a": json.loads(raw_path.read_text(encoding="utf-8")),
+            "record": rec,
+            "bank_model": bank_config.get("model") or rec.get("model"),
+        }
+    return out
+
+
 def load_pass_a_bank(bank_run_id: str) -> dict[str, dict[str, Any]]:
     """Load banked Pass A verdicts + raw payloads keyed by custom_id.
 
@@ -393,45 +434,24 @@ def load_pass_a_bank(bank_run_id: str) -> dict[str, dict[str, Any]]:
         raise SystemExit(
             f"Pass A bank {bank_run_id!r} has no predictions at {preds_path}"
         )
-    bank_config: dict[str, Any] = {}
-    config_path = run_config_path(bank_run_id)
-    if config_path.exists():
-        bank_config = json.loads(config_path.read_text(encoding="utf-8"))
 
-    by_cid: dict[str, dict[str, Any]] = {}
-    for line in preds_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        rec = json.loads(line)
+    # Detect completed preds that lack raw (hard fail) vs soft index gaps.
+    completed_cids: list[str] = []
+    for rec in iter_jsonl(preds_path, tolerate_truncated_final=True):
         if rec.get("status") != "completed":
             continue
         cid = rec.get("custom_id")
-        verdict = rec.get("ai_native")
-        if not cid or verdict not in (0, 1):
-            continue
-        by_cid[cid] = rec
+        if cid and rec.get("ai_native") in (0, 1):
+            completed_cids.append(cid)
 
-    if not by_cid:
+    if not completed_cids:
         raise SystemExit(
             f"Pass A bank {bank_run_id!r} has no completed rows with ai_native "
             "in {{0,1}}"
         )
 
-    raw_root = run_raw_dir(bank_run_id)
-    out: dict[str, dict[str, Any]] = {}
-    missing_raw: list[str] = []
-    for cid, rec in by_cid.items():
-        raw_path = raw_root / f"{cid}_a.json"
-        if not raw_path.exists():
-            missing_raw.append(cid)
-            continue
-        out[cid] = {
-            "ai_native": int(rec["ai_native"]),
-            "raw_a": json.loads(raw_path.read_text(encoding="utf-8")),
-            "record": rec,
-            "bank_model": bank_config.get("model") or rec.get("model"),
-        }
+    out = _index_banked_pass_a(bank_run_id)
+    missing_raw = [cid for cid in completed_cids if cid not in out]
     if missing_raw:
         raise SystemExit(
             f"Pass A bank {bank_run_id!r} missing raw Pass A files for "
@@ -459,24 +479,17 @@ def _assert_bank_model(bank: dict[str, dict[str, Any]], bank_id: str,
         )
 
 
-def pass_a_bank_covers(bank_run_id: str, custom_ids: list[str]) -> bool:
-    """True when bank_run_id has completed Pass A + raw for every custom_id."""
-    preds_path = run_predictions_path(bank_run_id)
-    if not preds_path.exists():
-        return False
-    have: set[str] = set()
-    for line in preds_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        rec = json.loads(line)
-        if rec.get("status") != "completed":
-            continue
-        cid = rec.get("custom_id")
-        if cid and rec.get("ai_native") in (0, 1):
-            raw = run_raw_dir(bank_run_id) / f"{cid}_a.json"
-            if raw.exists():
-                have.add(cid)
+def pass_a_bank_covers(
+    bank_run_id: str,
+    custom_ids: list[str],
+    *,
+    index: dict[str, dict[str, Any]] | None = None,
+) -> bool:
+    """True when bank_run_id has completed Pass A + raw for every custom_id.
+
+    Pass ``index`` to avoid rescanning the bank JSONL (load once, reuse).
+    """
+    have = index if index is not None else _index_banked_pass_a(bank_run_id)
     return all(cid in have for cid in custom_ids)
 
 
@@ -523,19 +536,24 @@ def _ensure_pass_a_bank_config(bank_id: str, model: str, n_rows: int) -> None:
             )
 
 
-def _persist_pass_a_bank_row(bank_id: str, model: str, cid: str, org_uuid: str,
-                             resp_a: Any, latency_a_s: float | None,
-                             raw_a: dict[str, Any]) -> None:
-    """Append one completed Pass A row into the stable bank (idempotent skip)."""
-    preds_path = run_predictions_path(bank_id)
-    if preds_path.exists():
-        for line in preds_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            rec = json.loads(line)
-            if rec.get("custom_id") == cid and rec.get("status") == "completed":
-                return
+def _persist_pass_a_bank_row(
+    bank_id: str,
+    model: str,
+    cid: str,
+    org_uuid: str,
+    resp_a: Any,
+    latency_a_s: float | None,
+    raw_a: dict[str, Any],
+    *,
+    index: dict[str, dict[str, Any]],
+) -> None:
+    """Append one completed Pass A row into the stable bank (idempotent skip).
+
+    ``index`` is the in-memory bank map (updated after a successful append)
+    so callers never rescan a growing JSONL.
+    """
+    if cid in index:
+        return
     a = _parse_output(resp_a)
     if a is None or a.get("ai_native") not in (0, 1):
         return
@@ -552,8 +570,17 @@ def _persist_pass_a_bank_row(bank_id: str, model: str, cid: str, org_uuid: str,
         "a_latency_s": latency_a_s,
         **_usage_fields(resp_a, "a"),
     }
-    with preds_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    append_jsonl(run_predictions_path(bank_id), record)
+    bank_config: dict[str, Any] = {}
+    config_path = run_config_path(bank_id)
+    if config_path.exists():
+        bank_config = json.loads(config_path.read_text(encoding="utf-8"))
+    index[cid] = {
+        "ai_native": int(a["ai_native"]),
+        "raw_a": raw_a,
+        "record": record,
+        "bank_model": bank_config.get("model") or model,
+    }
 
 
 def _assert_bank_identity(bank_id: str) -> None:
@@ -590,6 +617,9 @@ def resolve_pass_a_source(
     bank is loaded when reusing; None when this run must call Pass A and
     persist into the stable bank. creating is True only for the stable-bank
     write path (not for --pass-a-from pins).
+
+    Side-effect free: never deletes or writes a bank. Callers that honor
+    ``--rerun-pass-a`` must clear the bank themselves after any dry-run gate.
     """
     if pass_a_from and rerun_pass_a:
         raise SystemExit(
@@ -609,7 +639,7 @@ def resolve_pass_a_source(
 
     bank_id = pass_a_bank_run_id(model)
     if rerun_pass_a:
-        clear_pass_a_bank(model)
+        # Side-effect free here: caller clears the bank only when not dry-run.
         return bank_id, None, True
 
     if pass_a_bank_covers(bank_id, custom_ids):
@@ -690,7 +720,7 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
 
     run_id = run_id or make_run_id(model, effort_b, repeat)
     prompt_a = load_pass_a_prompt()
-    custom_ids = [f"startup-{r['org_uuid']}" for r in rows]
+    custom_ids = [build_custom_id(r["org_uuid"]) for r in rows]
 
     bank_id, bank, creating_bank = resolve_pass_a_source(
         model, custom_ids,
@@ -705,6 +735,10 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
         )
         return run_id
 
+    # Disk mutation only after dry-run returns (resolve stays side-effect free).
+    if rerun_pass_a:
+        clear_pass_a_bank(model)
+
     run_dir(run_id).mkdir(parents=True, exist_ok=True)
     run_raw_dir(run_id).mkdir(parents=True, exist_ok=True)
     predictions_path = run_predictions_path(run_id)
@@ -713,17 +747,20 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
         pass_a_bank_run_id=bank_id,
     )
 
+    # In-memory Pass A bank index: load once, update after each append.
+    bank_index: dict[str, dict[str, Any]] = {}
     if creating_bank:
         run_dir(bank_id).mkdir(parents=True, exist_ok=True)
         run_raw_dir(bank_id).mkdir(parents=True, exist_ok=True)
         _ensure_pass_a_bank_config(bank_id, model, len(rows))
+        bank_index = _index_banked_pass_a(bank_id)
 
     done = _completed_custom_ids(predictions_path)
     if done:
         logger.info("Resuming %s: %d rows already complete", run_id, len(done))
 
     client = OpenAI(api_key=OPENAI_API_KEY)
-    todo = [r for r in rows if f"startup-{r['org_uuid']}" not in done]
+    todo = [r for r in rows if build_custom_id(r["org_uuid"]) not in done]
     if bank is not None:
         logger.info(
             "Two-pass run %s: %d rows (%s, B effort=%s, Pass A reused from %s)",
@@ -736,7 +773,7 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
         )
 
     for i, row in enumerate(todo, start=1):
-        cid = f"startup-{row['org_uuid']}"
+        cid = build_custom_id(row["org_uuid"])
         cohort = compute_cohort(row.get("founded_date", ""))
 
         if bank is not None:
@@ -754,9 +791,8 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
             a = {"ai_native": banked["ai_native"]}
         else:
             # Prefer a row already in the (partial) stable bank on resume.
-            if pass_a_bank_covers(bank_id, [cid]):
-                partial = load_pass_a_bank(bank_id)
-                banked = partial[cid]
+            if cid in bank_index:
+                banked = bank_index[cid]
                 resp_a = _BankedPassAResponse(banked["raw_a"])
                 latency_a_s = banked["record"].get("a_latency_s")
                 raw_a = banked["raw_a"]
@@ -780,6 +816,7 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
                 _persist_pass_a_bank_row(
                     bank_id, model, cid, row["org_uuid"], resp_a, latency_a_s,
                     raw_a if isinstance(raw_a, dict) else resp_a.model_dump(),
+                    index=bank_index,
                 )
 
         resp_b = None
@@ -803,8 +840,7 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
             latency_a_s, latency_b_s,
         )
         record["pass_a_bank_run_id"] = bank_id
-        with predictions_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        append_jsonl(predictions_path, record)
 
         logger.info("  [%d/%d] %s -> A=%s B=%s/%s (%s)",
                     i, len(todo), str(row.get("name", ""))[:24],

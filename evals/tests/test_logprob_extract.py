@@ -165,7 +165,7 @@ def test_masked_sentinels_excluded_from_renormalization():
     # A masked '0' at -100.0 contributes nothing, so the opposing digit is
     # missing: confidence must be unavailable (not fake p_one=1.0).
     masked = entry("1", -0.1, [("0", -100.0), (" ", -14.0)])
-    with pytest.raises(lpx.LogprobExtractionError, match="unavailable"):
+    with pytest.raises(lpx.BinaryConfidenceUnavailable):
         lpx.extract_binary_confidence(pass_a_response("1", masked))
 
     # The same '0' at a REAL logprob near the sentinel must be kept in the
@@ -177,7 +177,7 @@ def test_masked_sentinels_excluded_from_renormalization():
 
 def test_one_sided_pool_marks_confidence_unavailable():
     decision = entry("1", -0.1, [(" ", -14.0)])  # no opposing digit
-    with pytest.raises(lpx.LogprobExtractionError, match="unavailable"):
+    with pytest.raises(lpx.BinaryConfidenceUnavailable):
         lpx.extract_binary_confidence(pass_a_response("1", decision))
 
 
@@ -218,7 +218,7 @@ def test_all_candidates_masked_raises():
     decision["top_logprobs"].insert(
         0, {"token": "1", "bytes": [49], "logprob": -100.0}
     )
-    with pytest.raises(lpx.LogprobExtractionError, match="unavailable"):
+    with pytest.raises(lpx.BinaryConfidenceUnavailable):
         lpx.extract_binary_confidence(pass_a_response("1", decision))
 
 

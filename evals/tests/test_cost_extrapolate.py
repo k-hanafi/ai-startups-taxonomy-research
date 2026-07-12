@@ -87,6 +87,37 @@ def test_mixed_cached_field_coverage_is_unavailable():
     assert est["steps"]["2_cache"].get("cache_hit_rate") is None
 
 
+def test_token_totals_parity_scoring_vs_cost_extrapolate():
+    """Displayed cost and production projection must sum the same tokens."""
+    from evals.usage import token_totals
+
+    two_pass = {
+        "a_input_tokens": 100,
+        "b_input_tokens": 200,
+        "a_output_tokens": 10,
+        "b_output_tokens": 40,
+        "a_reasoning_tokens": 0,
+        "b_reasoning_tokens": 5,
+        "a_cached_tokens": 20,
+        "b_cached_tokens": 30,
+    }
+    single = {
+        "input_tokens": 300,
+        "output_tokens": 50,
+        "reasoning_tokens": 5,
+        "cached_tokens": 50,
+    }
+    assert token_totals(two_pass) == token_totals(single)
+    assert scoring._record_tokens(two_pass) == token_totals(two_pass)
+
+    est = ce.production_cost_from_records([two_pass], "gpt-5.4-nano")
+    cost = scoring.cost_and_tokens([two_pass], "gpt-5.4-nano")
+    assert est["steps"]["1_golden_sync"]["total_input_tokens"] == cost["total_input_tokens"]
+    assert est["steps"]["1_golden_sync"]["total_output_tokens"] == cost["total_output_tokens"]
+    assert est["steps"]["1_golden_sync"]["total_usd"] == pytest.approx(cost["total_usd"])
+    assert est["steps"]["2_cache"]["total_cached_tokens"] == cost["total_cached_tokens"]
+
+
 def test_format_cost_ladder_mentions_assumptions():
     records = [{"input_tokens": 100, "output_tokens": 10, "cached_tokens": 20}]
     text = ce.format_cost_ladder(ce.production_cost_from_records(records, "gpt-5.4-nano"))

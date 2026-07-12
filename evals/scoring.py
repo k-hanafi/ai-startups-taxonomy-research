@@ -99,20 +99,17 @@ def load_gold() -> dict[str, dict[str, str]]:
 
 
 def load_predictions(run_id: str) -> list[dict[str, Any]]:
-    """Completed prediction records for a run, keyed checks left to callers."""
+    """All prediction records for a run (completed filtering left to callers).
+
+    Tolerates a truncated final JSONL line; fails loudly on interior
+    corruption (see ``evals.jsonl_io``).
+    """
+    from evals.jsonl_io import iter_jsonl
+
     path = run_predictions_path(run_id)
     if not path.exists():
         raise SystemExit(f"No predictions found for run {run_id} at {path}")
-    records: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
-            logger.warning("Skipping malformed predictions line in %s", path)
-    return records
+    return list(iter_jsonl(path, tolerate_truncated_final=True))
 
 
 def _is_completed(record: dict[str, Any]) -> bool:
@@ -224,31 +221,10 @@ def paired_bootstrap_delta(
 # ---------------------------------------------------------------------------
 
 def _record_tokens(record: dict[str, Any]) -> dict[str, int]:
-    """input/output/reasoning/cached token totals for one record, both shapes.
+    """Delegate to ``evals.usage.token_totals`` (single source of truth)."""
+    from evals.usage import token_totals
 
-    Single-pass records carry flat fields; two-pass records carry a_/b_
-    prefixed fields that are summed (a completed two-pass row always has
-    both passes). Cached defaults to 0 when the field is absent on a
-    legacy record — callers that need "field present?" use
-    ``evals.cost_extrapolate`` instead of this helper alone.
-    """
-    if "a_input_tokens" in record:
-        keys = {
-            "input": ("a_input_tokens", "b_input_tokens"),
-            "output": ("a_output_tokens", "b_output_tokens"),
-            "reasoning": ("a_reasoning_tokens", "b_reasoning_tokens"),
-            "cached": ("a_cached_tokens", "b_cached_tokens"),
-        }
-        return {
-            kind: sum(int(record.get(k) or 0) for k in fields)
-            for kind, fields in keys.items()
-        }
-    return {
-        "input": int(record.get("input_tokens") or 0),
-        "output": int(record.get("output_tokens") or 0),
-        "reasoning": int(record.get("reasoning_tokens") or 0),
-        "cached": int(record.get("cached_tokens") or 0),
-    }
+    return token_totals(record)
 
 
 def _token_stats(values: list[int]) -> dict[str, float]:
