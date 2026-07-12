@@ -497,7 +497,13 @@ def run_two_pass(model: str = cfg.EVAL_MODELS[0],
     if reuse_pass_a_from:
         bank = load_pass_a_bank(reuse_pass_a_from)
         bank_model = next(iter(bank.values()))["bank_model"]
-        if bank_model and bank_model != model:
+        if not bank_model:
+            raise SystemExit(
+                f"Pass A bank {reuse_pass_a_from!r} has no model recorded in "
+                "config.json or prediction rows. Cannot verify same-model "
+                "reuse. Re-bank Pass A or fix the bank metadata."
+            )
+        if bank_model != model:
             raise SystemExit(
                 f"Pass A bank {reuse_pass_a_from!r} was run with model "
                 f"{bank_model!r}, but this run requested {model!r}. "

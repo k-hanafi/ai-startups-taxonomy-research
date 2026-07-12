@@ -415,3 +415,47 @@ def test_reuse_pass_a_refuses_model_mismatch(tmp_path, monkeypatch):
             dry_run=False,
             limit=1,
         )
+
+
+def test_reuse_pass_a_refuses_missing_bank_model(tmp_path, monkeypatch):
+    """Missing bank model must refuse reuse (not silently allow cross-model)."""
+    bank_id = "bank-no-model"
+    bank_dir = tmp_path / "runs" / bank_id
+    raw_dir = bank_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    cid = "startup-u1"
+    (raw_dir / f"{cid}_a.json").write_text(
+        json.dumps({"status": "completed", "output": []}), encoding="utf-8"
+    )
+    (bank_dir / "predictions.jsonl").write_text(
+        json.dumps({
+            "custom_id": cid, "org_uuid": "u1", "status": "completed",
+            "ai_native": 1,
+        }) + "\n",
+        encoding="utf-8",
+    )
+    (bank_dir / "config.json").write_text(
+        json.dumps({"kind": "two_pass", "effort_b": "low"}), encoding="utf-8"
+    )
+    monkeypatch.setattr(two_pass, "run_dir", lambda rid: tmp_path / "runs" / rid)
+    monkeypatch.setattr(two_pass, "run_raw_dir", lambda rid: tmp_path / "runs" / rid / "raw")
+    monkeypatch.setattr(
+        two_pass, "run_predictions_path",
+        lambda rid: tmp_path / "runs" / rid / "predictions.jsonl",
+    )
+    monkeypatch.setattr(
+        two_pass, "run_config_path",
+        lambda rid: tmp_path / "runs" / rid / "config.json",
+    )
+    monkeypatch.setattr(two_pass, "load_golden_rows", lambda: [
+        {"org_uuid": "u1", "name": "x", "founded_date": "2020-01",
+         "website_evidence": "e", "short_description": "s"},
+    ])
+    with pytest.raises(SystemExit, match="no model recorded"):
+        two_pass.run_two_pass(
+            model="gpt-5.4-nano",
+            effort_b="low",
+            reuse_pass_a_from=bank_id,
+            dry_run=False,
+            limit=1,
+        )
