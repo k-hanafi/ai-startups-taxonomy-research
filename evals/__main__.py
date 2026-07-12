@@ -59,14 +59,30 @@ def main() -> None:
     p_run2.add_argument("--limit", type=int, default=None, help="Cap rows (cheap smoke test)")
     p_run2.add_argument("--dry-run", action="store_true", help="Print plan + cost, no API call")
     p_run2.add_argument(
+        "--pass-a-from",
+        default=None,
+        metavar="RUN_ID",
+        help=(
+            "Advanced override: pin Pass A to a specific historical run_id "
+            "instead of the stable per-model bank under "
+            "evals/runs/pass_a_banks/<model>/."
+        ),
+    )
+    p_run2.add_argument(
+        "--rerun-pass-a",
+        action="store_true",
+        help=(
+            "Invalidate the stable per-model Pass A bank and run Pass A "
+            "again (escape hatch). Default is to reuse an existing bank."
+        ),
+    )
+    p_run2.add_argument(
         "--reuse-pass-a-from",
         default=None,
         metavar="RUN_ID",
         help=(
-            "Reuse banked Pass A verdicts + raw logprobs from RUN_ID (same "
-            "model). Required for Stage 8 effort arms after the first cell "
-            "per model so Pass B deltas are not confounded by resampling "
-            "the gate."
+            "Deprecated alias for --pass-a-from. Pass A auto-reuses the "
+            "per-model bank by default; do not use this for normal Stage 8."
         ),
     )
     p_run2.add_argument(
@@ -86,11 +102,6 @@ def main() -> None:
         action="store_true",
         default=True,
         help="Print planned commands only (default).",
-    )
-    p_matrix.add_argument(
-        "--pass-a-bank-template",
-        default="<pass-a-bank-run-id-for-MODEL>",
-        help="Placeholder shown for --reuse-pass-a-from on effort arms 2–3.",
     )
     p_score = subs.add_parser(
         "score", help="Score run predictions against gold labels (Stage 7)"
@@ -233,6 +244,8 @@ def main() -> None:
             limit=args.limit,
             dry_run=args.dry_run,
             run_id=args.run_id,
+            pass_a_from=args.pass_a_from,
+            rerun_pass_a=args.rerun_pass_a,
             reuse_pass_a_from=args.reuse_pass_a_from,
         )
         return
@@ -246,32 +259,33 @@ def main() -> None:
         print(f"  models = {cfg.EVAL_MODELS}")
         print(f"  Pass B efforts = {cfg.STAGE8_PASS_B_EFFORTS}")
         print()
-        print("Bank Pass A once per model (first effort arm), then reuse:")
+        print(
+            "Pass A banks auto-create on the first effort arm per model, "
+            "then reuse (no reuse flag needed):"
+        )
         by_model: dict[str, list[str]] = {}
         for model, effort in cells:
             by_model.setdefault(model, []).append(effort)
         for model, efforts in by_model.items():
-            bank_placeholder = args.pass_a_bank_template.replace("MODEL", model)
             first, *rest = efforts
             print(
-                f"  # {model}: bank Pass A on {first}, reuse for "
+                f"  # {model}: creates bank on {first}, auto-reuses for "
                 + ", ".join(rest)
             )
-            print(
-                f"  python -m evals run-two-pass --model {model} "
-                f"--effort-b {first} --require-stage8-cell"
-            )
-            for effort in rest:
+            for effort in efforts:
                 print(
                     f"  python -m evals run-two-pass --model {model} "
-                    f"--effort-b {effort} --require-stage8-cell "
-                    f"--reuse-pass-a-from {bank_placeholder}"
+                    f"--effort-b {effort} --require-stage8-cell"
                 )
             print(
                 f"  python -m evals score <run_id> --confidence-from-raw "
                 f"[--baseline <other_run_id>]"
             )
             print()
+        print(
+            "Escape hatch: --rerun-pass-a rebuilds the per-model bank. "
+            "Advanced: --pass-a-from <run_id> pins a historical bank."
+        )
         print(
             "Dry-run cost preflight (no API): add --dry-run to any "
             "run-two-pass line above."

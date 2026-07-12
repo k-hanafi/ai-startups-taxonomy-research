@@ -246,13 +246,11 @@ def test_stage8_matrix_cells_locked():
         two_pass.validate_stage8_cell("gpt-5.4-nano", "none")
 
 
-def test_load_pass_a_bank_and_reuse_in_run(tmp_path, monkeypatch):
-    """Reuse path copies banked Pass A raw + verdict and only pays Pass B."""
-    bank_id = "bank-nano"
+def _write_mini_bank(tmp_path, bank_id: str, model: str, cid: str = "startup-u1",
+                     verdict: int = 1) -> Path:
     bank_dir = tmp_path / "runs" / bank_id
     raw_dir = bank_dir / "raw"
     raw_dir.mkdir(parents=True)
-    cid = "startup-u1"
     raw_a = {
         "status": "completed",
         "usage": {
@@ -265,19 +263,20 @@ def test_load_pass_a_bank_and_reuse_in_run(tmp_path, monkeypatch):
             "type": "message",
             "content": [{
                 "type": "output_text",
-                "text": '{"ai_native": 1}',
+                "text": json.dumps({"ai_native": verdict}),
                 "logprobs": [],
             }],
         }],
     }
     (raw_dir / f"{cid}_a.json").write_text(json.dumps(raw_a), encoding="utf-8")
+    org = cid.removeprefix("startup-")
     (bank_dir / "predictions.jsonl").write_text(
         json.dumps({
             "custom_id": cid,
-            "org_uuid": "u1",
+            "org_uuid": org,
             "status": "completed",
-            "ai_native": 1,
-            "model": "gpt-5.4-nano",
+            "ai_native": verdict,
+            "model": model,
             "a_latency_s": 0.5,
             "a_input_tokens": 10,
             "a_output_tokens": 6,
@@ -287,10 +286,13 @@ def test_load_pass_a_bank_and_reuse_in_run(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     (bank_dir / "config.json").write_text(
-        json.dumps({"model": "gpt-5.4-nano", "kind": "two_pass", "effort_b": "low"}),
+        json.dumps({"model": model, "kind": "pass_a_bank"}),
         encoding="utf-8",
     )
+    return bank_dir
 
+
+def _patch_run_paths(monkeypatch, tmp_path):
     monkeypatch.setattr(two_pass, "run_dir", lambda rid: tmp_path / "runs" / rid)
     monkeypatch.setattr(two_pass, "run_raw_dir", lambda rid: tmp_path / "runs" / rid / "raw")
     monkeypatch.setattr(
@@ -301,7 +303,10 @@ def test_load_pass_a_bank_and_reuse_in_run(tmp_path, monkeypatch):
         two_pass, "run_config_path",
         lambda rid: tmp_path / "runs" / rid / "config.json",
     )
-    monkeypatch.setattr(two_pass, "load_golden_rows", lambda: [{
+
+
+def _golden_one_row():
+    return [{
         "org_uuid": "u1",
         "name": "Acme",
         "short_description": "x",
@@ -313,8 +318,11 @@ def test_load_pass_a_bank_and_reuse_in_run(tmp_path, monkeypatch):
         "total_funding_usd": "1",
         "website_pages_used": "https://x.test/",
         "website_evidence": "We build AI.",
-    }])
-    monkeypatch.setattr(two_pass, "identity_hashes", lambda: {
+    }]
+
+
+def _identity_hashes():
+    return {
         "prompt_a_sha256": "pa",
         "prompt_b_family1_sha256": "pb1",
         "prompt_b_family0_sha256": "pb0",
@@ -322,87 +330,183 @@ def test_load_pass_a_bank_and_reuse_in_run(tmp_path, monkeypatch):
         "schema_b1_sha256": "sb1",
         "schema_b0_sha256": "sb0",
         "formatter_sha256": "fmt",
-    })
+    }
+
+
+def _pass_b_resp():
+    return _resp(
+        "completed",
+        {
+            "subclass": "1A",
+            "rad_score": "RAD-H",
+            "conf_classification": 4,
+            "conf_rad": 3,
+            "reasons_3_points": "a; b; c",
+            "sources_used": "site",
+            "verification_critique": "ok",
+            "boundary_disagreement": False,
+        },
+        reasoning=100,
+    )
+
+
+def test_load_pass_a_bank_and_auto_reuse(tmp_path, monkeypatch):
+    """Stable bank under pass_a_banks/<model>/ is reused with no flag."""
+    from evals.paths import pass_a_bank_run_id
+
+    model = "gpt-5.4-nano"
+    bank_id = pass_a_bank_run_id(model)
+    _write_mini_bank(tmp_path, bank_id, model)
+    _patch_run_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(two_pass, "load_golden_rows", _golden_one_row)
+    monkeypatch.setattr(two_pass, "identity_hashes", _identity_hashes)
     monkeypatch.setattr(two_pass, "_git_commit", lambda: "abc")
     monkeypatch.setattr(two_pass, "OPENAI_API_KEY", "placeholder")
 
-    pass_a_calls = []
+    pass_calls: list[str] = []
 
     def fake_create(client, kwargs):
-        # Only Pass B should be paid when reusing.
         assert "top_logprobs" not in kwargs
-        pass_a_calls.append("b")
-        return _resp(
-            "completed",
-            {
-                "subclass": "1A",
-                "rad_score": "RAD-H",
-                "conf_classification": 4,
-                "conf_rad": 3,
-                "reasons_3_points": "a; b; c",
-                "sources_used": "site",
-                "verification_critique": "ok",
-                "boundary_disagreement": False,
-            },
-            reasoning=100,
-        )
+        pass_calls.append("b")
+        return _pass_b_resp()
 
     monkeypatch.setattr(two_pass, "_create", fake_create)
     monkeypatch.setattr(two_pass, "OpenAI", lambda api_key: object())
 
     bank = two_pass.load_pass_a_bank(bank_id)
-    assert bank[cid]["ai_native"] == 1
+    assert bank["startup-u1"]["ai_native"] == 1
 
     run_id = two_pass.run_two_pass(
-        model="gpt-5.4-nano",
+        model=model,
         effort_b="high",
-        reuse_pass_a_from=bank_id,
         run_id="reuse-high",
     )
     assert run_id == "reuse-high"
-    assert pass_a_calls == ["b"]
+    assert pass_calls == ["b"]
     preds = (tmp_path / "runs" / "reuse-high" / "predictions.jsonl").read_text()
     rec = json.loads(preds.strip())
     assert rec["ai_native"] == 1
     assert rec["subclass"] == "1A"
     assert rec["pass_a_bank_run_id"] == bank_id
-    assert (tmp_path / "runs" / "reuse-high" / "raw" / f"{cid}_a.json").exists()
-    cfg = json.loads(
+    assert (tmp_path / "runs" / "reuse-high" / "raw" / "startup-u1_a.json").exists()
+    cfg_out = json.loads(
         (tmp_path / "runs" / "reuse-high" / "config.json").read_text(encoding="utf-8")
     )
-    assert cfg["pass_a_bank_run_id"] == bank_id
-    assert cfg["top_logprobs"] == two_pass.cfg.PASS_A_TOP_LOGPROBS
+    assert cfg_out["pass_a_bank_run_id"] == bank_id
+    assert cfg_out["top_logprobs"] == two_pass.cfg.PASS_A_TOP_LOGPROBS
+
+
+def test_creates_pass_a_bank_when_missing(tmp_path, monkeypatch):
+    """First cell without a bank runs Pass A and persists the stable bank."""
+    from evals.paths import pass_a_bank_run_id
+
+    model = "gpt-5.4-nano"
+    bank_id = pass_a_bank_run_id(model)
+    _patch_run_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(two_pass, "load_golden_rows", _golden_one_row)
+    monkeypatch.setattr(two_pass, "identity_hashes", _identity_hashes)
+    monkeypatch.setattr(two_pass, "_git_commit", lambda: "abc")
+    monkeypatch.setattr(two_pass, "OPENAI_API_KEY", "placeholder")
+
+    pass_calls: list[str] = []
+
+    def fake_create(client, kwargs):
+        if "top_logprobs" in kwargs:
+            pass_calls.append("a")
+            return _resp("completed", {"ai_native": 1})
+        pass_calls.append("b")
+        return _pass_b_resp()
+
+    monkeypatch.setattr(two_pass, "_create", fake_create)
+    monkeypatch.setattr(two_pass, "OpenAI", lambda api_key: object())
+
+    run_id = two_pass.run_two_pass(
+        model=model, effort_b="low", run_id="first-low",
+    )
+    assert run_id == "first-low"
+    assert pass_calls == ["a", "b"]
+    assert two_pass.pass_a_bank_covers(bank_id, ["startup-u1"])
+    bank_cfg = json.loads(
+        (tmp_path / "runs" / bank_id / "config.json").read_text(encoding="utf-8")
+    )
+    assert bank_cfg["kind"] == "pass_a_bank"
+    assert bank_cfg["model"] == model
+
+    # Second effort auto-reuses: Pass B only.
+    pass_calls.clear()
+    two_pass.run_two_pass(model=model, effort_b="medium", run_id="second-med")
+    assert pass_calls == ["b"]
+
+
+def test_rerun_pass_a_forces_new_bank(tmp_path, monkeypatch):
+    from evals.paths import pass_a_bank_run_id
+
+    model = "gpt-5.4-nano"
+    bank_id = pass_a_bank_run_id(model)
+    _write_mini_bank(tmp_path, bank_id, model, verdict=0)
+    _patch_run_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(two_pass, "load_golden_rows", _golden_one_row)
+    monkeypatch.setattr(two_pass, "identity_hashes", _identity_hashes)
+    monkeypatch.setattr(two_pass, "_git_commit", lambda: "abc")
+    monkeypatch.setattr(two_pass, "OPENAI_API_KEY", "placeholder")
+
+    pass_calls: list[str] = []
+
+    def fake_create(client, kwargs):
+        if "top_logprobs" in kwargs:
+            pass_calls.append("a")
+            return _resp("completed", {"ai_native": 1})
+        pass_calls.append("b")
+        return _pass_b_resp()
+
+    monkeypatch.setattr(two_pass, "_create", fake_create)
+    monkeypatch.setattr(two_pass, "OpenAI", lambda api_key: object())
+
+    two_pass.run_two_pass(
+        model=model, effort_b="low", run_id="rerun-low", rerun_pass_a=True,
+    )
+    assert pass_calls == ["a", "b"]
+    bank = two_pass.load_pass_a_bank(bank_id)
+    assert bank["startup-u1"]["ai_native"] == 1
+
+
+def test_pass_a_from_pins_historical_bank(tmp_path, monkeypatch):
+    """--pass-a-from loads a historical run_id instead of the stable bank."""
+    hist = "historical-nano"
+    _write_mini_bank(tmp_path, hist, "gpt-5.4-nano")
+    _patch_run_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(two_pass, "load_golden_rows", _golden_one_row)
+    monkeypatch.setattr(two_pass, "identity_hashes", _identity_hashes)
+    monkeypatch.setattr(two_pass, "_git_commit", lambda: "abc")
+    monkeypatch.setattr(two_pass, "OPENAI_API_KEY", "placeholder")
+
+    pass_calls: list[str] = []
+
+    def fake_create(client, kwargs):
+        assert "top_logprobs" not in kwargs
+        pass_calls.append("b")
+        return _pass_b_resp()
+
+    monkeypatch.setattr(two_pass, "_create", fake_create)
+    monkeypatch.setattr(two_pass, "OpenAI", lambda api_key: object())
+
+    two_pass.run_two_pass(
+        model="gpt-5.4-nano",
+        effort_b="high",
+        pass_a_from=hist,
+        run_id="pinned-high",
+    )
+    assert pass_calls == ["b"]
+    rec = json.loads(
+        (tmp_path / "runs" / "pinned-high" / "predictions.jsonl").read_text().strip()
+    )
+    assert rec["pass_a_bank_run_id"] == hist
 
 
 def test_reuse_pass_a_refuses_model_mismatch(tmp_path, monkeypatch):
     bank_id = "bank-mini"
-    bank_dir = tmp_path / "runs" / bank_id
-    raw_dir = bank_dir / "raw"
-    raw_dir.mkdir(parents=True)
-    cid = "startup-u1"
-    (raw_dir / f"{cid}_a.json").write_text(
-        json.dumps({"status": "completed", "output": []}), encoding="utf-8"
-    )
-    (bank_dir / "predictions.jsonl").write_text(
-        json.dumps({
-            "custom_id": cid, "org_uuid": "u1", "status": "completed",
-            "ai_native": 0, "model": "gpt-5.4-mini",
-        }) + "\n",
-        encoding="utf-8",
-    )
-    (bank_dir / "config.json").write_text(
-        json.dumps({"model": "gpt-5.4-mini"}), encoding="utf-8"
-    )
-    monkeypatch.setattr(two_pass, "run_dir", lambda rid: tmp_path / "runs" / rid)
-    monkeypatch.setattr(two_pass, "run_raw_dir", lambda rid: tmp_path / "runs" / rid / "raw")
-    monkeypatch.setattr(
-        two_pass, "run_predictions_path",
-        lambda rid: tmp_path / "runs" / rid / "predictions.jsonl",
-    )
-    monkeypatch.setattr(
-        two_pass, "run_config_path",
-        lambda rid: tmp_path / "runs" / rid / "config.json",
-    )
+    _write_mini_bank(tmp_path, bank_id, "gpt-5.4-mini", verdict=0)
+    _patch_run_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(two_pass, "load_golden_rows", lambda: [
         {"org_uuid": "u1", "name": "x", "founded_date": "2020-01",
          "website_evidence": "e", "short_description": "s"},
@@ -411,7 +515,7 @@ def test_reuse_pass_a_refuses_model_mismatch(tmp_path, monkeypatch):
         two_pass.run_two_pass(
             model="gpt-5.4-nano",
             effort_b="low",
-            reuse_pass_a_from=bank_id,
+            pass_a_from=bank_id,
             dry_run=False,
             limit=1,
         )
@@ -437,16 +541,7 @@ def test_reuse_pass_a_refuses_missing_bank_model(tmp_path, monkeypatch):
     (bank_dir / "config.json").write_text(
         json.dumps({"kind": "two_pass", "effort_b": "low"}), encoding="utf-8"
     )
-    monkeypatch.setattr(two_pass, "run_dir", lambda rid: tmp_path / "runs" / rid)
-    monkeypatch.setattr(two_pass, "run_raw_dir", lambda rid: tmp_path / "runs" / rid / "raw")
-    monkeypatch.setattr(
-        two_pass, "run_predictions_path",
-        lambda rid: tmp_path / "runs" / rid / "predictions.jsonl",
-    )
-    monkeypatch.setattr(
-        two_pass, "run_config_path",
-        lambda rid: tmp_path / "runs" / rid / "config.json",
-    )
+    _patch_run_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(two_pass, "load_golden_rows", lambda: [
         {"org_uuid": "u1", "name": "x", "founded_date": "2020-01",
          "website_evidence": "e", "short_description": "s"},
@@ -455,7 +550,25 @@ def test_reuse_pass_a_refuses_missing_bank_model(tmp_path, monkeypatch):
         two_pass.run_two_pass(
             model="gpt-5.4-nano",
             effort_b="low",
-            reuse_pass_a_from=bank_id,
+            pass_a_from=bank_id,
             dry_run=False,
             limit=1,
         )
+
+
+def test_matrix_cli_omits_reuse_flag(capsys):
+    from evals.__main__ import main
+    import sys
+
+    monkey_argv = ["evals", "matrix"]
+    old = sys.argv
+    try:
+        sys.argv = monkey_argv
+        main()
+    finally:
+        sys.argv = old
+    out = capsys.readouterr().out
+    assert "--reuse-pass-a-from" not in out
+    assert "auto-reuses" in out or "auto-create" in out
+    assert "--require-stage8-cell" in out
+    assert "--rerun-pass-a" in out
