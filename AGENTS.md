@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-11 · Active branch: `eval-harness/research-direction-fixes` (Stage 8 science blockers: Pass A bank reuse, binary logprobs, Pass B metrics; stacks on PR #22 dashboard)
+Last updated: 2026-07-11 · Active branch: `main` (eval science stack merged via PR #25; next = paid Stage 8 9-cell with Pass A banked once per model)
 
 ---
 
@@ -49,7 +49,7 @@ Authoritative plans (read when resuming a strand; committed under **`.cursor/pla
 - `.cursor/plans/survivorship_bias_wayback_*.plan.md` — death-anchored CDX probe (active survivorship strand).
 - `.cursor/plans/survivorship_tavily_pipeline_*.plan.md` — post-probe Tavily extract + classify pipeline.
 - `.cursor/plans/logprob_confidence_classifier_*.plan.md` — logprob-based confidence methodology (active).
-- `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; two-pass committed; Stage 9 mock on PR #22; research-direction blockers on `eval-harness/research-direction-fixes`; Stage 8 next = paid 9-cell with Pass A banked once per model).
+- `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; two-pass committed; #22 dashboard + #24/#25 science on `main`; provisional `draft_*` gold accepted for paid sweep; Stage 8 next = paid 9-cell with Pass A banked once per model).
 
 Cursor writes new plans to `~/.cursor/plans/` by default; copy or sync them into **`.cursor/plans/`** in this repo so they are version-controlled. Legacy copies may still exist in **`plans/`** at repo root. Repo agent skills (committed): **`portfolio-git-messages`**, **`git-commit-batch-plan`**, **`code-structure`**, **`clean-my-repo`** under **`.cursor/skills/`**. **`.cursor/rules/`** stays local.
 
