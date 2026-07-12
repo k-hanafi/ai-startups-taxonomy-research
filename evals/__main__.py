@@ -94,14 +94,8 @@ def main() -> None:
         "matrix",
         help=(
             "Enumerate the locked Stage 8 9-cell matrix "
-            "(EVAL_MODELS × low/medium/high). Default is dry-run commands."
+            "(EVAL_MODELS × low/medium/high). Prints planned commands only."
         ),
-    )
-    p_matrix.add_argument(
-        "--dry-run",
-        action="store_true",
-        default=True,
-        help="Print planned commands only (default).",
     )
     p_score = subs.add_parser(
         "score", help="Score run predictions against gold labels (Stage 7)"

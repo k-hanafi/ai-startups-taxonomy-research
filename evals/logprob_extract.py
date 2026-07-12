@@ -52,6 +52,14 @@ class LogprobExtractionError(ValueError):
     """A response payload does not match the shape this extractor relies on."""
 
 
+class BinaryConfidenceUnavailable(LogprobExtractionError):
+    """Both {0,1} candidates are not available at the decision token.
+
+    Raised instead of inventing a fake p=0/p=1 when the opposing digit is
+    missing from the (unmasked) candidate pool.
+    """
+
+
 @dataclass(frozen=True)
 class BinaryConfidence:
     """Per-row confidence metrics for the binary ai_native decision.
@@ -269,7 +277,7 @@ def extract_binary_confidence(response: dict[str, Any]) -> BinaryConfidence:
     # only the chosen digit, or the opposing digit was grammar-masked) would
     # renormalize to fake p=0 or p=1 and poison calibration. Mark unavailable.
     if mass[0] <= 0.0 or mass[1] <= 0.0:
-        raise LogprobExtractionError(
+        raise BinaryConfidenceUnavailable(
             "binary confidence unavailable: need unmasked evidence for both "
             "{0,1} at the decision token (opposing digit missing from pool)"
         )
@@ -309,9 +317,9 @@ def extract_run(raw_dir: Path) -> list[dict[str, Any]]:
         custom_id = path.stem.removesuffix("_a")
         try:
             rows.append({"custom_id": custom_id, **extract_raw_file(path).as_dict()})
-        except LogprobExtractionError as exc:
-            if "unavailable" in str(exc):
-                continue
+        except BinaryConfidenceUnavailable:
+            continue
+        except LogprobExtractionError:
             raise
     return rows
 

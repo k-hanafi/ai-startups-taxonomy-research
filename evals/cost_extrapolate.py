@@ -80,15 +80,9 @@ def _records_partial_cached_field(records: list[dict[str, Any]]) -> bool:
 
 
 def _sum_cached(records: list[dict[str, Any]]) -> int:
-    total = 0
-    for rec in records:
-        if "a_cached_tokens" in rec or "b_cached_tokens" in rec:
-            total += int(rec.get("a_cached_tokens") or 0) + int(
-                rec.get("b_cached_tokens") or 0
-            )
-        else:
-            total += int(rec.get("cached_tokens") or 0)
-    return total
+    from evals.usage import token_totals
+
+    return sum(token_totals(rec)["cached"] for rec in records)
 
 
 def extrapolate_production_cost(
@@ -270,19 +264,11 @@ def production_cost_from_records(
     n_prod_label: str = "alive_plus_dead",
 ) -> dict[str, Any]:
     """Aggregate token totals from scored records, then extrapolate."""
-    total_in = 0
-    total_out = 0
-    for rec in records:
-        if "a_input_tokens" in rec:
-            total_in += int(rec.get("a_input_tokens") or 0) + int(
-                rec.get("b_input_tokens") or 0
-            )
-            total_out += int(rec.get("a_output_tokens") or 0) + int(
-                rec.get("b_output_tokens") or 0
-            )
-        else:
-            total_in += int(rec.get("input_tokens") or 0)
-            total_out += int(rec.get("output_tokens") or 0)
+    from evals.usage import token_totals
+
+    totals = [token_totals(rec) for rec in records]
+    total_in = sum(t["input"] for t in totals)
+    total_out = sum(t["output"] for t in totals)
 
     present = _records_have_cached_field(records)
     cached = _sum_cached(records) if present else None

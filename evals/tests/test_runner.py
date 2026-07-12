@@ -112,6 +112,20 @@ def test_completed_custom_ids_tolerates_truncated_final_line(tmp_path):
     assert runner._completed_custom_ids(p) == {"startup-a"}
 
 
+def test_completed_custom_ids_fails_on_interior_malformed(tmp_path):
+    from evals.jsonl_io import MalformedJSONLError
+
+    p = tmp_path / "predictions.jsonl"
+    p.write_text(
+        json.dumps({"custom_id": "startup-a"}) + "\n"
+        + "{broken\n"
+        + json.dumps({"custom_id": "startup-c"}) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(MalformedJSONLError, match="line 2"):
+        runner._completed_custom_ids(p)
+
+
 def test_negative_limit_rejected():
     with pytest.raises(ValueError):
         runner.run(limit=-1, dry_run=True)
