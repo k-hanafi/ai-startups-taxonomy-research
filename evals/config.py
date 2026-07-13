@@ -7,10 +7,10 @@ independent: nothing here is imported by (or from) the production pipeline.
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
-# Benchmark matrix
+# Benchmark matrix (locked model × Pass B effort screen)
 # ---------------------------------------------------------------------------
 
-# Locked Stage 8 screen matrix: nano / mini / luna × Pass B low/medium/high.
+# Locked screen matrix: nano / mini / luna × Pass B low/medium/high.
 # gpt-5.4 / gpt-5.5 stay in EVAL_MODEL_PRICING for scoring older banked runs.
 EVAL_MODELS: list[str] = [
     "gpt-5.4-nano",   # current production model
@@ -18,9 +18,9 @@ EVAL_MODELS: list[str] = [
     "gpt-5.6-luna",
 ]
 
-# Pass B effort arms for the locked 9-cell Stage 8 screen (not "none":
+# Pass B effort arms for the locked 9-cell screen (not "none":
 # Pass A already owns the logprob/calibration axis at effort=none).
-STAGE8_PASS_B_EFFORTS: list[str] = ["low", "medium", "high"]
+MATRIX_PASS_B_EFFORTS: list[str] = ["low", "medium", "high"]
 
 # Legacy single-pass knobs (kept for scoring older banked runs only).
 SCREEN_REASONING_EFFORT: str = "medium"

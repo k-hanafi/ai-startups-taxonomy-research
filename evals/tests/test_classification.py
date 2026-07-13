@@ -235,15 +235,15 @@ def test_dry_run_refuses_unknown_model_pricing(monkeypatch):
         classification.run_classification(model="gpt-not-a-real-model", dry_run=True, limit=1)
 
 
-def test_stage8_matrix_cells_locked():
-    cells = classification.stage8_matrix_cells()
+def test_matrix_cells_locked():
+    cells = classification.matrix_cells()
     assert len(cells) == 9
     assert cells[0] == ("gpt-5.4-nano", "low")
     assert cells[-1] == ("gpt-5.6-luna", "high")
-    with pytest.raises(SystemExit, match="Unknown Stage 8 model"):
-        classification.validate_stage8_cell("gpt-4o", "low")
-    with pytest.raises(SystemExit, match="Unknown Stage 8 Pass B effort"):
-        classification.validate_stage8_cell("gpt-5.4-nano", "none")
+    with pytest.raises(SystemExit, match="Unknown matrix model"):
+        classification.validate_matrix_cell("gpt-4o", "low")
+    with pytest.raises(SystemExit, match="Unknown matrix Pass B effort"):
+        classification.validate_matrix_cell("gpt-5.4-nano", "none")
 
 
 def _write_mini_bank(tmp_path, bank_id: str, model: str, cid: str = "startup-u1",
@@ -593,5 +593,5 @@ def test_matrix_cli_omits_reuse_flag(capsys):
     out = capsys.readouterr().out
     assert "--reuse-pass-a-from" not in out
     assert "auto-reuses" in out or "auto-create" in out
-    assert "--require-stage8-cell" in out
+    assert "--require-matrix-cell" in out
     assert "--rerun-pass-a" in out

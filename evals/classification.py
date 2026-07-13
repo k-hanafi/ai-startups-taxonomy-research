@@ -15,7 +15,7 @@ Reuses the Stage 3 runner's reliability harness: tenacity retries, per-row
 resume keyed by custom_id, config snapshot with prompt hashes, raw responses
 banked per pass. A row is complete only when BOTH passes succeeded.
 
-Stage 8 Pass B effort sweeps bank Pass A once per model by default into
+Pass B effort sweeps bank Pass A once per model by default into
 ``evals/runs/pass_a_banks/<model>/``. Later efforts auto-reuse that bank so
 effort deltas are not confounded by resampling the gate. Escape hatches:
 ``--rerun-pass-a`` (invalidate / rebuild) and ``--pass-a-from`` (pin a
@@ -847,30 +847,30 @@ def run_classification(model: str = cfg.EVAL_MODELS[0],
                     record.get("ai_native"), record.get("subclass"),
                     record.get("rad_score"), record.get("status"))
 
-    logger.info("Two-pass run %s complete: %s", run_id, predictions_path)
+    logger.info("Classification run %s complete: %s", run_id, predictions_path)
     return run_id
 
 
-def stage8_matrix_cells() -> list[tuple[str, str]]:
-    """Locked Stage 8 (model, Pass B effort) pairs in screen order."""
+def matrix_cells() -> list[tuple[str, str]]:
+    """Locked (model, Pass B effort) pairs in screen order."""
     return [
         (model, effort)
         for model in cfg.EVAL_MODELS
-        for effort in cfg.STAGE8_PASS_B_EFFORTS
+        for effort in cfg.MATRIX_PASS_B_EFFORTS
     ]
 
 
-def validate_stage8_cell(model: str, effort_b: str) -> None:
+def validate_matrix_cell(model: str, effort_b: str) -> None:
     """Refuse unknown models/efforts so a typo cannot create an off-matrix paid run."""
     if model not in cfg.EVAL_MODELS:
         raise SystemExit(
-            f"Unknown Stage 8 model {model!r}. Locked EVAL_MODELS = "
+            f"Unknown matrix model {model!r}. Locked EVAL_MODELS = "
             f"{cfg.EVAL_MODELS}"
         )
-    if effort_b not in cfg.STAGE8_PASS_B_EFFORTS:
+    if effort_b not in cfg.MATRIX_PASS_B_EFFORTS:
         raise SystemExit(
-            f"Unknown Stage 8 Pass B effort {effort_b!r}. Locked "
-            f"STAGE8_PASS_B_EFFORTS = {cfg.STAGE8_PASS_B_EFFORTS}"
+            f"Unknown matrix Pass B effort {effort_b!r}. Locked "
+            f"MATRIX_PASS_B_EFFORTS = {cfg.MATRIX_PASS_B_EFFORTS}"
         )
 
 

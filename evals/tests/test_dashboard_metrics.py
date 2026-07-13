@@ -40,7 +40,7 @@ def test_default_fixture_path_exists():
     assert MOCK.exists()
 
 
-def test_load_fixture_has_nine_stage8_configs():
+def test_load_fixture_has_nine_matrix_configs():
     metrics = load_fixture(MOCK)
     assert metrics["synthetic"] is True
     assert metrics["n_configs"] == 9

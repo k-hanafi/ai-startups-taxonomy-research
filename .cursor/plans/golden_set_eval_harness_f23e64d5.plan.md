@@ -49,7 +49,7 @@ Last updated: **2026-07-12** (rename in flight: public CLI/module `run-classific
 | **Last merged** | PR **#26** — Pass A auto-bank default on `main` (stable `pass_a_banks/<model>/`, `--rerun-pass-a` / `--pass-a-from` escapes, `matrix` without reuse flag). Prior: PR **#25** Stage 8 science stack. |
 | **Open now** | PR **#23** (`cursor/eval-dashboard-langsmith-ux-0263`) — separate LangSmith UX branch (do not delete). Rename branch `cursor/rename-two-pass-to-classification-c7d5`. |
 | **Working branch** | Rename branch → then `main` for paid Stage 8. |
-| **Next** | **Stage 8** paid 9-cell from `main`: for each model, run three `run-classification --effort-b {low,medium,high} --require-stage8-cell` (first cell creates the Pass A bank; later efforts auto-reuse). Score with `--confidence-from-raw` and `--baseline`. Use `python -m evals matrix` for the command list. Then Stage 9 real dashboard → Stage 10 report. |
+| **Next** | Paid **9-cell matrix** from `main`: for each model, run three `run-classification --effort-b {low,medium,high} --require-matrix-cell` (first cell creates the Pass A bank; later efforts auto-reuse). Score with `--confidence-from-raw` and `--baseline`. Use `python -m evals matrix` for the command list. Then real dashboard → report. |
 | **Gold labels** | Fable `draft_*` = provisional gold **accepted for the paid Stage 8 sweep** (user 2026-07-11; pivot 4; human review waived, `gold_verdict` stays 0/100 by design). No gold CSV edits this session. ONE full agent re-draft deferred to end of pipeline (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
 | **Architecture reminder** | Pass A/B classification is COMMITTED for production promotion (pivots 7–8). Pass A is banked once per model across Pass B effort arms (science invariant). `src/` classifier is still historically one-pass. Banked single-pass runs are reference points only. Do **not** start `src/` promotion until Stage 8–9 insights land. |
@@ -76,7 +76,7 @@ Last updated: **2026-07-12** (rename in flight: public CLI/module `run-classific
 
 ### In progress
 
-- **Stage 8 (paid, next from `main`):** `python -m evals matrix` then `run-classification` per cell (Pass A auto-banks once per model). Provisional `draft_*` gold accepted for this sweep.
+- **Paid matrix (next from `main`):** `python -m evals matrix` then `run-classification` per cell (Pass A auto-banks once per model). Provisional `draft_*` gold accepted for this sweep.
 
 ### Pending (in order) — NEXT STEPS
 

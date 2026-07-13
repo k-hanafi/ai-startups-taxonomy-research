@@ -3,7 +3,7 @@
 Pure compute. The HTML builder only shapes Plotly traces and the config
 filter. No OpenAI imports: offline stages must not require API keys.
 
-Fixture path exists because Stage 8 paid runs are not banked yet. Real
+Fixture path exists because paid matrix runs are not banked yet. Real
 ``evals/runs/*/scored.json`` files plug in with the same loader once they
 exist.
 """
@@ -25,7 +25,7 @@ DEFAULT_FIXTURE = (
     / "dashboard_mock_runs.json"
 )
 
-# Locked Stage 8 screen matrix (labels + fixture). Short group keys drive
+# Locked screen matrix (labels + fixture). Short group keys drive
 # the HTML model-group pills (nano / mini / luna).
 MODEL_GROUP_BY_MODEL: dict[str, str] = {
     "gpt-5.4-nano": "nano",
@@ -365,7 +365,7 @@ def _aggregate_finalist_repeats(configs: list[dict[str, Any]]) -> list[dict[str,
     """When r1/r2/r3 share model×effort, append a mean±range aggregate row.
 
     Individual repeats stay visible (disambiguated labels). The aggregate
-    encodes determinism variance the Stage 8 plan asks for.
+    encodes determinism variance the matrix screen asks for.
     """
     groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for c in configs:

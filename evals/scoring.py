@@ -288,7 +288,7 @@ def cost_and_tokens(records: list[dict[str, Any]], model: str) -> dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
-# Latency (pivot 7: a measured axis for Stage 8 model selection)
+# Latency (pivot 7: a measured axis for matrix model selection)
 # ---------------------------------------------------------------------------
 
 def _latency_stats(values: list[float]) -> dict[str, float]:
@@ -306,8 +306,8 @@ def latency_summary(records: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
     """Wall-clock latency distributions, or None for runs that predate capture.
 
     Runs banked before the latency fields existed score exactly as before
-    (scored.json just carries latency: null). Two-pass runs additionally get
-    per-pass distributions, which is what the Stage 8 Pass B effort arm needs.
+    (scored.json just carries latency: null). Classification runs additionally get
+    per-pass distributions, which is what the matrix Pass B effort arm needs.
     """
     def collect(field: str) -> list[float]:
         return [float(r[field]) for r in records if r.get(field) is not None]
@@ -417,7 +417,7 @@ def calibration_report(
 
     n_eligible counts every scored row that could carry a confidence value.
     By default refuses when coverage is incomplete (partial raw/ dirs must
-    not look like finished Stage 8 calibration). Pass
+    not look like finished matrix calibration). Pass
     ``allow_partial_confidence=True`` for mid-flight debugging only.
     """
     if not confidence:

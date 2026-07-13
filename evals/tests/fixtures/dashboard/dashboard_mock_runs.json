@@ -1,6 +1,6 @@
 {
   "synthetic": true,
-  "note": "SYNTHETIC Stage 8 matrix mock for the Stage 9 dashboard skeleton. Numbers are design placeholders, not measured eval results. Pass A metrics (ai_native accuracy, ECE, mean_confidence, share≥0.9) are identical across Pass B efforts within each model, matching the bank-once Pass A design. Replace by loading real evals/runs/*/scored.json after the paid sweep.",
+  "note": "SYNTHETIC locked-matrix mock for the eval dashboard skeleton. Numbers are design placeholders, not measured eval results. Pass A metrics (ai_native accuracy, ECE, mean_confidence, share≥0.9) are identical across Pass B efforts within each model, matching the bank-once Pass A design. Replace by loading real evals/runs/*/scored.json after the paid sweep.",
   "scored_runs": [
     {
       "run_id": "mock_gpt-5.4-nano_low_r1",
