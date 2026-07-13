@@ -7,10 +7,10 @@ independent: nothing here is imported by (or from) the production pipeline.
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
-# Benchmark matrix
+# Benchmark matrix (locked model × Pass B effort screen)
 # ---------------------------------------------------------------------------
 
-# Locked Stage 8 screen matrix: nano / mini / luna × Pass B low/medium/high.
+# Locked screen matrix: nano / mini / luna × Pass B low/medium/high.
 # gpt-5.4 / gpt-5.5 stay in EVAL_MODEL_PRICING for scoring older banked runs.
 EVAL_MODELS: list[str] = [
     "gpt-5.4-nano",   # current production model
@@ -18,9 +18,9 @@ EVAL_MODELS: list[str] = [
     "gpt-5.6-luna",
 ]
 
-# Pass B effort arms for the locked 9-cell Stage 8 screen (not "none":
+# Pass B effort arms for the locked 9-cell screen (not "none":
 # Pass A already owns the logprob/calibration axis at effort=none).
-STAGE8_PASS_B_EFFORTS: list[str] = ["low", "medium", "high"]
+MATRIX_PASS_B_EFFORTS: list[str] = ["low", "medium", "high"]
 
 # Legacy single-pass knobs (kept for scoring older banked runs only).
 SCREEN_REASONING_EFFORT: str = "medium"
@@ -37,11 +37,11 @@ FINALIST_REPEATS: int = 3
 REASONING_OFF: str = "none"
 
 # ---------------------------------------------------------------------------
-# Two-pass classifier (Stage 5): Pass A = binary gate, Pass B = subclass + RAD
+# Classification runner (Stage 5): Pass A = binary gate, Pass B = subclass + RAD
 # ---------------------------------------------------------------------------
 
 # Pass A runs with reasoning off (logprobs on); Pass B defaults to maximum
-# reasoning, per the split-reasoning design in the two-pass plan.
+# reasoning, per the split-reasoning design in the classification plan.
 PASS_A_EFFORT: str = REASONING_OFF
 PASS_B_EFFORT: str = "high"
 
@@ -52,6 +52,8 @@ PASS_A_MAX_OUTPUT_TOKENS: int = 500
 
 # Distinct cache keys per pass: each pass has its own stable instruction
 # prefix, and mixing them in one cache route would hurt hit rates.
+# Opaque strings kept as the historical "two-pass-*" values so prompt-cache
+# identity does not reset when the public CLI/module was renamed.
 PASS_A_CACHE_KEY: str = "two-pass-a-binary-gate"
 PASS_B_CACHE_KEY: str = "two-pass-b-subclass-rad"
 

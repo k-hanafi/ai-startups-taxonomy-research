@@ -13,7 +13,7 @@ import json
 import pytest
 
 from evals import batch_parity, config as cfg
-from evals.two_pass import pass_a_kwargs
+from evals.classification import pass_a_kwargs
 
 
 @pytest.fixture

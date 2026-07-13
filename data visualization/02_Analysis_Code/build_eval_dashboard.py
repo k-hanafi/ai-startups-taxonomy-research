@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build the Stage 9 golden-set eval dashboard (LangSmith-light UX).
+"""Build the golden-set eval dashboard (LangSmith-light UX).
 
 Thin viewer skeleton: Pareto, leaderboard, confidence, latency, with a
 client-side config filter (model groups + per-config pills). Defaults to the
-synthetic Stage 8 matrix fixture; pass --runs / --scored for real scored.json.
+synthetic locked-matrix fixture; pass --runs / --scored for real scored.json.
 
 Writes:
     data visualization/01_Presentation_Materials/eval_dashboard.html
@@ -497,14 +497,14 @@ function renderPareto() {
 }
 
 function effortCaption(c) {
-  // Two-pass Stage 8 uses Pass B effort; banked single-pass refs use reasoning effort.
+  // Classification matrix cells use Pass B effort; banked single-pass refs use reasoning effort.
   // Do not hard-code "Pass B" when kind is single_pass or effort is none.
   // Missing effort must read as unknown, never as a fabricated medium.
   const e = (c.effort_b == null || c.effort_b === '' || c.effort_b === 'unknown')
     ? 'unknown'
     : String(c.effort_b);
   if (e === 'unknown') return 'effort unknown';
-  if (c.kind === 'two_pass') return 'Pass B ' + e;
+  if (c.kind === 'classification' || c.kind === 'two_pass') return 'Pass B ' + e;
   if (c.kind === 'single_pass' || e === 'none') return 'effort ' + e;
   return 'effort ' + e;
 }
@@ -756,7 +756,7 @@ def build_html(metrics: dict) -> str:
         banner = """
 <div class="banner" id="synthetic-banner">
   <div><strong>SYNTHETIC data.</strong> Numbers are design placeholders for the
-  Stage 8 matrix (nano / mini / luna × Pass B low / medium / high). Replace by
+  locked matrix (nano / mini / luna × Pass B low / medium / high). Replace by
   loading real <code>evals/runs/*/scored.json</code> after the paid sweep.</div>
 </div>
 """
@@ -786,7 +786,7 @@ def build_html(metrics: dict) -> str:
 <div class="app">
   <header class="header">
     <div class="header-title">Golden-set eval screen</div>
-    <div class="header-sub">Stage 9 viewer · {n} configs · source: {source}</div>
+    <div class="header-sub">Eval viewer · {n} configs · source: {source}</div>
   </header>
 
   <nav class="tabs" aria-label="Dashboard sections">
@@ -816,13 +816,13 @@ def build_html(metrics: dict) -> str:
       </table>
     </div>
     <p class="stub-note">Filter updates this table and the Charts tab without a reload.
-    Confusion / disagreement film-room is deferred until Stage 8 banked runs exist.</p>
+    Confusion / disagreement film-room is deferred until paid matrix runs exist.</p>
   </section>
 
   <section class="panel" id="panel-charts">
     <div class="card">
       <div class="card-title">Cost × subclass accuracy</div>
-      <div class="card-desc">Pareto view of the Stage 8 screen matrix. Log x-axis on projected production cost.</div>
+      <div class="card-desc">Pareto view of the locked screen matrix. Log x-axis on projected production cost.</div>
       <div id="chart-pareto" class="chart"></div>
     </div>
     <div class="card">
@@ -848,7 +848,7 @@ def build_html(metrics: dict) -> str:
   </section>
 
   <section class="panel" id="panel-stub">
-    <div class="empty">Confusion matrices and disagreement rows land after Stage 8 scored runs.
+    <div class="empty">Confusion matrices and disagreement rows land after paid matrix scored runs.
     This tab is a placeholder so the tab chrome matches the target UX.</div>
   </section>
 
