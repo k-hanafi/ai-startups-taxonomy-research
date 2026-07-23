@@ -190,7 +190,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `data visualization/02_Analysis_Code/*.py` | Scripts that build those dashboards |
 | `data visualization/02_Analysis_Code/survivorship_analysis.py` | Survivorship findings compute: survivor-vs-dead cohorts + 2 logistic models (pure metrics dict; PREVIEW from production if `survivorship_corrected.csv` absent) |
 | `data visualization/02_Analysis_Code/build_survivorship_insights_dashboard.py` | Renders `survivorship_insights.html` from that compute module (reuses house STYLE) |
-| `data visualization/02_Analysis_Code/build_eval_dashboard.py` | Eval viewer: Pareto / leaderboard / ECE+selective / reliability / vs_baseline / latency + config filter. Defaults to mock fixture; `--runs`/`--scored` for real runs. |
+| `data visualization/02_Analysis_Code/build_eval_dashboard.py` | Eval viewer (LangSmith-inspired light UX): white spacious canvas, summary line + experiments table, Pareto / ECE+selective / reliability / vs_baseline / latency, search + model-group chips. Defaults to mock fixture; `--runs`/`--scored` for real runs. Writes `eval_dashboard.html`. |
 | `tests/` | pytest for the live pipeline (schema, formatter, tokens, enrichment, tavily runner) |
 | `wayback_machine/tests/` | pytest for wayback (golden cleaner, cohort, state, config, budget, probe) |
 | `keys/` | API key env files, e.g. `keys/openai.env` (`OPENAI_API_KEY`). Git-ignored + cursor-ignored. **Never commit.** |

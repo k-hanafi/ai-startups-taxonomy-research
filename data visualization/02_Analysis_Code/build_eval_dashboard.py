@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Build the golden-set eval dashboard (LangSmith-light UX).
+"""Build the golden-set eval dashboard (LangSmith-inspired light UX).
 
-Thin viewer skeleton: Pareto, leaderboard, confidence, latency, with a
-client-side config filter (model groups + per-config pills). Defaults to the
-synthetic locked-matrix fixture; pass --runs / --scored for real scored.json.
+Thin viewer skeleton: experiments table + summary line chart, Pareto,
+confidence, reliability, vs baseline, latency, with a client-side config
+filter (model groups + per-config pills). Defaults to the synthetic
+locked-matrix fixture; pass --runs / --scored for real scored.json.
 
 Writes:
     data visualization/01_Presentation_Materials/eval_dashboard.html
 
-Style is eval-specific (white / light gray, tab underlines, toolbar filters).
-It deliberately does NOT reuse the survivorship navy/Cormorant house STYLE.
+Visual language follows LangSmith's light-mode eval kit: pure white canvas,
+generous whitespace, blue tab underlines, score bars, soft latency chips.
+Deliberately does NOT reuse the survivorship navy/Cormorant house STYLE.
 """
 
 from __future__ import annotations
@@ -40,32 +42,33 @@ OUTPUT_PATH = (
 
 # Soft accents for model groups on charts (not the dense house palette).
 GROUP_COLORS = {
-    "nano": "#6366f1",
-    "mini": "#0d9488",
-    "luna": "#d97706",
+    "nano": "#3b82f6",
+    "mini": "#14b8a6",
+    "luna": "#f59e0b",
 }
 
 STYLE = """
 :root {
-  --bg: #f7f7f8;
+  --bg: #ffffff;
   --surface: #ffffff;
-  --border: #e5e7eb;
-  --border-strong: #d1d5db;
-  --text: #111827;
-  --text2: #4b5563;
-  --muted: #9ca3af;
+  --surface-muted: #fafafa;
+  --border: #eceef2;
+  --border-strong: #d8dce3;
+  --text: #0f172a;
+  --text2: #475569;
+  --muted: #94a3b8;
   --accent: #2563eb;
   --accent-soft: #eff6ff;
-  --green: #16a34a;
-  --green-soft: #dcfce7;
+  --accent-border: #bfdbfe;
   --green-bar: #86efac;
-  --amber-pill: #fef3c7;
-  --amber-text: #92400e;
-  --rose-pill: #ffe4e6;
-  --rose-text: #9f1239;
+  --line: #4ade80;
+  --amber-pill: #fff7ed;
+  --amber-text: #c2410c;
+  --rose-pill: #fff1f2;
+  --rose-text: #be123c;
   --radius: 8px;
-  --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: "Plus Jakarta Sans", "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
@@ -74,38 +77,60 @@ body {
   background: var(--bg);
   color: var(--text);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
-
-.app {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 28px 32px 64px;
+code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  background: var(--surface-muted);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
 }
 
-/* Header */
-.header { margin-bottom: 8px; }
+.app {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 40px 40px 80px;
+}
+
+/* Header: folder + title + subtitle (LangSmith dataset page rhythm) */
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+.header-icon {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  margin-top: 2px;
+  color: var(--muted);
+}
+.header-copy { min-width: 0; }
 .header-title {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
   color: var(--text);
 }
 .header-sub {
-  margin-top: 4px;
-  font-size: 13px;
+  margin-top: 6px;
+  font-size: 14px;
   color: var(--text2);
 }
 
 /* Tabs */
 .tabs {
   display: flex;
-  gap: 20px;
+  gap: 28px;
   border-bottom: 1px solid var(--border);
-  margin: 20px 0 0;
+  margin: 28px 0 0;
 }
 .tab {
   appearance: none;
@@ -113,9 +138,9 @@ a:hover { text-decoration: underline; }
   border: none;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
-  padding: 10px 2px 12px;
+  padding: 12px 0 14px;
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text2);
   cursor: pointer;
@@ -127,7 +152,7 @@ a:hover { text-decoration: underline; }
 }
 
 /* Panels */
-.panel { display: none; padding-top: 20px; }
+.panel { display: none; padding-top: 28px; }
 .panel.active { display: block; }
 
 /* Banner */
@@ -135,109 +160,153 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 12px 14px;
-  margin-bottom: 16px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
   background: #fffbeb;
   border: 1px solid #fde68a;
   border-radius: var(--radius);
   color: #92400e;
   font-size: 13px;
+  line-height: 1.5;
 }
 .banner strong { font-weight: 600; }
-.banner.hidden { display: none; }
 
-/* Toolbar / filter */
+/* Toolbar */
 .toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 12px;
-  padding: 12px 0 16px;
+  gap: 12px 16px;
+  padding: 0 0 20px;
   margin-bottom: 8px;
 }
+.toolbar-left, .toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.toolbar-right { margin-left: auto; }
 .toolbar-label {
   font-size: 12px;
   color: var(--muted);
   font-weight: 500;
-  margin-right: 4px;
+  margin-right: 2px;
 }
 .toolbar-count {
-  margin-left: auto;
   font-size: 12px;
   color: var(--muted);
+  white-space: nowrap;
 }
-.pill-row { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
-.pill {
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 200px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+}
+.search:focus-within {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.search svg { flex: 0 0 auto; }
+.search input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  width: 100%;
+}
+.search input::placeholder { color: var(--muted); }
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  padding-top: 4px;
+}
+.chip {
   appearance: none;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text2);
-  border-radius: 999px;
-  padding: 5px 11px;
+  border-radius: 6px;
+  padding: 6px 12px;
   font: inherit;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-.pill:hover { border-color: var(--border-strong); color: var(--text); }
-.pill.active {
+.chip:hover { border-color: var(--border-strong); color: var(--text); }
+.chip.active {
   background: var(--accent-soft);
-  border-color: #bfdbfe;
+  border-color: var(--accent-border);
   color: var(--accent);
 }
-.pill.group { font-weight: 600; }
+.chip.group { font-weight: 600; }
+.chip.hidden-chip { display: none; }
 .btn-ghost {
   appearance: none;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text2);
   border-radius: 6px;
-  padding: 5px 10px;
+  padding: 7px 12px;
   font: inherit;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
 }
-.btn-ghost:hover { background: #f3f4f6; color: var(--text); }
+.btn-ghost:hover { background: var(--surface-muted); color: var(--text); }
 
-/* Cards / charts */
+/* Chart surface (interaction host for Plotly) */
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px 18px 8px;
-  margin-bottom: 16px;
+  padding: 22px 24px 12px;
+  margin-bottom: 28px;
 }
 .card-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
-  margin-bottom: 2px;
+  letter-spacing: -0.01em;
+  margin-bottom: 4px;
 }
 .card-desc {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
-.chart { width: 100%; height: 320px; }
-.chart.short { height: 260px; }
+.chart { width: 100%; height: 300px; }
+.chart.hero { height: 280px; }
+.chart.short { height: 240px; }
 .empty {
-  padding: 36px 16px;
+  padding: 48px 20px;
   text-align: center;
   color: var(--muted);
   font-size: 13px;
   border: 1px dashed var(--border);
   border-radius: var(--radius);
-  background: var(--surface);
+  background: var(--surface-muted);
 }
 
-/* Table */
+/* Table: hairline rules, airy rows (LangSmith experiments table) */
 .table-wrap {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 table.ls {
   width: 100%;
@@ -246,52 +315,65 @@ table.ls {
 }
 table.ls th {
   text-align: left;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--muted);
-  padding: 10px 14px;
+  padding: 14px 18px;
   border-bottom: 1px solid var(--border);
-  background: #fafafa;
+  background: var(--surface);
   white-space: nowrap;
 }
 table.ls th.num, table.ls td.num { text-align: right; }
 table.ls td {
-  padding: 12px 14px;
+  padding: 16px 18px;
   border-bottom: 1px solid var(--border);
   color: var(--text);
   vertical-align: middle;
 }
 table.ls tr:last-child td { border-bottom: none; }
-table.ls tbody tr:hover { background: #fafafa; }
-table.ls td.mono { font-family: var(--mono); font-size: 12px; }
-.name-cell { font-weight: 500; }
-.sub-cell { font-size: 11px; color: var(--muted); margin-top: 2px; }
+table.ls tbody tr:hover { background: var(--surface-muted); }
+table.ls td.mono { font-family: var(--mono); font-size: 12px; color: var(--text2); }
+.name-cell { font-weight: 600; letter-spacing: -0.01em; }
+.sub-cell { font-size: 12px; color: var(--muted); margin-top: 3px; }
 
-.score-cell { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
-.score-val { font-variant-numeric: tabular-nums; font-weight: 500; min-width: 2.6rem; }
+.score-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.score-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 3rem;
+}
 .score-bar {
-  width: 72px; height: 6px; border-radius: 999px;
-  background: #f3f4f6; overflow: hidden;
+  width: 88px;
+  height: 6px;
+  border-radius: 3px;
+  background: #f1f5f9;
+  overflow: hidden;
 }
 .score-bar > span {
-  display: block; height: 100%; border-radius: 999px;
+  display: block;
+  height: 100%;
+  border-radius: 3px;
   background: var(--green-bar);
 }
 
 .latency-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 999px;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
+  font-weight: 600;
   background: var(--amber-pill);
   color: var(--amber-text);
 }
+.latency-pill svg { width: 12px; height: 12px; opacity: 0.85; }
 .latency-pill.slow {
   background: var(--rose-pill);
   color: var(--rose-text);
@@ -312,14 +394,15 @@ table.ls td.mono { font-family: var(--mono); font-size: 12px; }
 }
 
 .stub-note {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
-  padding: 24px 8px;
+  padding: 8px 4px 0;
+  line-height: 1.6;
 }
 
 footer {
-  margin-top: 28px;
-  padding-top: 16px;
+  margin-top: 40px;
+  padding-top: 20px;
   border-top: 1px solid var(--border);
   font-size: 12px;
   color: var(--muted);
@@ -327,33 +410,36 @@ footer {
 }
 
 @media (max-width: 720px) {
-  .app { padding: 16px; }
-  .toolbar-count { width: 100%; margin-left: 0; }
-  .chart { height: 260px; }
+  .app { padding: 24px 18px 56px; }
+  .header-title { font-size: 22px; }
+  .toolbar-right { width: 100%; margin-left: 0; }
+  .search { width: 100%; }
+  .chart, .chart.hero { height: 240px; }
 }
 """
 
 SCRIPT = r"""
 const M = __M_JSON__;
 const COLORS = __GROUP_COLORS__;
+const CLOCK_SVG = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.2l2 1.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 const cfg = {displayModeBar: false, responsive: true};
-const axisFont = {family: 'Inter, ui-sans-serif, system-ui, sans-serif', size: 11, color: '#6b7280'};
+const axisFont = {family: 'Plus Jakarta Sans, Segoe UI, sans-serif', size: 11, color: '#94a3b8'};
 
 function layout(extra) {
   return Object.assign({
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(0,0,0,0)',
-    margin: {l: 48, r: 20, t: 12, b: 48},
+    margin: {l: 52, r: 24, t: 16, b: 52},
     font: axisFont,
-    xaxis: {gridcolor: '#f3f4f6', zeroline: false, linecolor: '#e5e7eb'},
-    yaxis: {gridcolor: '#f3f4f6', zeroline: false, linecolor: '#e5e7eb'},
-    legend: {orientation: 'h', y: 1.12, x: 0, font: {size: 11, color: '#6b7280'}},
+    xaxis: {gridcolor: '#f1f5f9', zeroline: false, linecolor: '#eceef2'},
+    yaxis: {gridcolor: '#f1f5f9', zeroline: false, linecolor: '#eceef2'},
+    legend: {orientation: 'h', y: 1.14, x: 0, font: {size: 11, color: '#64748b'}},
   }, extra || {});
 }
 
 function colorFor(c) {
-  return COLORS[c.model_group] || '#6366f1';
+  return COLORS[c.model_group] || '#2563eb';
 }
 
 function pct(x) {
@@ -372,20 +458,28 @@ function sec(x) {
 }
 
 let visible = new Set(M.configs.map(c => c.id));
+let query = '';
+
+function matchesQuery(c) {
+  if (!query) return true;
+  const hay = (c.label + ' ' + c.model + ' ' + c.effort_b + ' ' + c.model_group).toLowerCase();
+  return hay.includes(query);
+}
 
 function visibleConfigs() {
-  return M.configs.filter(c => visible.has(c.id));
+  return M.configs.filter(c => visible.has(c.id) && matchesQuery(c));
 }
 
 function updateCount() {
-  // Count visible *rows*, not Set size: ids are unique per run_id, but
-  // row count is the source of truth if a bad payload ever reuses an id.
   const el = document.getElementById('filter-count');
   if (el) el.textContent = visibleConfigs().length + ' of ' + M.configs.length + ' visible';
 }
 
-function syncPills() {
+function syncChips() {
   document.querySelectorAll('[data-config]').forEach(btn => {
+    const c = M.configs.find(x => x.id === btn.dataset.config);
+    const show = !c || matchesQuery(c);
+    btn.classList.toggle('hidden-chip', !show);
     btn.classList.toggle('active', visible.has(btn.dataset.config));
   });
   document.querySelectorAll('[data-group]').forEach(btn => {
@@ -399,7 +493,7 @@ function syncPills() {
 function toggleConfig(id) {
   if (visible.has(id)) visible.delete(id);
   else visible.add(id);
-  syncPills();
+  syncChips();
   renderAll();
 }
 
@@ -408,19 +502,19 @@ function toggleGroup(group) {
   const allOn = ids.length > 0 && ids.every(id => visible.has(id));
   if (allOn) ids.forEach(id => visible.delete(id));
   else ids.forEach(id => visible.add(id));
-  syncPills();
+  syncChips();
   renderAll();
 }
 
 function showAll() {
   visible = new Set(M.configs.map(c => c.id));
-  syncPills();
+  syncChips();
   renderAll();
 }
 
 function clearAll() {
   visible = new Set();
-  syncPills();
+  syncChips();
   renderAll();
 }
 
@@ -430,13 +524,59 @@ function emptyChart(id, msg) {
   el.innerHTML = '<div class="empty">' + msg + '</div>';
 }
 
+function renderSummaryLine() {
+  const runs = visibleConfigs();
+  const host = document.getElementById('chart-summary');
+  if (!host) return;
+  if (!runs.length) {
+    emptyChart('chart-summary', 'Turn on a config above to show subclass accuracy.');
+    return;
+  }
+  host.innerHTML = '';
+  const xs = runs.map(c => c.label);
+  const ys = runs.map(c => c.subclass_acc);
+  // Fit y to visible points like the Pareto chart, not a fixed 55-95% band.
+  // Banked / single-pass real runs can land near ~41% subclass accuracy.
+  const yLo = Math.min(...ys);
+  const yHi = Math.max(...ys);
+  const pad = Math.max(0.03, (yHi - yLo) * 0.12);
+  const yRange = [Math.max(0, yLo - pad), Math.min(1, yHi + pad)];
+  Plotly.newPlot('chart-summary', [{
+    type: 'scatter',
+    mode: 'lines+markers',
+    name: 'Subclass accuracy',
+    x: xs,
+    y: ys,
+    line: {color: '#4ade80', width: 2.5, shape: 'linear'},
+    marker: {
+      size: 9,
+      color: '#ffffff',
+      line: {width: 2.5, color: '#4ade80'},
+    },
+    hovertemplate: '%{x}<br>subclass %{y:.1%}<extra></extra>',
+  }], layout({
+    yaxis: {
+      title: {text: 'Subclass accuracy', font: {size: 11, color: '#94a3b8'}},
+      tickformat: '.0%',
+      range: yRange,
+      gridcolor: '#f1f5f9',
+      zeroline: false,
+    },
+    xaxis: {
+      tickangle: -28,
+      gridcolor: 'rgba(0,0,0,0)',
+      zeroline: false,
+    },
+    showlegend: false,
+    margin: {l: 56, r: 20, t: 12, b: 72},
+  }), cfg);
+}
+
 function renderPareto() {
   const runs = visibleConfigs();
   const host = document.getElementById('chart-pareto');
   if (!host) return;
   if (!runs.length) { emptyChart('chart-pareto', 'Turn on a config above to show the Pareto chart.'); return; }
-  // Log x-axis cannot place null/NaN/<=0 cost (legacy scored.json). Omit
-  // those points; leaderboard still shows money() "n/a" for the same configs.
   const plottable = runs.filter(c => Number.isFinite(c.projected_usd) && c.projected_usd > 0);
   if (!plottable.length) {
     emptyChart('chart-pareto', 'No configs with a positive projected cost to plot.');
@@ -467,7 +607,7 @@ function renderPareto() {
       y: [c.subclass_acc],
       text: [partial ? c.label + ' · partial' : c.label],
       textposition: 'top center',
-      textfont: {size: 10, color: partial ? '#b45309' : '#6b7280'},
+      textfont: {size: 10, color: partial ? '#b45309' : '#64748b'},
       marker: {
         size: 12,
         color: colorFor(c),
@@ -476,7 +616,7 @@ function renderPareto() {
       },
       error_y: c.subclass_ci == null ? undefined : {
         type: 'data', array: [c.subclass_ci], visible: true,
-        color: '#d1d5db', thickness: 1, width: 3,
+        color: '#d8dce3', thickness: 1, width: 3,
       },
       hovertemplate: c.label + '<br>subclass %{y:.1%}<br>cost %{x:$,.0f}' +
         hoverExtra + '<extra></extra>',
@@ -484,12 +624,12 @@ function renderPareto() {
   });
   Plotly.newPlot('chart-pareto', traces, layout({
     xaxis: {
-      title: {text: 'Projected production $ (41k)', font: {size: 11, color: '#9ca3af'}},
-      type: 'log', gridcolor: '#f3f4f6', zeroline: false,
+      title: {text: 'Projected production $ (41k)', font: {size: 11, color: '#94a3b8'}},
+      type: 'log', gridcolor: '#f1f5f9', zeroline: false,
     },
     yaxis: {
-      title: {text: 'Subclass accuracy', font: {size: 11, color: '#9ca3af'}},
-      tickformat: '.0%', range: yRange, gridcolor: '#f3f4f6', zeroline: false,
+      title: {text: 'Subclass accuracy', font: {size: 11, color: '#94a3b8'}},
+      tickformat: '.0%', range: yRange, gridcolor: '#f1f5f9', zeroline: false,
     },
     showlegend: false,
     margin: {l: 56, r: 16, t: 24, b: 52},
@@ -546,7 +686,7 @@ function renderLeaderboard() {
       '<td class="num mono">' + pct(c.ai_native_acc) + '</td>' +
       '<td class="num mono">' + pct(c.rad_acc) + '</td>' +
       '<td class="num mono">' + money(c.projected_usd) + '</td>' +
-      '<td class="num"><span class="' + pillCls + '">' + sec(lat) + '</span></td>' +
+      '<td class="num"><span class="' + pillCls + '">' + CLOCK_SVG + sec(lat) + '</span></td>' +
       '</tr>';
   }).join('');
 }
@@ -562,7 +702,7 @@ function renderConfidence() {
     name: 'ECE (lower better)',
     x: runs.map(c => c.label),
     y: runs.map(c => c.ece == null ? null : 100 * c.ece),
-    marker: {color: runs.map(c => colorFor(c)), opacity: 0.85},
+    marker: {color: runs.map(c => colorFor(c)), opacity: 0.88},
     hovertemplate: '%{x}<br>ECE %{y:.2f}%<extra></extra>',
   };
   const selTrace = {
@@ -577,9 +717,9 @@ function renderConfidence() {
     hovertemplate: '%{x}<br>selective@50 %{y:.1f}%<extra></extra>',
   };
   Plotly.newPlot('chart-confidence', [eceTrace, selTrace], layout({
-    yaxis: {title: {text: 'ECE (%)', font: {size: 11, color: '#9ca3af'}}, gridcolor: '#f3f4f6'},
+    yaxis: {title: {text: 'ECE (%)', font: {size: 11, color: '#94a3b8'}}, gridcolor: '#f1f5f9'},
     yaxis2: {
-      title: {text: 'Selective accuracy @50% coverage (%)', font: {size: 11, color: '#9ca3af'}},
+      title: {text: 'Selective accuracy @50% coverage (%)', font: {size: 11, color: '#94a3b8'}},
       overlaying: 'y',
       side: 'right',
       showgrid: false,
@@ -655,13 +795,14 @@ function renderLatency() {
     },
   ], layout({
     barmode: 'group',
-    yaxis: {title: {text: 'Seconds', font: {size: 11, color: '#9ca3af'}}, gridcolor: '#f3f4f6'},
+    yaxis: {title: {text: 'Seconds', font: {size: 11, color: '#94a3b8'}}, gridcolor: '#f1f5f9'},
     xaxis: {tickangle: -30, gridcolor: 'rgba(0,0,0,0)'},
     margin: {l: 48, r: 12, t: 28, b: 80},
   }), cfg);
 }
 
 function renderAll() {
+  renderSummaryLine();
   renderPareto();
   renderLeaderboard();
   renderConfidence();
@@ -697,7 +838,9 @@ function showTab(name) {
   document.querySelectorAll('.panel').forEach(p => {
     p.classList.toggle('active', p.id === 'panel-' + name);
   });
-  // Re-layout Plotly when a chart panel becomes visible.
+  if (name === 'experiments') {
+    setTimeout(() => { renderSummaryLine(); }, 30);
+  }
   if (name === 'charts') {
     setTimeout(() => { renderPareto(); renderConfidence(); renderReliability(); renderLatency(); renderBaseline(); }, 30);
   }
@@ -714,10 +857,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const clearBtn = document.getElementById('btn-clear');
   if (allBtn) allBtn.addEventListener('click', showAll);
   if (clearBtn) clearBtn.addEventListener('click', clearAll);
+  const search = document.getElementById('config-search');
+  if (search) {
+    search.addEventListener('input', () => {
+      query = search.value.trim().toLowerCase();
+      syncChips();
+      renderAll();
+    });
+  }
   document.querySelectorAll('.tab').forEach(t => {
     t.addEventListener('click', () => showTab(t.dataset.tab));
   });
-  syncPills();
+  syncChips();
   renderAll();
 });
 """
@@ -729,21 +880,32 @@ def _filter_toolbar_html(metrics: dict) -> str:
     for g in groups:
         label = (metrics["model_groups"].get(g) or {}).get("label", g)
         group_btns.append(
-            f'<button type="button" class="pill group active" data-group="{g}">{label}</button>'
+            f'<button type="button" class="chip group active" data-group="{g}">{label}</button>'
         )
     config_btns = []
     for c in metrics["configs"]:
         config_btns.append(
-            f'<button type="button" class="pill active" data-config="{c["id"]}">{c["label"]}</button>'
+            f'<button type="button" class="chip active" data-config="{c["id"]}">{c["label"]}</button>'
         )
     return f"""
 <div class="toolbar" id="config-filter">
-  <span class="toolbar-label">Show configs</span>
-  {"".join(group_btns)}
-  <button type="button" class="btn-ghost" id="btn-show-all">Show all</button>
-  <button type="button" class="btn-ghost" id="btn-clear">Clear</button>
-  <span class="toolbar-count" id="filter-count"></span>
-  <div class="pill-row">{"".join(config_btns)}</div>
+  <div class="toolbar-left">
+    <span class="toolbar-label">Model family</span>
+    {"".join(group_btns)}
+    <button type="button" class="btn-ghost" id="btn-show-all">Show all</button>
+    <button type="button" class="btn-ghost" id="btn-clear">Clear</button>
+  </div>
+  <div class="toolbar-right">
+    <label class="search" for="config-search">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      <input id="config-search" type="search" placeholder="Search by name..." autocomplete="off"/>
+    </label>
+    <span class="toolbar-count" id="filter-count"></span>
+  </div>
+  <div class="chip-row">{"".join(config_btns)}</div>
 </div>
 """
 
@@ -776,7 +938,7 @@ def build_html(metrics: dict) -> str:
 <title>Eval dashboard · golden-set screen</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
 {STYLE}
@@ -785,8 +947,14 @@ def build_html(metrics: dict) -> str:
 <body>
 <div class="app">
   <header class="header">
-    <div class="header-title">Golden-set eval screen</div>
-    <div class="header-sub">Eval viewer · {n} configs · source: {source}</div>
+    <svg class="header-icon" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+      <path d="M6 12.5h9.2l2.2-2.4H30a2 2 0 0 1 2 2V27a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V14.5a2 2 0 0 1 2-2Z"
+            stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+    </svg>
+    <div class="header-copy">
+      <div class="header-title">Golden-set eval screen</div>
+      <div class="header-sub">Locked model × Pass B effort matrix · {n} configs · source: {source}</div>
+    </div>
   </header>
 
   <nav class="tabs" aria-label="Dashboard sections">
@@ -799,23 +967,28 @@ def build_html(metrics: dict) -> str:
   {toolbar}
 
   <section class="panel active" id="panel-experiments">
+    <div class="card">
+      <div class="card-title">Subclass_accuracy</div>
+      <div class="card-desc">Primary screen metric across visible configs (LangSmith-style summary line).</div>
+      <div id="chart-summary" class="chart hero"></div>
+    </div>
     <div class="table-wrap">
       <table class="ls" id="leaderboard">
         <thead>
           <tr>
             <th></th>
-            <th>Config</th>
-            <th class="num">Subclass acc</th>
+            <th>Experiment Name</th>
+            <th class="num">Subclass_accuracy</th>
             <th class="num">AI-native</th>
             <th class="num">RAD</th>
-            <th class="num">Proj. $ (41k)</th>
-            <th class="num">P50 latency</th>
+            <th class="num">Total Cost</th>
+            <th class="num">P50 Latency</th>
           </tr>
         </thead>
         <tbody id="leaderboard-body"></tbody>
       </table>
     </div>
-    <p class="stub-note">Filter updates this table and the Charts tab without a reload.
+    <p class="stub-note">Filter and search update this table and the Charts tab without a reload.
     Confusion / disagreement film-room is deferred until paid matrix runs exist.</p>
   </section>
 
