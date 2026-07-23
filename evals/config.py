@@ -154,7 +154,8 @@ EVAL_MODEL_PRICING: dict[str, dict[str, float]] = {
     "gpt-5.4-mini": {"input": 0.75, "output": 4.50},
     "gpt-5.4":      {"input": 2.50, "output": 15.00},
     "gpt-5.5":      {"input": 5.00, "output": 30.00},
-    # gpt-5.6-luna: OpenAI GPT-5.6 launch pricing (July 2026), $1.00/$6.00 per 1M.
+    # gpt-5.6-luna: OpenAI GPT-5.6 launch pricing, $1.00/$6.00 per 1M
+    # (re-verified 2026-07-22 against OpenAI's published GPT-5.6 rates).
     "gpt-5.6-luna": {"input": 1.00, "output": 6.00},
 }
 
