@@ -535,6 +535,12 @@ function renderSummaryLine() {
   host.innerHTML = '';
   const xs = runs.map(c => c.label);
   const ys = runs.map(c => c.subclass_acc);
+  // Fit y to visible points like the Pareto chart, not a fixed 55-95% band.
+  // Banked / single-pass real runs can land near ~41% subclass accuracy.
+  const yLo = Math.min(...ys);
+  const yHi = Math.max(...ys);
+  const pad = Math.max(0.03, (yHi - yLo) * 0.12);
+  const yRange = [Math.max(0, yLo - pad), Math.min(1, yHi + pad)];
   Plotly.newPlot('chart-summary', [{
     type: 'scatter',
     mode: 'lines+markers',
@@ -552,7 +558,7 @@ function renderSummaryLine() {
     yaxis: {
       title: {text: 'Subclass accuracy', font: {size: 11, color: '#94a3b8'}},
       tickformat: '.0%',
-      range: [0.55, 0.95],
+      range: yRange,
       gridcolor: '#f1f5f9',
       zeroline: false,
     },
