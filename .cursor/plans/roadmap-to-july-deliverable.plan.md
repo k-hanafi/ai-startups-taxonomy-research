@@ -8,20 +8,55 @@ STATUS block after every milestone, decision, or pivot.
 
 ## STATUS
 
-- **State:** Plan created 2026-07-22 from four repo audits (eval harness,
-  survivorship pipeline, V2 migration scope, dashboard inventory).
-- **Current branch:** `cursor/eval-dashboard-langsmith-ux-0263` (draft PR #29,
-  CONFLICTING with main, 19 commits behind).
-- **Key discovery:** AGENTS.md is stale. The paid Stage C dead-cohort extract
-  is ALREADY DONE on disk: 19,044 targets covered, 15,714 with usable evidence
-  (`wayback_machine/outputs/processed/scrape_processed_dead.csv`). Remaining
-  survivorship stages: D (free) -> E (paid classify) -> F (free merge).
-- **Decisions pending (user):** D1 model matrix, D2 budgets, D3 V2 scope for
-  the alive cohort, D4 fallback if V2 batch migration slips. See "Open
-  decisions".
+- **State:** Decisions D1-D4 resolved 2026-07-22 evening. Plan re-sequenced:
+  V1 fallback on the dead cohort runs FIRST, V2 becomes a standalone sync-API
+  classifier package, Batch API dropped for V2.
+- **Current branch:** `cursor/eval-dashboard-langsmith-ux-0263` (draft PR #29
+  being rebased by worker).
+- **Key facts:** paid dead-cohort extract DONE (15,714 of 19,044 with
+  evidence). V1 alive results already exist (production_classifications.csv,
+  44,387 rows), so the V1 fallback needs only the dead-cohort classify.
+- **WU-0 + WU-1p DONE (2026-07-22):** PR #29 rebased and MERGEABLE (draft).
+  Luna pricing ($1/$6 per 1M) was already in evals/config.py on main and the
+  D1 matrix already aligned, so Stage 8 is unblocked from main as-is. PR #30
+  open: AGENTS.md staleness fix + roadmap sync. Luna dry-run ~$1.54/cell
+  input-side.
 - **In-flight workers:** none.
-- **Next steps:** resolve D1-D4, then kick off WU-1 (Stage 8 sweep prep) and
-  WU-3 (V2 batch migration scaffold) in parallel.
+- **User actions pending:** (1) WU-4a fallback commands (build input ->
+  dry-run -> classify_dead run -> merge) in iTerm; (2) WU-1 Stage 8 sweep,
+  9 cells, runnable from main now; (3) merge PRs #29 and #30 when ready.
+- **Next steps after fallback lands:** WU-5a V1 alive-vs-dead dashboard ->
+  user runs Stage 8 sweep -> WU-3 V2 sync migration -> WU-4b V2 runs ->
+  WU-5b final dashboard + WU-6 narrative.
+
+---
+
+## Decisions (locked 2026-07-22)
+
+- **D1:** Eval matrix = gpt-5.4-nano / gpt-5.4-mini / gpt-5.6-luna x Pass B
+  low/medium/high. 9 runs total, 100 golden rows each. Luna must be added to
+  `evals/config.py` models + pricing first.
+- **D2:** The user personally executes ALL paid eval and classifier runs in
+  their own terminal. Orchestrator/workers only prepare code and hand over
+  exact commands. Dry-run cost estimates precede every paid run.
+- **D3:** Deliver results for both cohorts. Alive = the ~22k evidence rows
+  (V1 results already exist for all 44,387). Dead = the 15,714 with archive
+  evidence.
+- **D4:** Fallback-first sequencing. Run the EXISTING V1 classifier on the
+  dead cohort now (before the eval sweep) so an alive-vs-dead comparison
+  dashboard exists no matter what. Only after that dashboard exists do we
+  build V2.
+- **D4b (architecture):** Production V2 uses the SYNC Responses API, not the
+  Batch API. Rationale: two-pass over Batch is a two-stage DAG with
+  resume/double-billing risk (the plan's riskiest item); sync reuses the
+  already-working eval runner pattern. Cost: forfeits the 50% batch
+  discount (~2x model spend on ~37k rows, acceptable at nano-class pricing).
+- **D4c (structure):** V1 and V2 are BOTH maintained, as standalone sibling
+  packages: `src/single_pass_classifier/` (today's `src/` modules moved) and
+  `src/two_pass_classifier/` (new, promoted from `evals/`). Underscores, not
+  hyphens (hyphens are illegal in Python package names). The restructure
+  happens only AFTER the V1 fallback run completes, so `classify_dead.py`
+  is never destabilized mid-run.
 
 ---
 
@@ -29,192 +64,160 @@ STATUS block after every milestone, decision, or pivot.
 
 | # | Deliverable | What "done" looks like |
 |---|------------|------------------------|
-| 1 | **V2 progress presentation dashboard** | A narrative HTML dashboard telling the V1 -> V2 story: single-pass + self-reported 1-5 confidence -> two-pass split-reasoning classifier + logprob-calibrated confidence + golden-set eval harness. Presentable to a professor in one sitting. |
-| 2 | **Production eval dashboard instance** | The existing LangSmith-style eval dashboard rendering REAL Stage 8 sweep results (not the mock fixture) over the 100-row golden set, ready to discuss config choice. |
-| 3 | **Unified production dashboard: alive + dead** | `full_baseline_cohort.html`-class dashboard over V2 classifications of ~20k alive (evidence rows) + ~15.7k dead companies, with a new alive-vs-dead section isolating survivorship bias. Requires migrating the `src/` batch classifier to the V2 two-pass design first. |
+| 1 | **V2 progress presentation dashboard** | Narrative HTML telling the V1 -> V2 story: single-pass + self-reported 1-5 confidence -> two-pass split-reasoning + logprob-calibrated confidence + golden-set eval harness. |
+| 2 | **Production eval dashboard instance** | LangSmith-style eval dashboard rendering REAL Stage 8 results (9 configs, 100-row golden set), ready for config discussion. |
+| 3 | **Production dashboard, alive + dead** | Classification dashboard over ~22k alive + ~15.7k dead with an alive-vs-dead section isolating survivorship bias. V1 version first (fallback), V2 version after migration. |
 
 ---
 
 ## Verified current state (2026-07-22)
 
 ### Eval harness (`evals/`) — feeds deliverables 1 + 2
-- DONE: stages 0-7 + cost-extrapolation pivot merged; Stage 9 mock dashboard
-  built. Batch parity validated for Pass A (logprobs survive Batch API).
-- Golden set: `evals/golden/golden_set.csv`, 100 stratified rows, all with
-  `draft_*` provisional labels (human `gold_*` review waived).
-- NOT DONE: Stage 8 paid sweep (full 100-row two-pass runs per config).
-  Banked so far: 3 single-pass nano reference runs + 2-row two-pass smokes.
-- Config drift to fix before sweep: `evals/config.py` `EVAL_MODELS` lists
-  nano/mini/gpt-5.4/gpt-5.5 but the locked dashboard matrix is
-  nano/mini/**gpt-5.6-luna** x Pass B low/medium/high; luna missing from
-  models list and pricing table.
-- Run commands per cell (paid, sync, outside sandbox):
-  `python -m evals run-two-pass --model M --effort-b E` then
-  `python -m evals score <run_id> --confidence-from-raw` then
-  `python -m evals dashboard --runs <ids...>`. Dry-run flag exists.
+- DONE: stages 0-7 + cost-extrapolation pivot merged; Stage 9 mock dashboard.
+  Pass A batch parity validated (moot for production now that V2 is sync,
+  still evidence of correctness).
+- Golden set: `evals/golden/golden_set.csv`, 100 stratified rows with
+  `draft_*` provisional labels.
+- NOT DONE: Stage 8 paid sweep. Blocker: luna missing from
+  `evals/config.py` `EVAL_MODELS` + `EVAL_MODEL_PRICING` (worker fixing).
+- Per-cell commands (user-run): `python -m evals run-two-pass --model M
+  --effort-b E` -> `python -m evals score <run_id> --confidence-from-raw` ->
+  `python -m evals dashboard --runs <ids...>`.
 
 ### Survivorship pipeline (`wayback_machine/`) — feeds deliverable 3
-- DONE: cohort (22,002) -> death probe (19,044 ok) -> targets (19,044) ->
-  **paid extract complete** (15,714 with evidence; ~3.2k permanent archive
-  empties; 0 retryable failures left).
-- REMAINING:
+- DONE through paid extract: 19,044 targets, 15,714 with evidence in
+  `wayback_machine/outputs/processed/scrape_processed_dead.csv`.
+- REMAINING (user-run, V1 fallback = WU-4a):
   1. `python3 wayback_machine/scripts/build_classifier_input_dead.py` (free)
   2. `python3 wayback_machine/scripts/classify_dead.py prepare --dry-run`
-     then `classify_dead.py run` (PAID; isolated under `CLASSIFY_NS=wayback_dead`)
-  3. `python3 wayback_machine/scripts/merge_survivorship.py` (free) ->
+  3. `caffeinate -ims python3 wayback_machine/scripts/classify_dead.py run`
+     (paid, Batch API, `CLASSIFY_NS=wayback_dead`)
+  4. `python3 wayback_machine/scripts/merge_survivorship.py` (free) ->
      `outputs/wayback_dead/survivorship_corrected.csv`
-- Note: classify_dead currently runs the V1 single-pass classifier. Whether
-  it should wait for V2 is decision D3/D4.
 
-### V2 production migration (`src/` + `classify.py`) — blocker for deliverable 3
-- V2 exists only in `evals/` and only via the synchronous Responses API.
-  Production `src/` is still single-pass Batch.
-- Architecture to port: Pass A = binary gate, effort none, top_logprobs=15,
-  `prompts/binary_gate_prompt.txt`; Pass B = family-constrained subclass+RAD,
-  configurable effort, `prompts/subclass_rad_prompt.txt` + family blocks.
-  Cohort computed in code. Confidence from logprob extraction
-  (`evals/logprob_extract.py`).
-- Hardest piece: two-stage Batch orchestration (Pass A batch -> download ->
-  join by custom_id -> build family-split Pass B batches -> download ->
-  assemble CSV), with resume that never re-pays a completed Pass A.
-- Validated: Pass A batch parity (byte-identical bodies, logprobs intact).
-  NOT validated: Pass B on Batch, end-to-end A->B join at scale.
-- Final model/effort config comes from Stage 8 results, but scaffolding can
-  start now with config as a parameter.
+### V2 production migration — now sync-API, standalone package
+- V2 lives in `evals/` (sync Responses API, 100-row scale). Production
+  promotion = scale-up of the sync runner, NOT a batch DAG.
+- To port: Pass A binary gate (effort none, top_logprobs=15,
+  `prompts/binary_gate_prompt.txt`) -> Pass B family-constrained
+  subclass+RAD (`prompts/subclass_rad_prompt.txt` + family blocks); logprob
+  confidence via `evals/logprob_extract.py`; cohort computed in code.
+- Scale-up needs: concurrency + rate limiting, resume checkpointing (never
+  re-pay a completed Pass A), per-pass error files, cost accounting, output
+  CSV contract with logprob columns.
 
-### Dashboards (`data visualization/`) — deliverables 1 + 3
-- `build_classification_dashboard.py` (full_baseline_cohort.html): 5 sections
-  (Overview, Landscape, RAD, Cohort Dynamics, Confidence Audit); reads the
-  legacy V1 CSV. Template for deliverable 3, needs new input + new section.
+### Dashboards (`data visualization/`)
+- `build_classification_dashboard.py`: 5-section template (reads legacy V1
+  CSV). Fork target for deliverable 3.
 - `survivorship_analysis.py` + `build_survivorship_insights_dashboard.py`:
-  alive-vs-dead comparisons + 2 logistic regressions already built; PREVIEW
-  mode until `survivorship_corrected.csv` exists. Reuse for the new
-  alive-vs-dead section.
-- Eval dashboard: mock by default; real data via `--runs`/`--scored`.
-- Gap: no V2 narrative/methodology dashboard exists at all (deliverable 1).
+  alive-vs-dead comparisons + 2 logistic regressions built; PREVIEW mode
+  until `survivorship_corrected.csv` exists. Becomes real after WU-4a.
+- Eval dashboard: mock by default; real via `--runs`/`--scored`.
+- No V2 narrative dashboard exists (deliverable 1 gap).
 
 ---
 
-## Dependency graph
+## Sequencing (decided)
 
 ```
-D1+D2 decisions
-   |
-   v
-WU-1 Stage 8 sweep (paid) ----> WU-2 real eval dashboard  [deliverable 2]
-   |                                   |
-   | (config pick)                     v
-   v                            WU-6 V2 narrative dashboard [deliverable 1]
-WU-3 V2 batch migration (can scaffold in parallel, config injected late)
-   |
-   v
-WU-4 production V2 runs (paid): alive evidence cohort + dead cohort
-   |
-   v
-WU-5 merge_survivorship + unified alive-vs-dead dashboard [deliverable 3]
+NOW (parallel):
+  [user, iTerm]  WU-4a  V1 fallback: classifier_input_dead -> dry-run ->
+                        classify_dead run -> merge_survivorship
+  [worker]       WU-0   rebase/land PR #29 + AGENTS.md staleness fix
+  [worker]       WU-1p  luna in evals/config.py (models + pricing) -> PR
 
-Housekeeping (parallel, cheap): WU-0 rebase/land PR #29; sync AGENTS.md.
+THEN:
+  [worker]       WU-5a  V1 alive-vs-dead dashboard (deliverable 3, fallback
+                        edition) from survivorship_corrected.csv
+  [user, iTerm]  WU-1   Stage 8 sweep: 9 x (run-two-pass -> score) -> dashboard
+  [worker]       WU-2   snapshot real eval dashboard into presentation dir
+
+THEN (V2 build, only after WU-4a results are banked):
+  [worker]       WU-3   src restructure: src/single_pass_classifier +
+                        src/two_pass_classifier (sync API, scaled eval runner)
+  [user, iTerm]  WU-4b  V2 sync runs: alive evidence cohort + dead cohort
+                        (config chosen from Stage 8 results)
+  [worker]       WU-5b  V2 production dashboard w/ survivorship section
+  [worker]       WU-6   V2 narrative dashboard (can draft early, numbers last)
 ```
 
-Critical path: D1 -> WU-1 -> config pick -> WU-4 -> WU-5. WU-3 scaffolding
-and WU-6 drafting are parallelizable and should start immediately.
+Critical path to a safe meeting: WU-4a -> WU-5a (fallback deliverable 3),
+WU-1p -> WU-1 -> WU-2 (deliverable 2). Everything V2 is upside on top.
 
 ---
 
-## Work units (kickoff-ready)
+## Work units
 
-### WU-0 — Housekeeping (free, ~1h agent time)
+### WU-0 — Housekeeping (worker, in flight)
 Rebase `cursor/eval-dashboard-langsmith-ux-0263` onto main, resolve
-conflicts, land PR #29 (the real eval dashboard build depends on this UX).
-Update AGENTS.md: survivorship status (extract DONE), this plan's existence.
-- Owner: implementer worker. Verify: PR mergeable, `pytest` green.
+conflicts, make PR #29 mergeable. Fix AGENTS.md staleness (extract done,
+roadmap plan exists). Verify: PR mergeable, `pytest` green.
 
-### WU-1 — Stage 8 eval sweep prep + execution (PAID)
-1. Fix `evals/config.py`: add `gpt-5.6-luna` to `EVAL_MODELS` + pricing;
-   align matrix with D1 decision.
-2. Dry-run every cell; report total estimated input cost for approval.
-3. Execute sweep (user runs, or worker runs outside sandbox with keys):
-   N configs x (run-two-pass -> score --confidence-from-raw -> report).
-- Owner: implementer for (1), user/worker for (3). Verify: scored.json per
-  cell, accuracy/cost/latency populated.
+### WU-1p — Eval config prep (worker, in flight)
+Add `gpt-5.6-luna` to `EVAL_MODELS` and `EVAL_MODEL_PRICING` (pricing from
+OpenAI's published rates; if unpublishable, flag for user). Align matrix
+with D1. PR to main. Verify: `pytest evals/tests` green, dry-run works for
+all 3 models.
 
-### WU-2 — Real eval dashboard instance (deliverable 2, free)
-`python -m evals dashboard --runs <stage-8 run ids>`; confirm SYNTHETIC
-banner gone, all configs render, Pareto/confidence/latency tabs correct.
-Snapshot HTML into `01_Presentation_Materials/`.
-- Depends: WU-1. Verify: dashboard opens with real runs only.
+### WU-1 — Stage 8 sweep (USER-RUN, paid)
+Dry-run each of 9 cells first, then execute. Commands handed over after
+WU-1p lands. Verify: 9 scored.json files with accuracy/cost/latency.
 
-### WU-3 — V2 two-pass Batch migration (biggest engineering item)
-Port the two-pass design from `evals/` into the production Batch pipeline:
-- `src/schema.py`: BinaryResult + family-constrained Pass B schemas; keep
-  final CSV contract + new logprob-confidence columns + boundary_disagreement.
-- `src/builder.py`: pass_a/pass_b request builders (cache-stable prefixes,
-  logprobs only on A, family-split B prefixes).
-- `classify.py` + `src/state.py`: two-stage state machine
-  (A prepare/submit/download -> join -> B prepare/submit/download ->
-  assemble); resume must never re-pay completed A batches.
-- Promote `evals/logprob_extract.py` -> `src/logprobs.py`.
-- Tokens/dry-run cost for 2x calls; keep `CLASSIFY_NS` isolation.
-- Smoke test: tiny end-to-end two-pass Batch run (~10 rows) before scale.
-Model/effort left as config; injected after WU-1.
-- Owner: dedicated implementer worker (large unit; own branch/PR). Verify:
-  smoke run produces assembled CSV matching eval-path results on same rows.
+### WU-2 — Real eval dashboard (worker, free)
+`python -m evals dashboard --runs <9 ids>`; snapshot HTML into
+`01_Presentation_Materials/`. Verify: no SYNTHETIC banner, 9 configs render.
 
-### WU-4 — Production V2 classification runs (PAID)
-1. `build_classifier_input_dead.py` (free) -> classifier_input_dead.csv.
-2. Dry-run costs for both cohorts with chosen config; get approval.
-3. Run V2 batch classify: alive evidence cohort (classifier_input.csv) under
-   default NS; dead cohort under `CLASSIFY_NS=wayback_dead`.
-- Depends: WU-3 + config from WU-1. Verify: output CSVs complete, custom_id
-  match counts, cost within estimate.
+### WU-4a — V1 fallback dead-cohort classification (USER-RUN, paid)
+Commands in "Survivorship pipeline" above. Produces
+`survivorship_corrected.csv`. Verify: merge prints before/after AI-native
+rate; row counts match 15,714 dead verdicts overlaid.
 
-### WU-5 — Merge + unified alive-vs-dead dashboard (deliverable 3)
-1. `merge_survivorship.py` -> survivorship_corrected.csv (adapt to V2
-   columns if needed).
-2. New builder (fork of `build_classification_dashboard.py`): V2 production
-   input, existing 5 sections adapted (confidence audit becomes logprob
-   calibration), plus new "Survivorship bias isolated" section reusing
-   `survivorship_analysis.py` cohort comparisons + logistic forests.
-- Depends: WU-4. Verify: HTML renders alive+dead KPIs, distribution deltas,
-  corrected vs biased AI-native rate.
+### WU-5a — V1 alive-vs-dead dashboard (worker, free)
+Fork/extend `build_classification_dashboard.py` +
+`survivorship_analysis.py` into the fallback edition of deliverable 3:
+V1 classifications, alive evidence cohort vs dead cohort, survivorship-bias
+section (distribution deltas, biased vs corrected AI-native rate, logistic
+forests). Verify: HTML renders with real (non-PREVIEW) dead verdicts.
 
-### WU-6 — V2 progress narrative dashboard (deliverable 1)
-New presentation HTML: the story of V1 -> V2. Sections: why V1 confidence
-was weak (post-hoc self-report) -> two-pass design (gate + family-constrained
-subclass) -> logprob confidence/calibration -> golden set + eval harness ->
-Stage 8 results summary -> what production V2 changes. Reuse house STYLE.
-Content can be drafted NOW against mock/known material; final numbers
-injected after WU-1.
-- Owner: implementer worker, parallel from day 1. Verify: professor-readable
-  standalone HTML in `01_Presentation_Materials/`.
+### WU-3 — V2 standalone package + sync scale-up (worker, largest unit)
+1. Move existing `src/` modules into `src/single_pass_classifier/`; fix
+   imports (`classify.py`, wayback scripts, tests). No behavior change.
+2. Create `src/two_pass_classifier/`: promote two-pass runner, logprob
+   extraction, schemas, prompts wiring from `evals/`; add concurrency,
+   resume checkpoints, rate limiting, cost accounting for ~37k rows.
+3. Smoke: 10-row run matches eval-path results on the same rows.
+Config (model + effort B) injected from Stage 8 results. Verify: full test
+suite green, smoke parity, V1 path still runs (classify_dead regression).
+
+### WU-4b — V2 production runs (USER-RUN, paid, sync)
+Alive evidence cohort + dead cohort through `src/two_pass_classifier` with
+the chosen config. Dry-run cost gate first. Verify: output CSVs complete,
+resume tested, cost within estimate.
+
+### WU-5b — V2 production dashboard (worker, free)
+WU-5a dashboard re-pointed at V2 outputs; confidence audit section becomes
+logprob calibration. Verify: HTML with V2 numbers, alive-vs-dead section.
+
+### WU-6 — V2 narrative dashboard (worker, free, parallelizable)
+The V1 -> V2 story: why self-reported confidence was weak -> two-pass
+design -> logprob calibration -> golden set + eval harness -> Stage 8
+results -> production V2. Draft early against known material; inject final
+numbers after WU-1/WU-4b. Verify: standalone professor-readable HTML.
 
 ---
-
-## Open decisions (user)
-
-- **D1 — Stage 8 matrix:** confirm nano / mini / gpt-5.6-luna x Pass B
-  low/medium/high (9 cells) as locked in the dashboard, or trim. Requires
-  adding luna pricing to config.
-- **D2 — Budgets:** approve (a) Stage 8 sweep spend (dry-run numbers first),
-  (b) production batch spend for alive + dead V2 runs (dry-run first).
-- **D3 — Alive cohort scope for V2:** re-classify the full 44,387 live rows,
-  or only the ~22k with real website evidence (the "~20k alive" framing)?
-  Recommendation: evidence rows only for the meeting; the no-evidence
-  remainder is exactly what the dead cohort replaces.
-- **D4 — Fallback if WU-3 slips:** the meeting is days away and WU-3 is the
-  riskiest unit. Fallback: run the dead cohort through the EXISTING V1
-  classifier (classify_dead.py works today), build deliverable 3's
-  alive-vs-dead comparison on V1-vs-V1 (methodologically consistent), and
-  present V2 as "validated in eval, production migration in progress".
-  Decide now whether fallback is acceptable so we can trigger it early.
 
 ## Risks
 
-- WU-3 (two-stage Batch DAG) is high complexity; resume/double-billing bugs
-  are the main hazard. Mitigate with the 10-row smoke and Pass-A-bank reuse.
-- Stage 8 gold labels are provisional drafts (human review waived); frame
-  eval numbers as provisional to the professor.
-- Only 15,714 of 19,044 dead targets have evidence (~18% archive empties);
-  the comparison cohort is ~15.7k, not 20k. State this in the dashboard.
-- Fair-comparison invariant: alive and dead MUST be classified by the same
-  classifier version for the survivorship section to be publishable.
+- Meeting is days away: the fallback path (WU-4a + WU-5a) is the safety
+  net and runs first by design.
+- Sync V2 forfeits the 50% batch discount (~2x model spend, accepted D4b).
+- Sync at 37k-row scale needs disciplined rate limiting + resume; smoke
+  test before full runs.
+- Stage 8 gold labels are provisional drafts; present eval numbers as
+  provisional.
+- Dead cohort is 15,714 of 19,044 targets (~18% archive empties); the
+  dashboard must state this.
+- Fair comparison: alive vs dead must use the SAME classifier version per
+  dashboard edition (V1-vs-V1 fallback, V2-vs-V2 final). Never mix.
+- `src/` restructure (WU-3.1) must wait until WU-4a finishes so the V1
+  batch run is never disturbed mid-flight.

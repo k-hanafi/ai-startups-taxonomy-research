@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-13 · Active branch: `cursor/eval-dashboard-langsmith-ux-0263` (LangSmith-spacious UX polish merged with main's matrix-language CLI; next = paid 9-cell matrix)
+Last updated: 2026-07-22 · Active branch: `eval/luna-config` (luna pricing re-verified + survivorship status corrected; next = paid 9-cell matrix)
 
 ---
 
@@ -42,9 +42,10 @@ taxonomy never change. The only thing that differs across strands is the evidenc
 |--------|-------|--------|
 | Live | crawl → classify → merge | DONE — 44,387 companies classified (`production_classifications.csv`) |
 | Historical (wayback) | coverage probe done; infra built | PAUSED — GO verdict (~16k retrievable at Mar-2023); awaiting recovery probe before paid extract |
-| Survivorship-bias | probe done → extract → classify → merge | IN PROGRESS — Stage C migrated crawl→extract (single-page archive extract; crawl fought Archive playback limits); next manual run: paid `run_extract_dead.py` |
+| Survivorship-bias | probe done → extract DONE → classify → merge | IN PROGRESS — paid Stage C extract complete (19,044 targets covered, 15,714 with evidence in `scrape_processed_dead.csv`); next: `build_classifier_input_dead.py` → `classify_dead.py` (paid) → `merge_survivorship.py` |
 
 Authoritative plans (read when resuming a strand; committed under **`.cursor/plans/`**):
+- `.cursor/plans/roadmap-to-july-deliverable.plan.md` — master roadmap for the July professor-meeting deliverables (read first).
 - `.cursor/plans/PLAN.md` — historical/wayback master plan.
 - `.cursor/plans/survivorship_bias_wayback_*.plan.md` — death-anchored CDX probe (active survivorship strand).
 - `.cursor/plans/survivorship_tavily_pipeline_*.plan.md` — post-probe Tavily extract + classify pipeline.
