@@ -295,7 +295,7 @@ table.ls td {
 table.ls tr:last-child td { border-bottom: none; }
 table.ls tbody tr:hover { background: var(--surface-muted); }
 table.ls td.mono { font-family: var(--mono); font-size: 12px; color: var(--text2); }
-.name-cell { font-weight: 560; letter-spacing: -0.01em; }
+.name-cell { font-weight: 600; letter-spacing: -0.01em; }
 .sub-cell { font-size: 12px; color: var(--muted); margin-top: 3px; }
 
 .score-cell {
@@ -306,7 +306,7 @@ table.ls td.mono { font-family: var(--mono); font-size: 12px; color: var(--text2
 }
 .score-val {
   font-variant-numeric: tabular-nums;
-  font-weight: 550;
+  font-weight: 600;
   min-width: 3rem;
 }
 .score-bar {
@@ -331,7 +331,7 @@ table.ls td.mono { font-family: var(--mono); font-size: 12px; color: var(--text2
   border-radius: 6px;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  font-weight: 550;
+  font-weight: 600;
   background: var(--amber-pill);
   color: var(--amber-text);
 }
@@ -339,6 +339,20 @@ table.ls td.mono { font-family: var(--mono); font-size: 12px; color: var(--text2
 .latency-pill.slow {
   background: var(--rose-pill);
   color: var(--rose-text);
+}
+
+.partial-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--amber-pill);
+  color: var(--amber-text);
+  vertical-align: middle;
 }
 
 .stub-note {
@@ -376,7 +390,7 @@ footer {
     </svg>
     <div class="header-copy">
       <div class="header-title">Golden-set eval screen</div>
-      <div class="header-sub">Stage 8 model × Pass B effort matrix · 9 configs · source: evals/tests/fixtures/dashboard_mock_runs.json</div>
+      <div class="header-sub">Locked model × Pass B effort matrix · 9 configs · source: evals/tests/fixtures/dashboard/dashboard_mock_runs.json</div>
     </div>
   </header>
 
@@ -389,7 +403,7 @@ footer {
   
 <div class="banner" id="synthetic-banner">
   <div><strong>SYNTHETIC data.</strong> Numbers are design placeholders for the
-  Stage 8 matrix (nano / mini / luna × Pass B low / medium / high). Replace by
+  locked matrix (nano / mini / luna × Pass B low / medium / high). Replace by
   loading real <code>evals/runs/*/scored.json</code> after the paid sweep.</div>
 </div>
 
@@ -438,19 +452,29 @@ footer {
       </table>
     </div>
     <p class="stub-note">Filter and search update this table and the Charts tab without a reload.
-    Confusion / disagreement film-room is deferred until Stage 8 banked runs exist.</p>
+    Confusion / disagreement film-room is deferred until paid matrix runs exist.</p>
   </section>
 
   <section class="panel" id="panel-charts">
     <div class="card">
       <div class="card-title">Cost × subclass accuracy</div>
-      <div class="card-desc">Pareto view of the Stage 8 screen matrix. Log x-axis on projected production cost.</div>
+      <div class="card-desc">Pareto view of the locked screen matrix. Log x-axis on projected production cost.</div>
       <div id="chart-pareto" class="chart"></div>
     </div>
     <div class="card">
-      <div class="card-title">High-confidence share</div>
-      <div class="card-desc">Share of rows with binary confidence ≥ 90%.</div>
+      <div class="card-title">Calibration (ECE + selective)</div>
+      <div class="card-desc">Expected Calibration Error (lower is better) and accuracy when answering only on the top 50% most confident rows. Share ≥90% is secondary.</div>
       <div id="chart-confidence" class="chart short"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Reliability curve</div>
+      <div class="card-desc">Mean confidence vs accuracy per bin for the first visible config that carries bins. Filter to one config to inspect it.</div>
+      <div id="chart-reliability" class="chart short"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Paired vs baseline</div>
+      <div class="card-desc">Paired-bootstrap subclass deltas when scored.json includes vs_baseline (score --baseline).</div>
+      <div id="baseline-table"></div>
     </div>
     <div class="card">
       <div class="card-title">Latency</div>
@@ -460,12 +484,12 @@ footer {
   </section>
 
   <section class="panel" id="panel-stub">
-    <div class="empty">Confusion matrices and disagreement rows land after Stage 8 scored runs.
+    <div class="empty">Confusion matrices and disagreement rows land after paid matrix scored runs.
     This tab is a placeholder so the tab chrome matches the target UX.</div>
   </section>
 
   <footer>
-    Generated 2026-07-10 · regenerate with
+    Generated 2026-07-22 · regenerate with
     <code>python "data visualization/02_Analysis_Code/build_eval_dashboard.py"</code>
     or <code>python -m evals dashboard</code> (mock fixture by default).
     Config filter is required for multi-run charts.
@@ -473,7 +497,7 @@ footer {
 </div>
 <script>
 
-const M = {"synthetic": true, "source": "evals/tests/fixtures/dashboard_mock_runs.json", "n_configs": 9, "configs": [{"id": "mock_gpt-5.4-nano_low_r1", "label": "nano / low", "run_id": "mock_gpt-5.4-nano_low_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "low", "n_scored": 100, "subclass_acc": 0.68, "subclass_ci": 0.09200000000000003, "ai_native_acc": 0.9, "rad_acc": 0.76, "macro_f1": 0.62, "projected_usd": 95.0, "mean_confidence": 0.78, "share_above_90": 0.38, "ece": 0.088, "latency_p50": 2.4, "latency_p95": 5.9}, {"id": "mock_gpt-5.4-nano_medium_r1", "label": "nano / medium", "run_id": "mock_gpt-5.4-nano_medium_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "medium", "n_scored": 100, "subclass_acc": 0.74, "subclass_ci": 0.08499999999999996, "ai_native_acc": 0.93, "rad_acc": 0.81, "macro_f1": 0.69, "projected_usd": 118.0, "mean_confidence": 0.83, "share_above_90": 0.46, "ece": 0.071, "latency_p50": 3.1, "latency_p95": 7.8}, {"id": "mock_gpt-5.4-nano_high_r1", "label": "nano / high", "run_id": "mock_gpt-5.4-nano_high_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "high", "n_scored": 100, "subclass_acc": 0.76, "subclass_ci": 0.08199999999999996, "ai_native_acc": 0.94, "rad_acc": 0.82, "macro_f1": 0.71, "projected_usd": 175.0, "mean_confidence": 0.85, "share_above_90": 0.51, "ece": 0.064, "latency_p50": 4.0, "latency_p95": 9.6}, {"id": "mock_gpt-5.4-mini_low_r1", "label": "mini / low", "run_id": "mock_gpt-5.4-mini_low_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "low", "n_scored": 100, "subclass_acc": 0.78, "subclass_ci": 0.08000000000000002, "ai_native_acc": 0.95, "rad_acc": 0.83, "macro_f1": 0.74, "projected_usd": 290.0, "mean_confidence": 0.85, "share_above_90": 0.54, "ece": 0.052, "latency_p50": 3.8, "latency_p95": 9.1}, {"id": "mock_gpt-5.4-mini_medium_r1", "label": "mini / medium", "run_id": "mock_gpt-5.4-mini_medium_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "medium", "n_scored": 100, "subclass_acc": 0.82, "subclass_ci": 0.07500000000000001, "ai_native_acc": 0.96, "rad_acc": 0.85, "macro_f1": 0.78, "projected_usd": 412.0, "mean_confidence": 0.88, "share_above_90": 0.61, "ece": 0.038, "latency_p50": 4.6, "latency_p95": 11.2}, {"id": "mock_gpt-5.4-mini_high_r1", "label": "mini / high", "run_id": "mock_gpt-5.4-mini_high_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "high", "n_scored": 100, "subclass_acc": 0.84, "subclass_ci": 0.07200000000000001, "ai_native_acc": 0.97, "rad_acc": 0.86, "macro_f1": 0.8, "projected_usd": 580.0, "mean_confidence": 0.89, "share_above_90": 0.66, "ece": 0.035, "latency_p50": 5.8, "latency_p95": 13.4}, {"id": "mock_gpt-5.6-luna_low_r1", "label": "luna / low", "run_id": "mock_gpt-5.6-luna_low_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "low", "n_scored": 100, "subclass_acc": 0.81, "subclass_ci": 0.07600000000000001, "ai_native_acc": 0.96, "rad_acc": 0.84, "macro_f1": 0.77, "projected_usd": 980.0, "mean_confidence": 0.88, "share_above_90": 0.63, "ece": 0.045, "latency_p50": 6.2, "latency_p95": 14.8}, {"id": "mock_gpt-5.6-luna_medium_r1", "label": "luna / medium", "run_id": "mock_gpt-5.6-luna_medium_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "medium", "n_scored": 100, "subclass_acc": 0.85, "subclass_ci": 0.07, "ai_native_acc": 0.97, "rad_acc": 0.87, "macro_f1": 0.81, "projected_usd": 1450.0, "mean_confidence": 0.9, "share_above_90": 0.7, "ece": 0.041, "latency_p50": 7.9, "latency_p95": 18.2}, {"id": "mock_gpt-5.6-luna_high_r1", "label": "luna / high", "run_id": "mock_gpt-5.6-luna_high_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "high", "n_scored": 100, "subclass_acc": 0.86, "subclass_ci": 0.068, "ai_native_acc": 0.98, "rad_acc": 0.88, "macro_f1": 0.82, "projected_usd": 2100.0, "mean_confidence": 0.92, "share_above_90": 0.74, "ece": 0.048, "latency_p50": 9.8, "latency_p95": 22.5}], "config_ids": ["mock_gpt-5.4-nano_low_r1", "mock_gpt-5.4-nano_medium_r1", "mock_gpt-5.4-nano_high_r1", "mock_gpt-5.4-mini_low_r1", "mock_gpt-5.4-mini_medium_r1", "mock_gpt-5.4-mini_high_r1", "mock_gpt-5.6-luna_low_r1", "mock_gpt-5.6-luna_medium_r1", "mock_gpt-5.6-luna_high_r1"], "model_groups": {"nano": {"label": "nano", "ids": ["mock_gpt-5.4-nano_low_r1", "mock_gpt-5.4-nano_medium_r1", "mock_gpt-5.4-nano_high_r1"]}, "mini": {"label": "mini", "ids": ["mock_gpt-5.4-mini_low_r1", "mock_gpt-5.4-mini_medium_r1", "mock_gpt-5.4-mini_high_r1"]}, "luna": {"label": "luna", "ids": ["mock_gpt-5.6-luna_low_r1", "mock_gpt-5.6-luna_medium_r1", "mock_gpt-5.6-luna_high_r1"]}}, "model_group_order": ["nano", "mini", "luna"]};
+const M = {"synthetic": true, "source": "evals/tests/fixtures/dashboard/dashboard_mock_runs.json", "n_configs": 9, "configs": [{"id": "mock_gpt-5.4-nano_low_r1", "label": "nano / low", "run_id": "mock_gpt-5.4-nano_low_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "low", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.68, "subclass_ci": 0.09200000000000003, "subclass_family_conditional_acc": 0.72, "rad_ai_native_only_acc": 0.71, "boundary_disagreement_rate": 0.08, "ai_native_acc": 0.93, "rad_acc": 0.76, "macro_f1": 0.62, "projected_usd": 95.0, "mean_confidence": 0.83, "share_above_90": 0.46, "ece": 0.071, "reliability_bins": [], "selective_acc_50": 0.98, "vs_baseline": null, "latency_p50": 2.4, "latency_p95": 5.9, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-nano_medium_r1", "label": "nano / medium", "run_id": "mock_gpt-5.4-nano_medium_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "medium", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.74, "subclass_ci": 0.08499999999999996, "subclass_family_conditional_acc": 0.78, "rad_ai_native_only_acc": 0.77, "boundary_disagreement_rate": 0.06, "ai_native_acc": 0.93, "rad_acc": 0.81, "macro_f1": 0.69, "projected_usd": 118.0, "mean_confidence": 0.83, "share_above_90": 0.46, "ece": 0.071, "reliability_bins": [], "selective_acc_50": 0.98, "vs_baseline": null, "latency_p50": 3.1, "latency_p95": 7.8, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-nano_high_r1", "label": "nano / high", "run_id": "mock_gpt-5.4-nano_high_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "high", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.76, "subclass_ci": 0.08199999999999996, "subclass_family_conditional_acc": 0.8, "rad_ai_native_only_acc": 0.79, "boundary_disagreement_rate": 0.05, "ai_native_acc": 0.93, "rad_acc": 0.82, "macro_f1": 0.71, "projected_usd": 175.0, "mean_confidence": 0.83, "share_above_90": 0.46, "ece": 0.071, "reliability_bins": [], "selective_acc_50": 0.98, "vs_baseline": null, "latency_p50": 4.0, "latency_p95": 9.6, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-mini_low_r1", "label": "mini / low", "run_id": "mock_gpt-5.4-mini_low_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "low", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.78, "subclass_ci": 0.08000000000000002, "subclass_family_conditional_acc": 0.81, "rad_ai_native_only_acc": 0.79, "boundary_disagreement_rate": 0.07, "ai_native_acc": 0.96, "rad_acc": 0.83, "macro_f1": 0.74, "projected_usd": 290.0, "mean_confidence": 0.88, "share_above_90": 0.61, "ece": 0.038, "reliability_bins": [], "selective_acc_50": 0.99, "vs_baseline": null, "latency_p50": 3.8, "latency_p95": 9.1, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-mini_medium_r1", "label": "mini / medium", "run_id": "mock_gpt-5.4-mini_medium_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "medium", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.82, "subclass_ci": 0.07500000000000001, "subclass_family_conditional_acc": 0.85, "rad_ai_native_only_acc": 0.83, "boundary_disagreement_rate": 0.05, "ai_native_acc": 0.96, "rad_acc": 0.85, "macro_f1": 0.78, "projected_usd": 412.0, "mean_confidence": 0.88, "share_above_90": 0.61, "ece": 0.038, "reliability_bins": [], "selective_acc_50": 0.99, "vs_baseline": null, "latency_p50": 4.6, "latency_p95": 11.2, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-mini_high_r1", "label": "mini / high", "run_id": "mock_gpt-5.4-mini_high_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "high", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.84, "subclass_ci": 0.07200000000000001, "subclass_family_conditional_acc": 0.87, "rad_ai_native_only_acc": 0.85, "boundary_disagreement_rate": 0.04, "ai_native_acc": 0.96, "rad_acc": 0.86, "macro_f1": 0.8, "projected_usd": 580.0, "mean_confidence": 0.88, "share_above_90": 0.61, "ece": 0.038, "reliability_bins": [], "selective_acc_50": 0.99, "vs_baseline": null, "latency_p50": 5.8, "latency_p95": 13.4, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.6-luna_low_r1", "label": "luna / low", "run_id": "mock_gpt-5.6-luna_low_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "low", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.81, "subclass_ci": 0.07600000000000001, "subclass_family_conditional_acc": 0.83, "rad_ai_native_only_acc": 0.81, "boundary_disagreement_rate": 0.06, "ai_native_acc": 0.97, "rad_acc": 0.84, "macro_f1": 0.77, "projected_usd": 980.0, "mean_confidence": 0.9, "share_above_90": 0.7, "ece": 0.041, "reliability_bins": [], "selective_acc_50": 1.0, "vs_baseline": null, "latency_p50": 6.2, "latency_p95": 14.8, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.6-luna_medium_r1", "label": "luna / medium", "run_id": "mock_gpt-5.6-luna_medium_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "medium", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.85, "subclass_ci": 0.07, "subclass_family_conditional_acc": 0.87, "rad_ai_native_only_acc": 0.85, "boundary_disagreement_rate": 0.04, "ai_native_acc": 0.97, "rad_acc": 0.87, "macro_f1": 0.81, "projected_usd": 1450.0, "mean_confidence": 0.9, "share_above_90": 0.7, "ece": 0.041, "reliability_bins": [], "selective_acc_50": 1.0, "vs_baseline": null, "latency_p50": 7.9, "latency_p95": 18.2, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.6-luna_high_r1", "label": "luna / high", "run_id": "mock_gpt-5.6-luna_high_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "high", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.86, "subclass_ci": 0.068, "subclass_family_conditional_acc": 0.88, "rad_ai_native_only_acc": 0.86, "boundary_disagreement_rate": 0.03, "ai_native_acc": 0.97, "rad_acc": 0.88, "macro_f1": 0.82, "projected_usd": 2100.0, "mean_confidence": 0.9, "share_above_90": 0.7, "ece": 0.041, "reliability_bins": [], "selective_acc_50": 1.0, "vs_baseline": null, "latency_p50": 9.8, "latency_p95": 22.5, "repeat": 1, "is_aggregate": false}], "config_ids": ["mock_gpt-5.4-nano_low_r1", "mock_gpt-5.4-nano_medium_r1", "mock_gpt-5.4-nano_high_r1", "mock_gpt-5.4-mini_low_r1", "mock_gpt-5.4-mini_medium_r1", "mock_gpt-5.4-mini_high_r1", "mock_gpt-5.6-luna_low_r1", "mock_gpt-5.6-luna_medium_r1", "mock_gpt-5.6-luna_high_r1"], "model_groups": {"nano": {"label": "nano", "ids": ["mock_gpt-5.4-nano_low_r1", "mock_gpt-5.4-nano_medium_r1", "mock_gpt-5.4-nano_high_r1"]}, "mini": {"label": "mini", "ids": ["mock_gpt-5.4-mini_low_r1", "mock_gpt-5.4-mini_medium_r1", "mock_gpt-5.4-mini_high_r1"]}, "luna": {"label": "luna", "ids": ["mock_gpt-5.6-luna_low_r1", "mock_gpt-5.6-luna_medium_r1", "mock_gpt-5.6-luna_high_r1"]}}, "model_group_order": ["nano", "mini", "luna"]};
 const COLORS = {"nano": "#3b82f6", "mini": "#14b8a6", "luna": "#f59e0b"};
 const CLOCK_SVG = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.2l2 1.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
@@ -631,26 +655,45 @@ function renderPareto() {
     return;
   }
   host.innerHTML = '';
-  const traces = plottable.map(c => ({
-    type: 'scatter',
-    mode: 'markers+text',
-    name: c.label,
-    x: [c.projected_usd],
-    y: [c.subclass_acc],
-    text: [c.label],
-    textposition: 'top center',
-    textfont: {size: 10, color: '#64748b'},
-    marker: {
-      size: 12,
-      color: colorFor(c),
-      line: {width: 1, color: '#fff'},
-    },
-    error_y: c.subclass_ci == null ? undefined : {
-      type: 'data', array: [c.subclass_ci], visible: true,
-      color: '#d8dce3', thickness: 1, width: 3,
-    },
-    hovertemplate: c.label + '<br>subclass %{y:.1%}<br>cost %{x:$,.0f}<extra></extra>',
-  }));
+  // Fit y to visible points (± CI), not the mock fixture's 60–95% band.
+  // Banked / single-pass real runs can land near ~41% subclass accuracy.
+  let yLo = Infinity;
+  let yHi = -Infinity;
+  for (const c of plottable) {
+    const ci = c.subclass_ci == null ? 0 : c.subclass_ci;
+    yLo = Math.min(yLo, c.subclass_acc - ci);
+    yHi = Math.max(yHi, c.subclass_acc + ci);
+  }
+  const pad = Math.max(0.03, (yHi - yLo) * 0.12);
+  const yRange = [Math.max(0, yLo - pad), Math.min(1, yHi + pad)];
+  const traces = plottable.map(c => {
+    const partial = isPartial(c);
+    const nBit = sampleCaption(c);
+    const hoverExtra = (partial ? '<br>partial screen' : '') +
+      (nBit ? '<br>' + nBit : '');
+    return {
+      type: 'scatter',
+      mode: 'markers+text',
+      name: c.label,
+      x: [c.projected_usd],
+      y: [c.subclass_acc],
+      text: [partial ? c.label + ' · partial' : c.label],
+      textposition: 'top center',
+      textfont: {size: 10, color: partial ? '#b45309' : '#64748b'},
+      marker: {
+        size: 12,
+        color: colorFor(c),
+        symbol: partial ? 'circle-open' : 'circle',
+        line: {width: partial ? 2 : 1, color: partial ? '#b45309' : '#fff'},
+      },
+      error_y: c.subclass_ci == null ? undefined : {
+        type: 'data', array: [c.subclass_ci], visible: true,
+        color: '#d8dce3', thickness: 1, width: 3,
+      },
+      hovertemplate: c.label + '<br>subclass %{y:.1%}<br>cost %{x:$,.0f}' +
+        hoverExtra + '<extra></extra>',
+    };
+  });
   Plotly.newPlot('chart-pareto', traces, layout({
     xaxis: {
       title: {text: 'Projected production $ (41k)', font: {size: 11, color: '#94a3b8'}},
@@ -658,11 +701,35 @@ function renderPareto() {
     },
     yaxis: {
       title: {text: 'Subclass accuracy', font: {size: 11, color: '#94a3b8'}},
-      tickformat: '.0%', range: [0.6, 0.95], gridcolor: '#f1f5f9', zeroline: false,
+      tickformat: '.0%', range: yRange, gridcolor: '#f1f5f9', zeroline: false,
     },
     showlegend: false,
     margin: {l: 56, r: 16, t: 24, b: 52},
   }), cfg);
+}
+
+function effortCaption(c) {
+  // Classification matrix cells use Pass B effort; banked single-pass refs use reasoning effort.
+  // Do not hard-code "Pass B" when kind is single_pass or effort is none.
+  // Missing effort must read as unknown, never as a fabricated medium.
+  const e = (c.effort_b == null || c.effort_b === '' || c.effort_b === 'unknown')
+    ? 'unknown'
+    : String(c.effort_b);
+  if (e === 'unknown') return 'effort unknown';
+  if (c.kind === 'classification' || c.kind === 'two_pass') return 'Pass B ' + e;
+  if (c.kind === 'single_pass' || e === 'none') return 'effort ' + e;
+  return 'effort ' + e;
+}
+
+function isPartial(c) {
+  if (c.is_partial === true) return true;
+  return c.n_scored != null && c.n_expected != null && c.n_scored < c.n_expected;
+}
+
+function sampleCaption(c) {
+  if (c.n_scored == null && c.n_expected == null) return '';
+  if (c.n_expected != null) return String(c.n_scored ?? '?') + '/' + c.n_expected + ' scored';
+  return String(c.n_scored) + ' scored';
 }
 
 function renderLeaderboard() {
@@ -678,10 +745,14 @@ function renderLeaderboard() {
     const lat = c.latency_p50;
     const slow = lat != null && lat >= 8;
     const pillCls = slow ? 'latency-pill slow' : 'latency-pill';
+    const partial = isPartial(c);
+    const badge = partial ? '<span class="partial-badge">partial</span>' : '';
+    const nLine = sampleCaption(c);
+    const sub = [c.model + ' · ' + effortCaption(c), nLine].filter(Boolean).join(' · ');
     return '<tr>' +
       '<td class="mono">#' + (i + 1) + '</td>' +
-      '<td><div class="name-cell">' + c.label + '</div>' +
-        '<div class="sub-cell">' + c.model + ' · Pass B ' + c.effort_b + '</div></td>' +
+      '<td><div class="name-cell">' + c.label + badge + '</div>' +
+        '<div class="sub-cell">' + sub + '</div></td>' +
       '<td class="num"><div class="score-cell"><span class="score-val">' + pct(c.subclass_acc) + '</span>' +
         '<div class="score-bar"><span style="width:' + (100 * bar).toFixed(1) + '%"></span></div></div></td>' +
       '<td class="num mono">' + pct(c.ai_native_acc) + '</td>' +
@@ -693,22 +764,83 @@ function renderLeaderboard() {
 }
 
 function renderConfidence() {
-  const runs = visibleConfigs();
+  const runs = visibleConfigs().filter(c => !c.is_aggregate);
   const host = document.getElementById('chart-confidence');
   if (!host) return;
-  if (!runs.length) { emptyChart('chart-confidence', 'Turn on a config above to show confidence.'); return; }
+  if (!runs.length) { emptyChart('chart-confidence', 'Turn on a config above to show calibration.'); return; }
   host.innerHTML = '';
-  Plotly.newPlot('chart-confidence', [{
+  const eceTrace = {
     type: 'bar',
+    name: 'ECE (lower better)',
     x: runs.map(c => c.label),
-    y: runs.map(c => c.share_above_90 == null ? null : 100 * c.share_above_90),
+    y: runs.map(c => c.ece == null ? null : 100 * c.ece),
     marker: {color: runs.map(c => colorFor(c)), opacity: 0.88},
-    hovertemplate: '%{x}<br>≥90% conf: %{y:.1f}%<extra></extra>',
-  }], layout({
-    yaxis: {title: {text: 'Share of rows ≥ 90% confidence (%)', font: {size: 11, color: '#94a3b8'}}, gridcolor: '#f1f5f9'},
+    hovertemplate: '%{x}<br>ECE %{y:.2f}%<extra></extra>',
+  };
+  const selTrace = {
+    type: 'scatter',
+    mode: 'lines+markers',
+    name: 'Selective @50% cov',
+    x: runs.map(c => c.label),
+    y: runs.map(c => c.selective_acc_50 == null ? null : 100 * c.selective_acc_50),
+    yaxis: 'y2',
+    line: {color: '#64748b', width: 2},
+    marker: {size: 7, color: '#334155'},
+    hovertemplate: '%{x}<br>selective@50 %{y:.1f}%<extra></extra>',
+  };
+  Plotly.newPlot('chart-confidence', [eceTrace, selTrace], layout({
+    yaxis: {title: {text: 'ECE (%)', font: {size: 11, color: '#94a3b8'}}, gridcolor: '#f1f5f9'},
+    yaxis2: {
+      title: {text: 'Selective accuracy @50% coverage (%)', font: {size: 11, color: '#94a3b8'}},
+      overlaying: 'y',
+      side: 'right',
+      showgrid: false,
+      range: [50, 105],
+    },
     xaxis: {tickangle: -30, gridcolor: 'rgba(0,0,0,0)'},
-    margin: {l: 52, r: 12, t: 12, b: 80},
-    showlegend: false,
+    margin: {l: 52, r: 56, t: 28, b: 80},
+    legend: {orientation: 'h', y: 1.15},
+  }), cfg);
+}
+
+function renderReliability() {
+  const runs = visibleConfigs().filter(c => !c.is_aggregate && c.reliability_bins && c.reliability_bins.length);
+  const host = document.getElementById('chart-reliability');
+  if (!host) return;
+  if (!runs.length) {
+    emptyChart('chart-reliability', 'Reliability bins appear when scored.json carries calibration.reliability.bins.');
+    return;
+  }
+  host.innerHTML = '';
+  // Show the first visible config with bins (one diagram; filter to compare).
+  const c = runs[0];
+  const bins = c.reliability_bins.filter(b => b.count > 0 && b.mean_confidence != null);
+  Plotly.newPlot('chart-reliability', [
+    {
+      type: 'scatter',
+      mode: 'lines',
+      name: 'perfect',
+      x: [0, 1],
+      y: [0, 1],
+      line: {dash: 'dash', color: '#d1d5db', width: 1},
+      hoverinfo: 'skip',
+    },
+    {
+      type: 'scatter',
+      mode: 'markers+lines',
+      name: c.label,
+      x: bins.map(b => b.mean_confidence),
+      y: bins.map(b => b.accuracy),
+      marker: {size: bins.map(b => 6 + Math.sqrt(b.count)), color: colorFor(c)},
+      line: {color: colorFor(c), width: 1.5},
+      text: bins.map(b => 'n=' + b.count),
+      hovertemplate: 'conf %{x:.2f}<br>acc %{y:.2f}<br>%{text}<extra></extra>',
+    },
+  ], layout({
+    xaxis: {title: {text: 'Mean confidence', font: {size: 11, color: '#9ca3af'}}, range: [0, 1], gridcolor: '#f3f4f6'},
+    yaxis: {title: {text: 'Accuracy', font: {size: 11, color: '#9ca3af'}}, range: [0, 1], gridcolor: '#f3f4f6'},
+    margin: {l: 52, r: 12, t: 12, b: 48},
+    showlegend: true,
   }), cfg);
 }
 
@@ -746,7 +878,29 @@ function renderAll() {
   renderPareto();
   renderLeaderboard();
   renderConfidence();
+  renderReliability();
   renderLatency();
+  renderBaseline();
+}
+
+function renderBaseline() {
+  const host = document.getElementById('baseline-table');
+  if (!host) return;
+  const runs = visibleConfigs().filter(c => c.vs_baseline);
+  if (!runs.length) {
+    host.innerHTML = '<p class="stub-note">No vs_baseline blocks yet. Score with <code>--baseline &lt;run_id&gt;</code> for paired bootstrap deltas.</p>';
+    return;
+  }
+  host.innerHTML = '<table class="ls"><thead><tr><th>Config</th><th>Baseline</th><th class="num">Δ subclass</th><th class="num">95% CI</th><th>Sig?</th></tr></thead><tbody>' +
+    runs.map(c => {
+      const v = c.vs_baseline;
+      const d = v.delta_accuracy;
+      const ci = v.ci95 || [];
+      return '<tr><td>' + c.label + '</td><td class="mono">' + (v.baseline_run_id || '') +
+        '</td><td class="num mono">' + (d == null ? '—' : ((d >= 0 ? '+' : '') + (100 * d).toFixed(1) + '%')) +
+        '</td><td class="num mono">' + (ci.length === 2 ? ((100 * ci[0]).toFixed(1) + ' … ' + (100 * ci[1]).toFixed(1) + '%') : '—') +
+        '</td><td>' + (v.significant ? 'yes' : 'no') + '</td></tr>';
+    }).join('') + '</tbody></table>';
 }
 
 function showTab(name) {
@@ -760,7 +914,7 @@ function showTab(name) {
     setTimeout(() => { renderSummaryLine(); }, 30);
   }
   if (name === 'charts') {
-    setTimeout(() => { renderPareto(); renderConfidence(); renderLatency(); }, 30);
+    setTimeout(() => { renderPareto(); renderConfidence(); renderReliability(); renderLatency(); renderBaseline(); }, 30);
   }
 }
 

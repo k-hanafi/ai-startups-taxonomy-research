@@ -7,18 +7,22 @@ independent: nothing here is imported by (or from) the production pipeline.
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
-# Benchmark matrix
+# Benchmark matrix (locked model × Pass B effort screen)
 # ---------------------------------------------------------------------------
 
-# Screened at SCREEN_REASONING_EFFORT first; effort sweep + repeats follow
-# only for models on the cost-accuracy frontier (staged matrix design).
+# Locked screen matrix: nano / mini / luna × Pass B low/medium/high.
+# gpt-5.4 / gpt-5.5 stay in EVAL_MODEL_PRICING for scoring older banked runs.
 EVAL_MODELS: list[str] = [
     "gpt-5.4-nano",   # current production model
     "gpt-5.4-mini",
-    "gpt-5.4",
-    "gpt-5.5",
+    "gpt-5.6-luna",
 ]
 
+# Pass B effort arms for the locked 9-cell screen (not "none":
+# Pass A already owns the logprob/calibration axis at effort=none).
+MATRIX_PASS_B_EFFORTS: list[str] = ["low", "medium", "high"]
+
+# Legacy single-pass knobs (kept for scoring older banked runs only).
 SCREEN_REASONING_EFFORT: str = "medium"
 REASONING_EFFORTS: list[str] = ["none", "low", "medium", "high"]
 FINALIST_REPEATS: int = 3
@@ -33,11 +37,11 @@ FINALIST_REPEATS: int = 3
 REASONING_OFF: str = "none"
 
 # ---------------------------------------------------------------------------
-# Two-pass classifier (Stage 5): Pass A = binary gate, Pass B = subclass + RAD
+# Classification runner (Stage 5): Pass A = binary gate, Pass B = subclass + RAD
 # ---------------------------------------------------------------------------
 
 # Pass A runs with reasoning off (logprobs on); Pass B defaults to maximum
-# reasoning, per the split-reasoning design in the two-pass plan.
+# reasoning, per the split-reasoning design in the classification plan.
 PASS_A_EFFORT: str = REASONING_OFF
 PASS_B_EFFORT: str = "high"
 
@@ -48,6 +52,8 @@ PASS_A_MAX_OUTPUT_TOKENS: int = 500
 
 # Distinct cache keys per pass: each pass has its own stable instruction
 # prefix, and mixing them in one cache route would hurt hit rates.
+# Opaque strings kept as the historical "two-pass-*" values so prompt-cache
+# identity does not reset when the public CLI/module was renamed.
 PASS_A_CACHE_KEY: str = "two-pass-a-binary-gate"
 PASS_B_CACHE_KEY: str = "two-pass-b-subclass-rad"
 
@@ -58,8 +64,24 @@ COHORT_BOUNDARY: tuple[int, int] = (2023, 3)
 # Request parameters (experimental; production does not send these yet)
 # ---------------------------------------------------------------------------
 
+# Pass A is a binary {0,1} digit decision. Request depth 2 so both legal
+# values can appear in top_logprobs. Legacy TOP_LOGPROBS=15 was a single-pass
+# subclass leftover and must not drive Pass A or parity success criteria.
+PASS_A_TOP_LOGPROBS: int = 2
+# Kept for legacy single-pass runner / older banked runs only.
 TOP_LOGPROBS: int = 15
 LOGPROB_INCLUDE: list[str] = ["message.output_text.logprobs"]
+
+# Rough Pass B output+reasoning token guesses for dry-run budget preflight.
+# Input-only char/4 estimates understate high-effort spend; these are order-of-
+# magnitude only (observed single-pass high peaked ~1,450 output tokens).
+PASS_B_OUTPUT_TOKEN_ESTIMATE: dict[str, int] = {
+    "none": 250,
+    "low": 500,
+    "medium": 1_000,
+    "high": 1_600,
+}
+PASS_A_OUTPUT_TOKEN_ESTIMATE: int = 8
 
 # Empirical finding (2026-07-05, gpt-5.4-nano): reasoning models reject the
 # `temperature` parameter with a 400 ("not supported with this model"). They
@@ -132,7 +154,20 @@ EVAL_MODEL_PRICING: dict[str, dict[str, float]] = {
     "gpt-5.4-mini": {"input": 0.75, "output": 4.50},
     "gpt-5.4":      {"input": 2.50, "output": 15.00},
     "gpt-5.5":      {"input": 5.00, "output": 30.00},
+    # gpt-5.6-luna: OpenAI GPT-5.6 launch pricing (July 2026), $1.00/$6.00 per 1M.
+    "gpt-5.6-luna": {"input": 1.00, "output": 6.00},
 }
+
+
+def require_model_pricing(model: str) -> dict[str, float]:
+    """Return pricing for *model*, or refuse rather than silently estimate $0."""
+    pricing = EVAL_MODEL_PRICING.get(model)
+    if pricing is None:
+        raise SystemExit(
+            f"Unknown model pricing for {model!r}. Add it to EVAL_MODEL_PRICING "
+            "before dry-run or cost estimates (refusing a silent $0 figure)."
+        )
+    return pricing
 
 # ---------------------------------------------------------------------------
 # Production cost extrapolation (pivot 8)

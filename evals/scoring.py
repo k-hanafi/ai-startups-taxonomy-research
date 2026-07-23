@@ -23,6 +23,14 @@ field on prediction records or as an external {custom_id|org_uuid: float}
 mapping. The logprob extractor (Stage 6) plugs in through that data seam;
 this module never imports it.
 
+Pass B isolating metrics (alongside end-to-end axes):
+- ``subclass_family_conditional``: subclass accuracy only on rows where Pass A
+  family matched gold family (pred ai_native == gold ai_native). Isolates
+  Pass B quality from gate routing errors.
+- ``rad_ai_native_only``: RAD accuracy on gold AI-native rows only (excludes
+  structural RAD-NA zeros on the not-AI-native family).
+- ``boundary_disagreement``: rate of Pass B ``boundary_disagreement=True``.
+
 This module must stay importable without OPENAI_API_KEY: no src.* or
 evals.runner imports.
 """
@@ -91,20 +99,17 @@ def load_gold() -> dict[str, dict[str, str]]:
 
 
 def load_predictions(run_id: str) -> list[dict[str, Any]]:
-    """Completed prediction records for a run, keyed checks left to callers."""
+    """All prediction records for a run (completed filtering left to callers).
+
+    Tolerates a truncated final JSONL line; fails loudly on interior
+    corruption (see ``evals.jsonl_io``).
+    """
+    from evals.jsonl_io import iter_jsonl
+
     path = run_predictions_path(run_id)
     if not path.exists():
         raise SystemExit(f"No predictions found for run {run_id} at {path}")
-    records: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
-            logger.warning("Skipping malformed predictions line in %s", path)
-    return records
+    return list(iter_jsonl(path, tolerate_truncated_final=True))
 
 
 def _is_completed(record: dict[str, Any]) -> bool:
@@ -216,31 +221,10 @@ def paired_bootstrap_delta(
 # ---------------------------------------------------------------------------
 
 def _record_tokens(record: dict[str, Any]) -> dict[str, int]:
-    """input/output/reasoning/cached token totals for one record, both shapes.
+    """Delegate to ``evals.usage.token_totals`` (single source of truth)."""
+    from evals.usage import token_totals
 
-    Single-pass records carry flat fields; two-pass records carry a_/b_
-    prefixed fields that are summed (a completed two-pass row always has
-    both passes). Cached defaults to 0 when the field is absent on a
-    legacy record — callers that need "field present?" use
-    ``evals.cost_extrapolate`` instead of this helper alone.
-    """
-    if "a_input_tokens" in record:
-        keys = {
-            "input": ("a_input_tokens", "b_input_tokens"),
-            "output": ("a_output_tokens", "b_output_tokens"),
-            "reasoning": ("a_reasoning_tokens", "b_reasoning_tokens"),
-            "cached": ("a_cached_tokens", "b_cached_tokens"),
-        }
-        return {
-            kind: sum(int(record.get(k) or 0) for k in fields)
-            for kind, fields in keys.items()
-        }
-    return {
-        "input": int(record.get("input_tokens") or 0),
-        "output": int(record.get("output_tokens") or 0),
-        "reasoning": int(record.get("reasoning_tokens") or 0),
-        "cached": int(record.get("cached_tokens") or 0),
-    }
+    return token_totals(record)
 
 
 def _token_stats(values: list[int]) -> dict[str, float]:
@@ -304,7 +288,7 @@ def cost_and_tokens(records: list[dict[str, Any]], model: str) -> dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
-# Latency (pivot 7: a measured axis for Stage 8 model selection)
+# Latency (pivot 7: a measured axis for matrix model selection)
 # ---------------------------------------------------------------------------
 
 def _latency_stats(values: list[float]) -> dict[str, float]:
@@ -322,8 +306,8 @@ def latency_summary(records: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
     """Wall-clock latency distributions, or None for runs that predate capture.
 
     Runs banked before the latency fields existed score exactly as before
-    (scored.json just carries latency: null). Two-pass runs additionally get
-    per-pass distributions, which is what the Stage 8 Pass B effort arm needs.
+    (scored.json just carries latency: null). Classification runs additionally get
+    per-pass distributions, which is what the matrix Pass B effort arm needs.
     """
     def collect(field: str) -> list[float]:
         return [float(r[field]) for r in records if r.get(field) is not None]
@@ -426,12 +410,15 @@ def calibration_report(
     confidence: dict[str, float],
     gold: dict[str, dict[str, str]],
     predictions: dict[str, dict[str, Any]],
+    *,
+    allow_partial_confidence: bool = False,
 ) -> Optional[dict[str, Any]]:
     """Binary-axis calibration, or None when no confidence input exists.
 
-    n_eligible counts every scored row that could carry a confidence value;
-    when n < n_eligible the coverage gap is reported loudly (a git-ignored,
-    machine-local raw/ can be partially copied without any other symptom).
+    n_eligible counts every scored row that could carry a confidence value.
+    By default refuses when coverage is incomplete (partial raw/ dirs must
+    not look like finished matrix calibration). Pass
+    ``allow_partial_confidence=True`` for mid-flight debugging only.
     """
     if not confidence:
         return None
@@ -451,10 +438,17 @@ def calibration_report(
         correct_list.append(pred == gold[uuid]["ai_native"])
     if not conf_list:
         return None
+    if len(conf_list) < len(eligible) and not allow_partial_confidence:
+        raise SystemExit(
+            f"Confidence covers only {len(conf_list)} of {len(eligible)} "
+            "eligible rows (incomplete raw/ or one-sided binary pools). "
+            "Re-extract, or pass --allow-partial-confidence to score "
+            "incomplete calibration deliberately."
+        )
     if len(conf_list) < len(eligible):
         logger.warning(
             "calibration covers only %d of %d eligible rows "
-            "(confidence input is missing rows, e.g. an incomplete raw/ dir)",
+            "(--allow-partial-confidence)",
             len(conf_list), len(eligible),
         )
     return {
@@ -463,6 +457,98 @@ def calibration_report(
         "n_eligible": len(eligible),
         "reliability": reliability_bins(conf_list, correct_list),
         "selective_prediction": selective_prediction_curve(conf_list, correct_list),
+        "definitions": {
+            "ece": "Expected Calibration Error over equal-width confidence bins",
+            "selective_prediction": (
+                "Accuracy when answering only on the top-X% most confident rows"
+            ),
+        },
+    }
+
+
+def pass_b_isolating_metrics(
+    gold: dict[str, dict[str, str]],
+    predictions: dict[str, dict[str, Any]],
+    uuids: list[str],
+) -> dict[str, Any]:
+    """Metrics that isolate Pass B from Pass A / structural RAD-NA.
+
+    Definitions are mirrored into scored.json so dashboard readers need not
+    dig into source.
+    """
+    family_ok = [
+        u for u in uuids
+        if _predicted_labels(predictions[u])["ai_native"] == gold[u]["ai_native"]
+    ]
+    subclass_cond: dict[str, Any]
+    if family_ok:
+        g = [gold[u]["subclass"] for u in family_ok]
+        p = [_predicted_labels(predictions[u])["subclass"] for u in family_ok]
+        correct = [a == b for a, b in zip(g, p)]
+        subclass_cond = {
+            "n": len(family_ok),
+            "accuracy": accuracy(g, p),
+            "accuracy_ci95": bootstrap_accuracy_ci(correct),
+            "macro_f1": macro_f1(g, p),
+        }
+    else:
+        subclass_cond = {
+            "n": 0,
+            "accuracy": None,
+            "accuracy_ci95": None,
+            "macro_f1": None,
+        }
+
+    # Gold AI-native only: RAD-NA on the zero family is structural, not Pass B.
+    ai_native_uuids = [u for u in uuids if gold[u]["ai_native"] == "1"]
+    rad_ai: dict[str, Any]
+    if ai_native_uuids:
+        g = [gold[u]["rad"] for u in ai_native_uuids]
+        p = [_predicted_labels(predictions[u])["rad"] for u in ai_native_uuids]
+        correct = [a == b for a, b in zip(g, p)]
+        rad_ai = {
+            "n": len(ai_native_uuids),
+            "accuracy": accuracy(g, p),
+            "accuracy_ci95": bootstrap_accuracy_ci(correct),
+            "macro_f1": macro_f1(g, p),
+        }
+    else:
+        rad_ai = {
+            "n": 0,
+            "accuracy": None,
+            "accuracy_ci95": None,
+            "macro_f1": None,
+        }
+
+    flags = []
+    for u in uuids:
+        flag = predictions[u].get("boundary_disagreement")
+        if flag is None:
+            continue
+        flags.append(bool(flag))
+    boundary = {
+        "n": len(flags),
+        "rate": (sum(flags) / len(flags)) if flags else None,
+    }
+
+    return {
+        "definitions": {
+            "subclass_family_conditional": (
+                "Subclass accuracy only on rows where Pass A family matched "
+                "gold family (pred ai_native == gold ai_native)"
+            ),
+            "rad_ai_native_only": (
+                "RAD accuracy on gold AI-native rows only (excludes structural "
+                "RAD-NA zeros on the not-AI-native family)"
+            ),
+            "boundary_disagreement": (
+                "Share of completed rows where Pass B set "
+                "boundary_disagreement=true"
+            ),
+        },
+        "subclass_family_conditional": subclass_cond,
+        "rad_ai_native_only": rad_ai,
+        "boundary_disagreement": boundary,
     }
 
 
@@ -488,11 +574,21 @@ def score_run(
     baseline_run_id: Optional[str] = None,
     confidence: Optional[dict[str, float]] = None,
     write: bool = True,
+    allow_partial: bool = False,
+    allow_partial_confidence: bool = False,
 ) -> dict[str, Any]:
     """Score one run against gold; optionally compare to a baseline run.
 
     Returns the scored summary dict and (by default) writes it to
     evals/runs/<run_id>/scored.json.
+
+    By default refuses when fewer completed predictions match gold than the
+    run expected (config ``n_rows``, else full golden-set size). Pass
+    ``allow_partial=True`` (CLI ``--allow-partial``) to score a mid-flight
+    resume without pretending it is a full screen.
+
+    When confidence is supplied, incomplete coverage refuses unless
+    ``allow_partial_confidence=True``.
     """
     gold = load_gold()
     records = load_predictions(run_id)
@@ -502,6 +598,22 @@ def score_run(
     if not scored_uuids:
         raise SystemExit(
             f"Run {run_id} has no completed predictions matching gold rows."
+        )
+
+    run_config = {}
+    config_path = run_config_path(run_id)
+    if config_path.exists():
+        run_config = json.loads(config_path.read_text(encoding="utf-8"))
+
+    expected_n = run_config.get("n_rows")
+    if expected_n is None:
+        expected_n = len(gold)
+    expected_n = int(expected_n)
+    if len(scored_uuids) < expected_n and not allow_partial:
+        raise SystemExit(
+            f"Run {run_id} scored {len(scored_uuids)}/{expected_n} rows "
+            f"(n_gold={len(gold)}). Re-run after the predictions finish, or "
+            "pass --allow-partial to score an incomplete run deliberately."
         )
 
     axes_report: dict[str, Any] = {}
@@ -516,11 +628,18 @@ def score_run(
             "confusion": confusion_matrix(gold_labels, pred_labels),
         }
 
-    run_config = {}
-    config_path = run_config_path(run_id)
-    if config_path.exists():
-        run_config = json.loads(config_path.read_text(encoding="utf-8"))
     model = run_config.get("model") or predictions[scored_uuids[0]].get("model") or ""
+    kind = run_config.get("kind")
+    if kind == "two_pass":
+        # Pre-rename artifact label; normalize for scored.json / dashboard.
+        kind = "classification"
+    if kind is None:
+        if "effort_b" in run_config:
+            kind = "classification"
+        elif run_config or model:
+            kind = "single_pass"
+        else:
+            kind = None
 
     scored_records = [predictions[u] for u in scored_uuids]
     from evals.cost_extrapolate import production_cost_from_records
@@ -529,25 +648,40 @@ def score_run(
         "run_id": run_id,
         "scored_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "gold_source": GOLD_SOURCE,
+        "model": model,
+        "kind": kind,
         "n_gold": len(gold),
         "n_prediction_records": len(records),
         "n_scored": len(scored_uuids),
+        "n_expected": expected_n,
         "bootstrap": {
             "resamples": cfg.BOOTSTRAP_RESAMPLES,
             "seed": cfg.BOOTSTRAP_SEED,
             "confidence_level": cfg.CONFIDENCE_LEVEL,
         },
         "axes": axes_report,
+        "pass_b_metrics": pass_b_isolating_metrics(gold, predictions, scored_uuids),
         "cost": cost_and_tokens(scored_records, model),
         "production_cost_estimate": production_cost_from_records(
             scored_records, model
         ),
         "latency": latency_summary(scored_records),
         "calibration": calibration_report(
-            resolve_confidence(scored_records, confidence), gold, predictions
+            resolve_confidence(scored_records, confidence),
+            gold,
+            predictions,
+            allow_partial_confidence=allow_partial_confidence,
         ),
         "vs_baseline": None,
     }
+    if kind == "classification" or "effort_b" in run_config:
+        report["effort_b"] = run_config.get("effort_b")
+        if run_config.get("pass_a_bank_run_id"):
+            report["pass_a_bank_run_id"] = run_config["pass_a_bank_run_id"]
+    else:
+        report["effort"] = run_config.get("reasoning_effort") or run_config.get(
+            "effort"
+        )
 
     if baseline_run_id is not None:
         report["vs_baseline"] = compare_to_baseline(
@@ -608,8 +742,16 @@ def score_cli(
     run_id: str,
     baseline: Optional[str],
     confidence: Optional[dict[str, float]],
+    allow_partial: bool = False,
+    allow_partial_confidence: bool = False,
 ) -> None:
-    report = score_run(run_id, baseline_run_id=baseline, confidence=confidence)
+    report = score_run(
+        run_id,
+        baseline_run_id=baseline,
+        confidence=confidence,
+        allow_partial=allow_partial,
+        allow_partial_confidence=allow_partial_confidence,
+    )
     for axis in AXES:
         ax = report["axes"][axis]
         logger.info(
@@ -617,6 +759,22 @@ def score_cli(
             axis, ax["accuracy"], ax["accuracy_ci95"][0],
             ax["accuracy_ci95"][1], ax["macro_f1"],
         )
+    pbm = report.get("pass_b_metrics") or {}
+    sc = pbm.get("subclass_family_conditional") or {}
+    if sc.get("accuracy") is not None:
+        logger.info(
+            "subclass (family-conditional, n=%d): accuracy=%.3f",
+            sc["n"], sc["accuracy"],
+        )
+    rad = pbm.get("rad_ai_native_only") or {}
+    if rad.get("accuracy") is not None:
+        logger.info(
+            "rad (AI-native only, n=%d): accuracy=%.3f",
+            rad["n"], rad["accuracy"],
+        )
+    bd = pbm.get("boundary_disagreement") or {}
+    if bd.get("rate") is not None:
+        logger.info("boundary_disagreement rate=%.3f (n=%d)", bd["rate"], bd["n"])
     cost = report["cost"]
     if cost["mean_usd_per_row"] is not None:
         logger.info("cost: $%.4f/row ($%.2f total, %d rows)",

@@ -27,10 +27,10 @@ todos:
     content: "Stage 7: Batch parity smoke (gate Q4, PASS) + evals/scoring.py scorer — MERGED #16. Calibration wire-up (score --confidence-from-raw, chosen-digit confidence per pivot 6) — MERGED #18"
     status: completed
   - id: stage8-experiments
-    content: "Stage 8 (paid CLI, not a code PR until runs expose fixes): model/config selection on the COMMITTED two-pass architecture (pivot 7) — sweep GPT-family models (nano, mini, one larger if affordable) x Pass B effort (medium vs high, per the 77%-vs-66% banked finding), measuring accuracy, calibration, cost, and latency; repeats on finalists. Latency capture landed in #19; cost extrapolation in #21. Banked single-pass runs are reference points, not competitors"
+    content: "Stage 8 (paid CLI): locked 9-cell matrix nano/mini/luna x Pass B low/medium/high; Pass A auto-banks once per model (evals/runs/pass_a_banks/<model>/, --rerun-pass-a escape); PASS_A_TOP_LOGPROBS=2 + both {0,1} required; pass_b_metrics + score --baseline. Science contracts on main via #25. Paid sweep next from main after auto-bank UX lands."
     status: pending
   - id: stage9-dashboard
-    content: "Stage 9 (PR 9): house-style static HTML dashboard: Pareto, per-axis metrics + CIs, confusion, calibration, disagreement browser (after Stage 8 runs exist)"
+    content: "Stage 9: LangSmith-light HTML dashboard: Pareto, ECE/selective/reliability, vs_baseline, finalist mean±range, config filter. Skeleton + mock (#22) + science charts (#24/#25) on main; real charts after Stage 8 runs"
     status: pending
   - id: stage10-wrapup
     content: "Stage 10 (PR 10): evals/tests/, AGENTS.md updates, written report answering the three eval questions (pivot 7: calibration, model selection, implementation robustness) + model recommendation"
@@ -42,17 +42,18 @@ isProject: false
 
 ## STATUS (source of truth — update after every PR merge / pivot)
 
-Last updated: **2026-07-09** (PR **#21** / pivot 8 MERGED; no open PRs. Next = Stage 8 paid model/config sweep. Today's user intent: full eval benchmark → understand → dashboard instance → later plan `src/` two-pass promotion for ~40k).
+Last updated: **2026-07-12** (rename in flight: public CLI/module `run-classification` / `evals/classification.py`; Pass A auto-bank still default. Next = Stage 8 paid 9-cell from `main` after merge.)
 
 | Field | Value |
 |-------|--------|
-| **Last merged** | PR **#21** — pivot 8: `cached_tokens` in eval runners + `evals/cost_extrapolate.py` ladder into `scored.json` / `python -m evals report` (production cost extrapolation on the committed two-pass path). Merged 2026-07-09 (`72ceeee` on `main`). |
-| **Open now** | **None.** No open PRs. |
-| **Working branch** | `main` (pull after #21). Stage 8 is a **paid CLI experiment**, not a code PR until runs expose fixes. |
-| **Next** | **Stage 8** paid model/config selection on the committed two-pass architecture (pivot 7): sweep GPT-family models × Pass B `medium` vs `high`, measuring accuracy, calibration, cost, latency; use measured two-pass cache rates (never the old single-pass ~78% figure). Then **Stage 9** house-style dashboard → **Stage 10** written report (three eval questions). Production `src/` two-pass + logprob promotion stays **gated until after dashboard insights** (~40k alive+dead plan is later, not today). Paid — USER runs CLI or delegates (decision pending). Open decisions: final model list; who runs/pays; timing of end-of-pipeline gold re-draft (pivot 5). |
-| **Gold labels** | Fable `draft_*` = provisional gold (pivot 4; human review waived, `gold_verdict` stays 0/100 by design). ONE full agent re-draft deferred to end of pipeline, after all design decisions lock (pivot 5); all runs re-scored offline afterwards. |
+| **Last merged** | PR **#26** — Pass A auto-bank default on `main` (stable `pass_a_banks/<model>/`, `--rerun-pass-a` / `--pass-a-from` escapes, `matrix` without reuse flag). Prior: PR **#25** Stage 8 science stack. |
+| **Open now** | PR **#23** (`cursor/eval-dashboard-langsmith-ux-0263`) — separate LangSmith UX branch (do not delete). Rename branch `cursor/rename-two-pass-to-classification-c7d5`. |
+| **Working branch** | Rename branch → then `main` for paid Stage 8. |
+| **Next** | Paid **9-cell matrix** from `main`: for each model, run three `run-classification --effort-b {low,medium,high} --require-matrix-cell` (first cell creates the Pass A bank; later efforts auto-reuse). Score with `--confidence-from-raw` and `--baseline`. Use `python -m evals matrix` for the command list. Then real dashboard → report. |
+| **Gold labels** | Fable `draft_*` = provisional gold **accepted for the paid Stage 8 sweep** (user 2026-07-11; pivot 4; human review waived, `gold_verdict` stays 0/100 by design). No gold CSV edits this session. ONE full agent re-draft deferred to end of pipeline (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
-| **Architecture reminder** | Two-pass is COMMITTED for production promotion (pivots 7–8). `src/` classifier is still historically one-pass; eval/cost projections assume two-pass. Banked single-pass runs are reference points only. Do **not** start `src/` two-pass promotion until Stage 8–9 insights land. |
+| **Architecture reminder** | Pass A/B classification is COMMITTED for production promotion (pivots 7–8). Pass A is banked once per model across Pass B effort arms (science invariant). `src/` classifier is still historically one-pass. Banked single-pass runs are reference points only. Do **not** start `src/` promotion until Stage 8–9 insights land. |
+| **Kill-list (landed)** | Pass A reuse; binary top_logprobs=2 + both candidates; Pass B isolating metrics; score `--baseline` + dashboard vs_baseline; ECE/selective/reliability; fixture Pass A invariant; refuse partial confidence; deprecate single-pass `run` guidance; `matrix` helper; dry-run output estimate; finalist mean±range. |
 
 ### Done
 
@@ -69,16 +70,19 @@ Last updated: **2026-07-09** (PR **#21** / pivot 8 MERGED; no open PRs. Next = S
 | #19 | pre-8 latency capture | `eval-harness/latency-capture` | Merged by user 2026-07-08. Per-row wall-clock latency in run records + mean/p50/p95/max latency block in scored.json — the measured axis pivot 7 added for Stage 8. |
 | #20 | Q3 parity resilience | `eval-harness/parity-report-resilience` | Squash-merged 2026-07-08 (`cb30187`). Batch timeout / missing-output no longer discard paid sync results; `batch_error` + forced FAIL + nonzero exit. |
 | #21 | pivot 8 cost extrapolate | `eval-harness/cached-tokens-cost-extrapolate` | Merged 2026-07-09 (`72ceeee`). `cached_tokens` in runners; `cost_extrapolate.py` ladder in `scored.json`; `python -m evals report` → `cost_report.html`. Scale-up N default = alive+dead ≈ 41,076. |
+| #22 | Stage 9 mock viewer + Stage 8 preflight | `eval-harness/dashboard` (deleted after #25) | Merged 2026-07-11 (`cc2052a`). LangSmith-light mock dashboard, locked `EVAL_MODELS`, `--allow-partial`, fixture isolation. |
+| #24 | Stage 8 science blockers | `eval-harness/research-direction-fixes` (deleted after #25) | Merged into dashboard then to main via #25. Pass A bank, binary logprobs, Pass B metrics, calibration charts. |
+| #25 | Science stack → main | `eval-harness/dashboard` (deleted) | Merged 2026-07-11 (`4644bf9`). Lands #22+#24 science contracts on `main` for the paid 9-cell sweep. |
 
 ### In progress
 
-- **Stage 8 (paid):** model/config selection on the committed two-pass architecture — USER/delegate runs `python -m evals run-two-pass` matrix. No open code PR until runs expose fixes.
+- **Paid matrix (next from `main`):** `python -m evals matrix` then `run-classification` per cell (Pass A auto-banks once per model). Provisional `draft_*` gold accepted for this sweep.
 
 ### Pending (in order) — NEXT STEPS
 
-1. **Stage 8** — paid GPT-family × Pass B medium-vs-high sweep (pivot 7); score with `--confidence-from-raw`; cost axis uses measured two-pass cache rates (pivot 8). Banked single-pass nano runs = reference only. Provisionally scored vs current Fable drafts.
-2. **Stage 9** — house-style static HTML dashboard (Pareto, CIs, confusion, calibration, disagreement browser). Until then: `python -m evals report <run_id>` is the interim cost-ladder view (`cost_report.html`).
-3. **Stage 10** — written report answering the three eval questions (calibration, model selection, implementation robustness) + model recommendation + `AGENTS.md`.
+1. **Stage 8** — paid locked 9-cell sweep from `main` with Pass A banked once per model; score `--confidence-from-raw [--baseline]`; cost axis uses measured two-pass cache rates (pivot 8). Banked single-pass nano runs = reference only. Provisional `draft_*` gold.
+2. **Stage 9** — point the dashboard at real `scored.json` via `--runs`. Until Stage 8 lands: mock fixture default.
+3. **Stage 10** — written report answering the three eval questions + model recommendation + `AGENTS.md`.
 4. **After insights (NOT today):** plan two-pass + logprob promotion into `src/` for ~40k production (alive+dead). Gated on Stage 8–9.
 5. **Pivot 5 (timing TBD):** final gold re-draft + offline re-score of all banked runs.
 
@@ -192,7 +196,7 @@ This is the GATE from [.cursor/plans/logprob_confidence_classifier_17f55781.plan
 - **Matrix**: staged — screen 4 models at reasoning=medium (1 repeat) -> reasoning-effort sweep (incl. none-vs-medium A/B) on the 1-2 frontier models -> 3 repeats on finalists for determinism variance.
 - **Storage**: one directory per run, `evals/runs/<run_id>/` (`config.json`, `predictions.jsonl`, `raw/`). `run_id` = `<date>_<model>_<effort>_r<n>`.
 - **Git**: commit golden labels/verdicts (org_uuid + labels, NO evidence text) and `scored.json` summaries; git-ignore `evals/runs/*/raw/`.
-- **Dashboard**: house-style static HTML only, under `data visualization/01_Presentation_Materials/`.
+- **Dashboard**: static HTML under `data visualization/01_Presentation_Materials/`. **Aesthetic (locked 2026-07-10):** LangSmith/LangChain eval-kit light mode (airy whitespace, underline tabs, thin chart frames, score bars + latency pills, quiet synthetic banner). Do **not** reuse survivorship navy/Cormorant house style for this dashboard. Canvas mock: `~/.cursor/projects/.../canvases/eval-dashboard.canvas.tsx`.
 - **Metrics v1**: per-axis accuracy (ai_native / subclass / rad), macro-F1, confusion matrices, paired-bootstrap CIs (10k resamples) on model deltas, cost per row from actual usage — plus calibration (reliability diagram + selective-prediction curve for logprob_confidence).
 
 ## Architecture
@@ -231,9 +235,9 @@ flowchart TD
 
 **Stage 7 — Batch parity + scorer.** (a) 10 Pass-A rows via Batch API with identical params; assert logprob shape parity and parameter honoring vs sync (gate Q4). (b) `evals/scoring.py` (offline): all v1 metrics; calibration applies to Pass A binary confidence (pivot 6: sampled digit = verdict, logprob fields = confidence metadata only); reasoning-token usage sizes `MAX_OUTPUT_TOKENS` and the cost model (gate Q6). Writes `scored.json`.
 
-**Stage 8 — Model/config selection experiment** (paid, outside sandbox, `keys/openai.env`). On the COMMITTED two-pass architecture (pivot 7): sweep GPT-family models (e.g. nano, mini, and one larger if affordable) crossed with the Pass B effort arm (medium vs high, per the 77%-vs-66% banked subclass finding), measuring accuracy, calibration, cost, and latency; repeats on finalists for determinism variance. NOT a design validation against single-pass — the banked nano none/medium/high runs in `evals/runs/` serve as reference points only. Requires a small pre-Stage-8 runner tweak to record per-row latency (not currently captured in `predictions.jsonl`).
+**Stage 8 — Model/config selection experiment** (paid, outside sandbox, `keys/openai.env`). On the COMMITTED two-pass architecture (pivot 7): locked matrix = **nano / mini / luna × Pass B low / medium / high** (9 Stage-1 screens), then Stage-2 finalist repeats (Waiting + CLI in the dashboard until r2/r3 land); measuring accuracy, calibration, cost, and latency. NOT a design validation against single-pass — the banked nano none/medium/high runs in `evals/runs/` serve as reference points only. Per-row latency capture already landed in PR #19.
 
-**Stage 9 — Dashboard.** House-style static HTML: cost-vs-accuracy Pareto, per-axis metrics with CIs, confusion matrices, calibration plots, disagreement browser (evidence + gold + each model's answer/rationale).
+**Stage 9 — Dashboard.** Static HTML with **LangSmith-light** aesthetic (not survivorship navy/Cormorant): cost-vs-accuracy Pareto, per-axis metrics with CIs, confusion matrices, calibration plots, disagreement browser (evidence + gold + each model's answer/rationale). **Config filter required:** show/hide model×effort configs on multi-run charts (Pareto, leaderboard, confidence, latency) so the Stage-1 9-point screen stays readable. Match the canvas mock at `eval-dashboard.canvas.tsx` (underline tabs, toolbar filter strip, score bars, latency pills). Skeleton (`evals/dashboard_metrics.py` + `build_eval_dashboard.py` + mock fixture) lands on PR #22; real Stage 8 `scored.json` plugged in via `--runs` / `--scored` (no auto-discovery).
 
 **Stage 10 — Wrap-up.** `evals/tests/` completeness, AGENTS.md updates, and a written report answering the three eval questions (pivot 7: calibration, model selection, implementation robustness) + the model recommendation — the artifact that unblocks the production promotion.
 

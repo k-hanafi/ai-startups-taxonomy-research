@@ -3,7 +3,7 @@
 Pure compute. The HTML builder only shapes Plotly traces and the config
 filter. No OpenAI imports: offline stages must not require API keys.
 
-Fixture path exists because Stage 8 paid runs are not banked yet. Real
+Fixture path exists because paid matrix runs are not banked yet. Real
 ``evals/runs/*/scored.json`` files plug in with the same loader once they
 exist.
 """
@@ -17,10 +17,15 @@ from typing import Any, Iterable, Optional
 from evals.paths import PROJECT_ROOT, RUNS_DIR, run_scored_path
 
 DEFAULT_FIXTURE = (
-    PROJECT_ROOT / "evals" / "tests" / "fixtures" / "dashboard_mock_runs.json"
+    PROJECT_ROOT
+    / "evals"
+    / "tests"
+    / "fixtures"
+    / "dashboard"
+    / "dashboard_mock_runs.json"
 )
 
-# Locked Stage 8 screen matrix (labels + fixture). Short group keys drive
+# Locked screen matrix (labels + fixture). Short group keys drive
 # the HTML model-group pills (nano / mini / luna).
 MODEL_GROUP_BY_MODEL: dict[str, str] = {
     "gpt-5.4-nano": "nano",
@@ -29,7 +34,10 @@ MODEL_GROUP_BY_MODEL: dict[str, str] = {
 }
 
 MODEL_GROUP_ORDER: tuple[str, ...] = ("nano", "mini", "luna")
-EFFORT_ORDER: tuple[str, ...] = ("low", "medium", "high")
+# Known Pass B / reasoning efforts first; unknown last so missing metadata
+# does not sort as if it were medium.
+EFFORT_ORDER: tuple[str, ...] = ("low", "medium", "high", "minimal", "none", "unknown")
+UNKNOWN_EFFORT = "unknown"
 
 
 def _short_model(model: str) -> str:
@@ -55,6 +63,16 @@ def _parse_effort_from_run_id(run_id: str) -> Optional[str]:
     return None
 
 
+def _parse_repeat_from_run_id(run_id: str) -> Optional[int]:
+    """Repeat index from run_id suffix (..._r1 → 1)."""
+    if not run_id:
+        return None
+    tail = run_id.rsplit("_", 1)[-1]
+    if len(tail) >= 2 and tail[0] == "r" and tail[1:].isdigit():
+        return int(tail[1:])
+    return None
+
+
 def _parse_model_from_run_id(run_id: str) -> str:
     """Pull model slug from run_id when scored.json omits an explicit model."""
     # Patterns: 2026-07-05_gpt-5.4-nano_medium_r1, mock_gpt-5.4-mini_low_r1
@@ -62,6 +80,42 @@ def _parse_model_from_run_id(run_id: str) -> str:
         if known in run_id:
             return known
     return ""
+
+
+def _infer_kind(scored: dict[str, Any], run_id: str, effort: str) -> Optional[str]:
+    """Architecture label for leaderboard captions (classification vs single_pass)."""
+    kind = scored.get("kind")
+    if kind == "two_pass":
+        return "classification"
+    if kind:
+        return str(kind)
+    # New run ids use _classification_; older ones used _2pass_.
+    if (
+        "classification" in run_id
+        or "2pass" in run_id
+        or run_id.startswith("mock_")
+    ):
+        return "classification"
+    if effort == "none":
+        return "single_pass"
+    return None
+
+
+def _disambiguate_repeat_labels(configs: list[dict[str, Any]]) -> None:
+    """When Stage-2 finalist repeats share model×effort, append · rN to labels.
+
+    Stage-1 screens keep plain labels (one row per matrix cell). Only collide
+    when multiple runs share the same human label in one metrics payload.
+    """
+    counts: dict[str, int] = {}
+    for c in configs:
+        counts[c["label"]] = counts.get(c["label"], 0) + 1
+    for c in configs:
+        if counts[c["label"]] <= 1:
+            continue
+        rep = _parse_repeat_from_run_id(str(c.get("run_id") or ""))
+        if rep is not None:
+            c["label"] = f"{c['label']} · r{rep}"
 
 
 def _projected_usd(scored: dict[str, Any]) -> Optional[float]:
@@ -131,6 +185,35 @@ def _ece(cal: Optional[dict[str, Any]], screen: dict[str, Any]) -> Optional[floa
     return float(ece) if ece is not None else None
 
 
+def _selective_at_coverage(
+    cal: Optional[dict[str, Any]], coverage: float = 0.5
+) -> Optional[float]:
+    if not cal:
+        return None
+    for point in cal.get("selective_prediction") or []:
+        if abs(float(point.get("coverage", -1)) - coverage) < 1e-9:
+            acc = point.get("accuracy")
+            return float(acc) if acc is not None else None
+    return None
+
+
+def _vs_baseline_delta(scored: dict[str, Any], axis: str = "subclass") -> Optional[dict[str, Any]]:
+    vs = scored.get("vs_baseline")
+    if not vs:
+        return None
+    delta = (vs.get("deltas") or {}).get(axis)
+    if not delta:
+        return None
+    return {
+        "baseline_run_id": vs.get("baseline_run_id"),
+        "n_paired": vs.get("n_paired"),
+        "delta_accuracy": delta.get("delta_accuracy"),
+        "ci95": delta.get("ci95"),
+        "significant": delta.get("significant"),
+        "axis": axis,
+    }
+
+
 def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
     """Normalize one scored.json (or stub) into a dashboard config row."""
     run_id = str(scored.get("run_id") or "")
@@ -142,16 +225,21 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
     )
     effort = (
         scored.get("effort_b")
+        or scored.get("effort")
         or scored.get("reasoning_effort")
         or screen.get("effort_b")
         or _parse_effort_from_run_id(run_id)
-        or "medium"
+        or UNKNOWN_EFFORT
     )
     axes = scored.get("axes") or {}
     subclass = axes.get("subclass") or {}
     ai_native = axes.get("ai_native") or {}
     rad = axes.get("rad") or {}
     cal = scored.get("calibration")
+    pbm = scored.get("pass_b_metrics") or {}
+    subclass_cond = pbm.get("subclass_family_conditional") or {}
+    rad_ai = pbm.get("rad_ai_native_only") or {}
+    boundary = pbm.get("boundary_disagreement") or {}
     latency = ((scored.get("latency") or {}).get("latency_s")) or {}
     if not latency and screen:
         latency = {
@@ -169,12 +257,22 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
     # Filter id must be unique per scored run. model×effort (and screen.id)
     # collide when Stage-2 finalist repeats share the same matrix cell; the
     # HTML toolbar uses a Set of ids, so duplicates make "X of Y visible"
-    # disagree with chart/table row count. Labels stay human model×effort.
+    # disagree with chart/table row count. Labels stay human model×effort
+    # until build_metrics disambiguates collisions with · rN.
     if run_id:
         cfg_id = run_id
     else:
         cfg_id = screen.get("id") or _config_id(str(model), str(effort))
     label = screen.get("label") or f"{_short_model(str(model))} / {effort}"
+    kind = _infer_kind(scored, run_id, str(effort))
+    n_scored = scored.get("n_scored")
+    n_expected = scored.get("n_expected")
+    is_partial = (
+        n_scored is not None
+        and n_expected is not None
+        and int(n_scored) < int(n_expected)
+    )
+    rel = (cal or {}).get("reliability") or {}
 
     return {
         "id": cfg_id,
@@ -183,9 +281,27 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
         "model": model,
         "model_group": group,
         "effort_b": effort,
-        "n_scored": scored.get("n_scored"),
+        "kind": kind,
+        "n_scored": n_scored,
+        "n_expected": n_expected,
+        "is_partial": is_partial,
         "subclass_acc": subclass_acc,
         "subclass_ci": half,
+        "subclass_family_conditional_acc": (
+            float(subclass_cond["accuracy"])
+            if subclass_cond.get("accuracy") is not None
+            else screen.get("subclass_family_conditional_acc")
+        ),
+        "rad_ai_native_only_acc": (
+            float(rad_ai["accuracy"])
+            if rad_ai.get("accuracy") is not None
+            else screen.get("rad_ai_native_only_acc")
+        ),
+        "boundary_disagreement_rate": (
+            float(boundary["rate"])
+            if boundary.get("rate") is not None
+            else screen.get("boundary_disagreement_rate")
+        ),
         "ai_native_acc": float(
             ai_native.get("accuracy", screen.get("ai_native_acc", 0.0))
         ),
@@ -197,12 +313,21 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
         "mean_confidence": _mean_confidence(cal, screen),
         "share_above_90": _share_above_90(cal, screen),
         "ece": _ece(cal, screen),
+        "reliability_bins": rel.get("bins") if rel else screen.get("reliability_bins"),
+        "selective_acc_50": (
+            _selective_at_coverage(cal, 0.5)
+            if cal
+            else screen.get("selective_acc_50")
+        ),
+        "vs_baseline": _vs_baseline_delta(scored),
         "latency_p50": (
             float(latency["p50"]) if latency.get("p50") is not None else None
         ),
         "latency_p95": (
             float(latency["p95"]) if latency.get("p95") is not None else None
         ),
+        "repeat": _parse_repeat_from_run_id(run_id),
+        "is_aggregate": False,
     }
 
 
@@ -236,6 +361,71 @@ def _sort_configs(configs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(configs, key=key)
 
 
+def _aggregate_finalist_repeats(configs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """When r1/r2/r3 share model×effort, append a mean±range aggregate row.
+
+    Individual repeats stay visible (disambiguated labels). The aggregate
+    encodes determinism variance the matrix screen asks for.
+    """
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for c in configs:
+        if c.get("is_aggregate"):
+            continue
+        rep = c.get("repeat")
+        if rep is None:
+            continue
+        key = (str(c.get("model") or ""), str(c.get("effort_b") or ""))
+        groups.setdefault(key, []).append(c)
+
+    extras: list[dict[str, Any]] = []
+    for (model, effort), rows in groups.items():
+        if len(rows) < 2:
+            continue
+        accs = [float(r["subclass_acc"]) for r in rows]
+        mean_acc = sum(accs) / len(accs)
+        lo, hi = min(accs), max(accs)
+        eces = [float(r["ece"]) for r in rows if r.get("ece") is not None]
+        costs = [
+            float(r["projected_usd"])
+            for r in rows
+            if r.get("projected_usd") is not None
+        ]
+        group = MODEL_GROUP_BY_MODEL.get(model, _short_model(model))
+        extras.append({
+            "id": f"agg_{model}_{effort}",
+            "label": f"{_short_model(model)} / {effort} · mean±range",
+            "run_id": "",
+            "model": model,
+            "model_group": group,
+            "effort_b": effort,
+            "kind": rows[0].get("kind"),
+            "n_scored": rows[0].get("n_scored"),
+            "subclass_acc": mean_acc,
+            "subclass_ci": (hi - lo) / 2.0,
+            "subclass_acc_range": [lo, hi],
+            "subclass_acc_mean": mean_acc,
+            "n_repeats": len(rows),
+            "ai_native_acc": sum(float(r["ai_native_acc"]) for r in rows) / len(rows),
+            "rad_acc": sum(float(r["rad_acc"]) for r in rows) / len(rows),
+            "macro_f1": sum(float(r["macro_f1"]) for r in rows) / len(rows),
+            "projected_usd": (sum(costs) / len(costs)) if costs else None,
+            "mean_confidence": None,
+            "share_above_90": None,
+            "ece": (sum(eces) / len(eces)) if eces else None,
+            "reliability_bins": None,
+            "selective_acc_50": None,
+            "vs_baseline": None,
+            "latency_p50": None,
+            "latency_p95": None,
+            "repeat": None,
+            "is_aggregate": True,
+            "subclass_family_conditional_acc": None,
+            "rad_ai_native_only_acc": None,
+            "boundary_disagreement_rate": None,
+        })
+    return extras
+
+
 def build_metrics(
     scored_runs: Iterable[dict[str, Any]],
     *,
@@ -243,7 +433,10 @@ def build_metrics(
     source: str = "",
 ) -> dict[str, Any]:
     """Build the chart-ready metrics dict (configs + filter keys)."""
-    configs = _sort_configs([config_row_from_scored(s) for s in scored_runs])
+    configs = [config_row_from_scored(s) for s in scored_runs]
+    _disambiguate_repeat_labels(configs)
+    configs.extend(_aggregate_finalist_repeats(configs))
+    configs = _sort_configs(configs)
     return {
         "synthetic": synthetic,
         "source": source,

@@ -1,4 +1,4 @@
-"""CLI entry point: python -m evals <sample|run|score|report|dashboard>."""
+"""CLI entry point: python -m evals <sample|run-classification|score|matrix|…>."""
 
 from __future__ import annotations
 
@@ -12,7 +12,10 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(
         prog="python -m evals",
-        description="Golden-set evaluation harness for the startup classifier.",
+        description=(
+            "Golden-set evaluation harness for the startup classifier. "
+            "Paid screen path: run-classification / matrix."
+        ),
     )
     subs = parser.add_subparsers(dest="command", required=True)
 
@@ -26,7 +29,11 @@ def main() -> None:
     p_drafts.add_argument("drafts_json", help="Path to a drafts JSON batch")
     subs.add_parser("review-page", help="Render the human-review HTML page (Stage 2)")
     p_run = subs.add_parser(
-        "run", help="Run one model config against the golden set (Stage 3)"
+        "run",
+        help=(
+            "LEGACY single-pass runner (retired for the locked matrix). Prefer "
+            "run-classification. Kept only to rescore old banked runs."
+        ),
     )
     p_run.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
     p_run.add_argument("--effort", default=None, help="Reasoning effort (default: screen effort)")
@@ -34,23 +41,93 @@ def main() -> None:
     p_run.add_argument("--run-id", default=None, help="Override run_id to resume a partial run")
     p_run.add_argument("--limit", type=int, default=None, help="Cap rows (cheap smoke test)")
     p_run.add_argument("--dry-run", action="store_true", help="Print plan + cost, no API call")
-    p_run2 = subs.add_parser(
-        "run-two-pass",
-        help="Run the two-pass classifier (binary gate + family-constrained subclass) (Stage 5)",
+
+    def _add_classification_run_args(p: argparse.ArgumentParser) -> None:
+        p.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
+        p.add_argument(
+            "--effort-b",
+            default=None,
+            help=(
+                "Pass B reasoning effort (default: high). Locked matrix uses "
+                "low/medium/high."
+            ),
+        )
+        p.add_argument("--repeat", type=int, default=1, help="Repeat index for the run_id")
+        p.add_argument("--run-id", default=None, help="Override run_id to resume a partial run")
+        p.add_argument("--limit", type=int, default=None, help="Cap rows (cheap smoke test)")
+        p.add_argument("--dry-run", action="store_true", help="Print plan + cost, no API call")
+        p.add_argument(
+            "--pass-a-from",
+            default=None,
+            metavar="RUN_ID",
+            help=(
+                "Advanced override: pin Pass A to a specific historical run_id "
+                "instead of the stable per-model bank under "
+                "evals/runs/pass_a_banks/<model>/."
+            ),
+        )
+        p.add_argument(
+            "--rerun-pass-a",
+            action="store_true",
+            help=(
+                "Invalidate the stable per-model Pass A bank and run Pass A "
+                "again (escape hatch). Default is to reuse an existing bank."
+            ),
+        )
+        p.add_argument(
+            "--reuse-pass-a-from",
+            default=None,
+            metavar="RUN_ID",
+            help=(
+                "Deprecated alias for --pass-a-from. Pass A auto-reuses the "
+                "per-model bank by default; do not use this for normal matrix runs."
+            ),
+        )
+        p.add_argument(
+            "--require-matrix-cell",
+            action="store_true",
+            help=(
+                "Refuse models/efforts outside the locked EVAL_MODELS × "
+                "MATRIX_PASS_B_EFFORTS matrix."
+            ),
+        )
+        p.add_argument(
+            "--require-stage8-cell",
+            action="store_true",
+            help="Deprecated alias for --require-matrix-cell.",
+        )
+
+    p_run_cls = subs.add_parser(
+        "run-classification",
+        help=(
+            "Run Pass A (binary gate) + Pass B (family-constrained subclass). "
+            "Paid matrix path."
+        ),
     )
-    p_run2.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
-    p_run2.add_argument("--effort-b", default=None, help="Pass B reasoning effort (default: high)")
-    p_run2.add_argument("--repeat", type=int, default=1, help="Repeat index for the run_id")
-    p_run2.add_argument("--run-id", default=None, help="Override run_id to resume a partial run")
-    p_run2.add_argument("--limit", type=int, default=None, help="Cap rows (cheap smoke test)")
-    p_run2.add_argument("--dry-run", action="store_true", help="Print plan + cost, no API call")
+    _add_classification_run_args(p_run_cls)
+    p_run_legacy = subs.add_parser(
+        "run-two-pass",
+        help="Deprecated alias for run-classification.",
+    )
+    _add_classification_run_args(p_run_legacy)
+    p_matrix = subs.add_parser(
+        "matrix",
+        help=(
+            "Enumerate the locked 9-cell matrix "
+            "(EVAL_MODELS × MATRIX_PASS_B_EFFORTS). Prints planned commands only."
+        ),
+    )
     p_score = subs.add_parser(
-        "score", help="Score run predictions against gold labels (Stage 7)"
+        "score", help="Score run predictions against gold labels"
     )
     p_score.add_argument("run_id", help="Run directory name under evals/runs/")
     p_score.add_argument(
         "--baseline", default=None,
-        help="Baseline run_id for paired-bootstrap deltas",
+        help=(
+            "Baseline run_id for paired-bootstrap deltas (same golden rows). "
+            "Use for model/config comparisons; surfaces as vs_baseline in "
+            "scored.json and the dashboard when present."
+        ),
     )
     conf_src = p_score.add_mutually_exclusive_group()
     conf_src.add_argument(
@@ -62,6 +139,20 @@ def main() -> None:
         "--confidence-from-raw", action="store_true",
         help="Derive binary confidence from the run's raw/ logprob responses "
              "(chosen-digit probability mass, pivot 6) and compute calibration",
+    )
+    p_score.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Score even when n_scored < expected rows (config n_rows or full "
+             "golden set). Default refuses so a mid-flight resume cannot look "
+             "like a finished screen.",
+    )
+    p_score.add_argument(
+        "--allow-partial-confidence",
+        action="store_true",
+        help="Allow calibration when confidence covers fewer than all "
+             "eligible rows (incomplete raw/ or one-sided binary pools). "
+             "Default refuses incomplete confidence coverage.",
     )
     p_parity = subs.add_parser(
         "batch-parity",
@@ -136,6 +227,11 @@ def main() -> None:
         render_review_page()
         return
     if args.command == "run":
+        logging.warning(
+            "Single-pass `run` is LEGACY. Paid science uses "
+            "`run-classification` (bank Pass A once per model, sweep Pass B "
+            "effort)."
+        )
         from evals import config as cfg
         from evals.runner import run
 
@@ -148,17 +244,76 @@ def main() -> None:
             run_id=args.run_id,
         )
         return
-    if args.command == "run-two-pass":
+    if args.command in ("run-classification", "run-two-pass"):
+        if args.command == "run-two-pass":
+            logging.warning(
+                "`run-two-pass` is deprecated; use `run-classification`."
+            )
         from evals import config as cfg
-        from evals.two_pass import run_two_pass
+        from evals.classification import run_classification, validate_matrix_cell
 
-        run_two_pass(
-            model=args.model or cfg.EVAL_MODELS[0],
-            effort_b=args.effort_b or cfg.PASS_B_EFFORT,
+        model = args.model or cfg.EVAL_MODELS[0]
+        effort_b = args.effort_b or cfg.PASS_B_EFFORT
+        require_matrix = args.require_matrix_cell or args.require_stage8_cell
+        if args.require_stage8_cell and not args.require_matrix_cell:
+            logging.warning(
+                "`--require-stage8-cell` is deprecated; use "
+                "`--require-matrix-cell`."
+            )
+        if require_matrix:
+            validate_matrix_cell(model, effort_b)
+        run_classification(
+            model=model,
+            effort_b=effort_b,
             repeat=args.repeat,
             limit=args.limit,
             dry_run=args.dry_run,
             run_id=args.run_id,
+            pass_a_from=args.pass_a_from,
+            rerun_pass_a=args.rerun_pass_a,
+            reuse_pass_a_from=args.reuse_pass_a_from,
+        )
+        return
+
+    if args.command == "matrix":
+        from evals import config as cfg
+        from evals.classification import matrix_cells
+
+        cells = matrix_cells()
+        print(f"Locked eval matrix: {len(cells)} cells")
+        print(f"  models = {cfg.EVAL_MODELS}")
+        print(f"  Pass B efforts = {cfg.MATRIX_PASS_B_EFFORTS}")
+        print()
+        print(
+            "Pass A banks auto-create on the first effort arm per model, "
+            "then reuse (no reuse flag needed):"
+        )
+        by_model: dict[str, list[str]] = {}
+        for model, effort in cells:
+            by_model.setdefault(model, []).append(effort)
+        for model, efforts in by_model.items():
+            first, *rest = efforts
+            print(
+                f"  # {model}: creates bank on {first}, auto-reuses for "
+                + ", ".join(rest)
+            )
+            for effort in efforts:
+                print(
+                    f"  python -m evals run-classification --model {model} "
+                    f"--effort-b {effort} --require-matrix-cell"
+                )
+            print(
+                f"  python -m evals score <run_id> --confidence-from-raw "
+                f"[--baseline <other_run_id>]"
+            )
+            print()
+        print(
+            "Escape hatch: --rerun-pass-a rebuilds the per-model bank. "
+            "Advanced: --pass-a-from <run_id> pins a historical bank."
+        )
+        print(
+            "Dry-run cost preflight (no API): add --dry-run to any "
+            "run-classification line above."
         )
         return
 
@@ -176,7 +331,13 @@ def main() -> None:
                 confidence = run_confidence(run_raw_dir(args.run_id))
             except LogprobExtractionError as exc:
                 sys.exit(f"--confidence-from-raw failed: {exc}")
-        score_cli(args.run_id, args.baseline, confidence)
+        score_cli(
+            args.run_id,
+            args.baseline,
+            confidence,
+            allow_partial=args.allow_partial,
+            allow_partial_confidence=args.allow_partial_confidence,
+        )
         return
     if args.command == "batch-parity":
         from evals import config as cfg

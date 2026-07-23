@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build the Stage 9 golden-set eval dashboard (LangSmith-inspired light UX).
+"""Build the golden-set eval dashboard (LangSmith-inspired light UX).
 
 Thin viewer skeleton: experiments table + summary line chart, Pareto,
-confidence, latency, with a client-side config filter. Defaults to the
-synthetic Stage 8 matrix fixture; pass --runs / --scored for real scored.json.
+confidence, reliability, vs baseline, latency, with a client-side config
+filter (model groups + per-config pills). Defaults to the synthetic
+locked-matrix fixture; pass --runs / --scored for real scored.json.
 
 Writes:
     data visualization/01_Presentation_Materials/eval_dashboard.html
@@ -378,6 +379,20 @@ table.ls td.mono { font-family: var(--mono); font-size: 12px; color: var(--text2
   color: var(--rose-text);
 }
 
+.partial-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--amber-pill);
+  color: var(--amber-text);
+  vertical-align: middle;
+}
+
 .stub-note {
   font-size: 13px;
   color: var(--muted);
@@ -562,26 +577,45 @@ function renderPareto() {
     return;
   }
   host.innerHTML = '';
-  const traces = plottable.map(c => ({
-    type: 'scatter',
-    mode: 'markers+text',
-    name: c.label,
-    x: [c.projected_usd],
-    y: [c.subclass_acc],
-    text: [c.label],
-    textposition: 'top center',
-    textfont: {size: 10, color: '#64748b'},
-    marker: {
-      size: 12,
-      color: colorFor(c),
-      line: {width: 1, color: '#fff'},
-    },
-    error_y: c.subclass_ci == null ? undefined : {
-      type: 'data', array: [c.subclass_ci], visible: true,
-      color: '#d8dce3', thickness: 1, width: 3,
-    },
-    hovertemplate: c.label + '<br>subclass %{y:.1%}<br>cost %{x:$,.0f}<extra></extra>',
-  }));
+  // Fit y to visible points (± CI), not the mock fixture's 60–95% band.
+  // Banked / single-pass real runs can land near ~41% subclass accuracy.
+  let yLo = Infinity;
+  let yHi = -Infinity;
+  for (const c of plottable) {
+    const ci = c.subclass_ci == null ? 0 : c.subclass_ci;
+    yLo = Math.min(yLo, c.subclass_acc - ci);
+    yHi = Math.max(yHi, c.subclass_acc + ci);
+  }
+  const pad = Math.max(0.03, (yHi - yLo) * 0.12);
+  const yRange = [Math.max(0, yLo - pad), Math.min(1, yHi + pad)];
+  const traces = plottable.map(c => {
+    const partial = isPartial(c);
+    const nBit = sampleCaption(c);
+    const hoverExtra = (partial ? '<br>partial screen' : '') +
+      (nBit ? '<br>' + nBit : '');
+    return {
+      type: 'scatter',
+      mode: 'markers+text',
+      name: c.label,
+      x: [c.projected_usd],
+      y: [c.subclass_acc],
+      text: [partial ? c.label + ' · partial' : c.label],
+      textposition: 'top center',
+      textfont: {size: 10, color: partial ? '#b45309' : '#64748b'},
+      marker: {
+        size: 12,
+        color: colorFor(c),
+        symbol: partial ? 'circle-open' : 'circle',
+        line: {width: partial ? 2 : 1, color: partial ? '#b45309' : '#fff'},
+      },
+      error_y: c.subclass_ci == null ? undefined : {
+        type: 'data', array: [c.subclass_ci], visible: true,
+        color: '#d8dce3', thickness: 1, width: 3,
+      },
+      hovertemplate: c.label + '<br>subclass %{y:.1%}<br>cost %{x:$,.0f}' +
+        hoverExtra + '<extra></extra>',
+    };
+  });
   Plotly.newPlot('chart-pareto', traces, layout({
     xaxis: {
       title: {text: 'Projected production $ (41k)', font: {size: 11, color: '#94a3b8'}},
@@ -589,11 +623,35 @@ function renderPareto() {
     },
     yaxis: {
       title: {text: 'Subclass accuracy', font: {size: 11, color: '#94a3b8'}},
-      tickformat: '.0%', range: [0.6, 0.95], gridcolor: '#f1f5f9', zeroline: false,
+      tickformat: '.0%', range: yRange, gridcolor: '#f1f5f9', zeroline: false,
     },
     showlegend: false,
     margin: {l: 56, r: 16, t: 24, b: 52},
   }), cfg);
+}
+
+function effortCaption(c) {
+  // Classification matrix cells use Pass B effort; banked single-pass refs use reasoning effort.
+  // Do not hard-code "Pass B" when kind is single_pass or effort is none.
+  // Missing effort must read as unknown, never as a fabricated medium.
+  const e = (c.effort_b == null || c.effort_b === '' || c.effort_b === 'unknown')
+    ? 'unknown'
+    : String(c.effort_b);
+  if (e === 'unknown') return 'effort unknown';
+  if (c.kind === 'classification' || c.kind === 'two_pass') return 'Pass B ' + e;
+  if (c.kind === 'single_pass' || e === 'none') return 'effort ' + e;
+  return 'effort ' + e;
+}
+
+function isPartial(c) {
+  if (c.is_partial === true) return true;
+  return c.n_scored != null && c.n_expected != null && c.n_scored < c.n_expected;
+}
+
+function sampleCaption(c) {
+  if (c.n_scored == null && c.n_expected == null) return '';
+  if (c.n_expected != null) return String(c.n_scored ?? '?') + '/' + c.n_expected + ' scored';
+  return String(c.n_scored) + ' scored';
 }
 
 function renderLeaderboard() {
@@ -609,10 +667,14 @@ function renderLeaderboard() {
     const lat = c.latency_p50;
     const slow = lat != null && lat >= 8;
     const pillCls = slow ? 'latency-pill slow' : 'latency-pill';
+    const partial = isPartial(c);
+    const badge = partial ? '<span class="partial-badge">partial</span>' : '';
+    const nLine = sampleCaption(c);
+    const sub = [c.model + ' · ' + effortCaption(c), nLine].filter(Boolean).join(' · ');
     return '<tr>' +
       '<td class="mono">#' + (i + 1) + '</td>' +
-      '<td><div class="name-cell">' + c.label + '</div>' +
-        '<div class="sub-cell">' + c.model + ' · Pass B ' + c.effort_b + '</div></td>' +
+      '<td><div class="name-cell">' + c.label + badge + '</div>' +
+        '<div class="sub-cell">' + sub + '</div></td>' +
       '<td class="num"><div class="score-cell"><span class="score-val">' + pct(c.subclass_acc) + '</span>' +
         '<div class="score-bar"><span style="width:' + (100 * bar).toFixed(1) + '%"></span></div></div></td>' +
       '<td class="num mono">' + pct(c.ai_native_acc) + '</td>' +
@@ -624,22 +686,83 @@ function renderLeaderboard() {
 }
 
 function renderConfidence() {
-  const runs = visibleConfigs();
+  const runs = visibleConfigs().filter(c => !c.is_aggregate);
   const host = document.getElementById('chart-confidence');
   if (!host) return;
-  if (!runs.length) { emptyChart('chart-confidence', 'Turn on a config above to show confidence.'); return; }
+  if (!runs.length) { emptyChart('chart-confidence', 'Turn on a config above to show calibration.'); return; }
   host.innerHTML = '';
-  Plotly.newPlot('chart-confidence', [{
+  const eceTrace = {
     type: 'bar',
+    name: 'ECE (lower better)',
     x: runs.map(c => c.label),
-    y: runs.map(c => c.share_above_90 == null ? null : 100 * c.share_above_90),
+    y: runs.map(c => c.ece == null ? null : 100 * c.ece),
     marker: {color: runs.map(c => colorFor(c)), opacity: 0.88},
-    hovertemplate: '%{x}<br>≥90% conf: %{y:.1f}%<extra></extra>',
-  }], layout({
-    yaxis: {title: {text: 'Share of rows ≥ 90% confidence (%)', font: {size: 11, color: '#94a3b8'}}, gridcolor: '#f1f5f9'},
+    hovertemplate: '%{x}<br>ECE %{y:.2f}%<extra></extra>',
+  };
+  const selTrace = {
+    type: 'scatter',
+    mode: 'lines+markers',
+    name: 'Selective @50% cov',
+    x: runs.map(c => c.label),
+    y: runs.map(c => c.selective_acc_50 == null ? null : 100 * c.selective_acc_50),
+    yaxis: 'y2',
+    line: {color: '#64748b', width: 2},
+    marker: {size: 7, color: '#334155'},
+    hovertemplate: '%{x}<br>selective@50 %{y:.1f}%<extra></extra>',
+  };
+  Plotly.newPlot('chart-confidence', [eceTrace, selTrace], layout({
+    yaxis: {title: {text: 'ECE (%)', font: {size: 11, color: '#94a3b8'}}, gridcolor: '#f1f5f9'},
+    yaxis2: {
+      title: {text: 'Selective accuracy @50% coverage (%)', font: {size: 11, color: '#94a3b8'}},
+      overlaying: 'y',
+      side: 'right',
+      showgrid: false,
+      range: [50, 105],
+    },
     xaxis: {tickangle: -30, gridcolor: 'rgba(0,0,0,0)'},
-    margin: {l: 52, r: 12, t: 12, b: 80},
-    showlegend: false,
+    margin: {l: 52, r: 56, t: 28, b: 80},
+    legend: {orientation: 'h', y: 1.15},
+  }), cfg);
+}
+
+function renderReliability() {
+  const runs = visibleConfigs().filter(c => !c.is_aggregate && c.reliability_bins && c.reliability_bins.length);
+  const host = document.getElementById('chart-reliability');
+  if (!host) return;
+  if (!runs.length) {
+    emptyChart('chart-reliability', 'Reliability bins appear when scored.json carries calibration.reliability.bins.');
+    return;
+  }
+  host.innerHTML = '';
+  // Show the first visible config with bins (one diagram; filter to compare).
+  const c = runs[0];
+  const bins = c.reliability_bins.filter(b => b.count > 0 && b.mean_confidence != null);
+  Plotly.newPlot('chart-reliability', [
+    {
+      type: 'scatter',
+      mode: 'lines',
+      name: 'perfect',
+      x: [0, 1],
+      y: [0, 1],
+      line: {dash: 'dash', color: '#d1d5db', width: 1},
+      hoverinfo: 'skip',
+    },
+    {
+      type: 'scatter',
+      mode: 'markers+lines',
+      name: c.label,
+      x: bins.map(b => b.mean_confidence),
+      y: bins.map(b => b.accuracy),
+      marker: {size: bins.map(b => 6 + Math.sqrt(b.count)), color: colorFor(c)},
+      line: {color: colorFor(c), width: 1.5},
+      text: bins.map(b => 'n=' + b.count),
+      hovertemplate: 'conf %{x:.2f}<br>acc %{y:.2f}<br>%{text}<extra></extra>',
+    },
+  ], layout({
+    xaxis: {title: {text: 'Mean confidence', font: {size: 11, color: '#9ca3af'}}, range: [0, 1], gridcolor: '#f3f4f6'},
+    yaxis: {title: {text: 'Accuracy', font: {size: 11, color: '#9ca3af'}}, range: [0, 1], gridcolor: '#f3f4f6'},
+    margin: {l: 52, r: 12, t: 12, b: 48},
+    showlegend: true,
   }), cfg);
 }
 
@@ -677,7 +800,29 @@ function renderAll() {
   renderPareto();
   renderLeaderboard();
   renderConfidence();
+  renderReliability();
   renderLatency();
+  renderBaseline();
+}
+
+function renderBaseline() {
+  const host = document.getElementById('baseline-table');
+  if (!host) return;
+  const runs = visibleConfigs().filter(c => c.vs_baseline);
+  if (!runs.length) {
+    host.innerHTML = '<p class="stub-note">No vs_baseline blocks yet. Score with <code>--baseline &lt;run_id&gt;</code> for paired bootstrap deltas.</p>';
+    return;
+  }
+  host.innerHTML = '<table class="ls"><thead><tr><th>Config</th><th>Baseline</th><th class="num">Δ subclass</th><th class="num">95% CI</th><th>Sig?</th></tr></thead><tbody>' +
+    runs.map(c => {
+      const v = c.vs_baseline;
+      const d = v.delta_accuracy;
+      const ci = v.ci95 || [];
+      return '<tr><td>' + c.label + '</td><td class="mono">' + (v.baseline_run_id || '') +
+        '</td><td class="num mono">' + (d == null ? '—' : ((d >= 0 ? '+' : '') + (100 * d).toFixed(1) + '%')) +
+        '</td><td class="num mono">' + (ci.length === 2 ? ((100 * ci[0]).toFixed(1) + ' … ' + (100 * ci[1]).toFixed(1) + '%') : '—') +
+        '</td><td>' + (v.significant ? 'yes' : 'no') + '</td></tr>';
+    }).join('') + '</tbody></table>';
 }
 
 function showTab(name) {
@@ -691,7 +836,7 @@ function showTab(name) {
     setTimeout(() => { renderSummaryLine(); }, 30);
   }
   if (name === 'charts') {
-    setTimeout(() => { renderPareto(); renderConfidence(); renderLatency(); }, 30);
+    setTimeout(() => { renderPareto(); renderConfidence(); renderReliability(); renderLatency(); renderBaseline(); }, 30);
   }
 }
 
@@ -767,7 +912,7 @@ def build_html(metrics: dict) -> str:
         banner = """
 <div class="banner" id="synthetic-banner">
   <div><strong>SYNTHETIC data.</strong> Numbers are design placeholders for the
-  Stage 8 matrix (nano / mini / luna × Pass B low / medium / high). Replace by
+  locked matrix (nano / mini / luna × Pass B low / medium / high). Replace by
   loading real <code>evals/runs/*/scored.json</code> after the paid sweep.</div>
 </div>
 """
@@ -802,7 +947,7 @@ def build_html(metrics: dict) -> str:
     </svg>
     <div class="header-copy">
       <div class="header-title">Golden-set eval screen</div>
-      <div class="header-sub">Stage 8 model × Pass B effort matrix · {n} configs · source: {source}</div>
+      <div class="header-sub">Locked model × Pass B effort matrix · {n} configs · source: {source}</div>
     </div>
   </header>
 
@@ -838,19 +983,29 @@ def build_html(metrics: dict) -> str:
       </table>
     </div>
     <p class="stub-note">Filter and search update this table and the Charts tab without a reload.
-    Confusion / disagreement film-room is deferred until Stage 8 banked runs exist.</p>
+    Confusion / disagreement film-room is deferred until paid matrix runs exist.</p>
   </section>
 
   <section class="panel" id="panel-charts">
     <div class="card">
       <div class="card-title">Cost × subclass accuracy</div>
-      <div class="card-desc">Pareto view of the Stage 8 screen matrix. Log x-axis on projected production cost.</div>
+      <div class="card-desc">Pareto view of the locked screen matrix. Log x-axis on projected production cost.</div>
       <div id="chart-pareto" class="chart"></div>
     </div>
     <div class="card">
-      <div class="card-title">High-confidence share</div>
-      <div class="card-desc">Share of rows with binary confidence ≥ 90%.</div>
+      <div class="card-title">Calibration (ECE + selective)</div>
+      <div class="card-desc">Expected Calibration Error (lower is better) and accuracy when answering only on the top 50% most confident rows. Share ≥90% is secondary.</div>
       <div id="chart-confidence" class="chart short"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Reliability curve</div>
+      <div class="card-desc">Mean confidence vs accuracy per bin for the first visible config that carries bins. Filter to one config to inspect it.</div>
+      <div id="chart-reliability" class="chart short"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Paired vs baseline</div>
+      <div class="card-desc">Paired-bootstrap subclass deltas when scored.json includes vs_baseline (score --baseline).</div>
+      <div id="baseline-table"></div>
     </div>
     <div class="card">
       <div class="card-title">Latency</div>
@@ -860,7 +1015,7 @@ def build_html(metrics: dict) -> str:
   </section>
 
   <section class="panel" id="panel-stub">
-    <div class="empty">Confusion matrices and disagreement rows land after Stage 8 scored runs.
+    <div class="empty">Confusion matrices and disagreement rows land after paid matrix scored runs.
     This tab is a placeholder so the tab chrome matches the target UX.</div>
   </section>
 

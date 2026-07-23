@@ -19,7 +19,7 @@ from evals.dashboard_metrics import (
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-MOCK = FIXTURES / "dashboard_mock_runs.json"
+MOCK = FIXTURES / "dashboard" / "dashboard_mock_runs.json"
 
 # Fixture run_ids (unique filter keys). Labels stay model×effort.
 FIXTURE_IDS = [
@@ -40,7 +40,7 @@ def test_default_fixture_path_exists():
     assert MOCK.exists()
 
 
-def test_load_fixture_has_nine_stage8_configs():
+def test_load_fixture_has_nine_matrix_configs():
     metrics = load_fixture(MOCK)
     assert metrics["synthetic"] is True
     assert metrics["n_configs"] == 9
@@ -62,11 +62,57 @@ def test_fixture_rows_carry_chart_fields():
     assert row["model"] == "gpt-5.4-mini"
     assert row["effort_b"] == "medium"
     assert row["model_group"] == "mini"
+    assert row["kind"] == "classification"
     assert 0.8 < row["subclass_acc"] < 0.9
     assert row["projected_usd"] == 412
     assert row["latency_p50"] == 4.6
     assert row["share_above_90"] == 0.61
     assert row["ece"] == 0.038
+    assert row["n_scored"] == 100
+    assert row["n_expected"] == 100
+    assert row["is_partial"] is False
+
+
+def test_fixture_pass_a_metrics_identical_within_model():
+    """Banked Pass A design: ai_native / ECE / confidence do not vary with Pass B effort."""
+    metrics = load_fixture(MOCK)
+    by_model: dict[str, list] = {}
+    for c in metrics["configs"]:
+        by_model.setdefault(c["model"], []).append(c)
+    for model, rows in by_model.items():
+        assert len(rows) == 3
+        ai = {r["ai_native_acc"] for r in rows}
+        ece = {r["ece"] for r in rows}
+        conf = {r["mean_confidence"] for r in rows}
+        share = {r["share_above_90"] for r in rows}
+        assert len(ai) == 1, model
+        assert len(ece) == 1, model
+        assert len(conf) == 1, model
+        assert len(share) == 1, model
+        # Pass B axes may still differ across efforts.
+        subclass = {r["subclass_acc"] for r in rows}
+        assert len(subclass) >= 2, model
+
+
+def test_config_row_prefers_scored_metadata_over_run_id_parse():
+    """Explicit scored.json fields win when run_id would parse differently."""
+    stub = {
+        "run_id": "mock_gpt-5.4-nano_high_r1",  # would parse nano/high
+        "model": "gpt-5.6-luna",
+        "effort_b": "low",
+        "kind": "classification",
+        "n_scored": 100,
+        "axes": {
+            "subclass": {"accuracy": 0.8, "accuracy_ci95": [0.7, 0.9], "macro_f1": 0.75},
+            "ai_native": {"accuracy": 0.9, "accuracy_ci95": [0.8, 1.0], "macro_f1": 0.9},
+            "rad": {"accuracy": 0.85, "accuracy_ci95": [0.8, 0.9], "macro_f1": 0.8},
+        },
+    }
+    row = config_row_from_scored(stub)
+    assert row["model"] == "gpt-5.6-luna"
+    assert row["model_group"] == "luna"
+    assert row["effort_b"] == "low"
+    assert row["label"] == "luna / low"
 
 
 def test_config_row_from_minimal_scored_stub():
@@ -74,6 +120,7 @@ def test_config_row_from_minimal_scored_stub():
         "run_id": "2026-07-10_gpt-5.4-nano_high_r1",
         "model": "gpt-5.4-nano",
         "effort_b": "high",
+        "kind": "classification",
         "n_scored": 10,
         "axes": {
             "subclass": {
@@ -95,6 +142,7 @@ def test_config_row_from_minimal_scored_stub():
     assert row["id"] == "2026-07-10_gpt-5.4-nano_high_r1"
     assert row["label"] == "nano / high"
     assert row["model_group"] == "nano"
+    assert row["kind"] == "classification"
     assert row["subclass_acc"] == 0.7
     assert row["subclass_ci"] == pytest.approx(0.1)
     assert row["projected_usd"] == 120.5
@@ -128,16 +176,72 @@ def test_duplicate_model_effort_keeps_distinct_filter_ids():
         {**base, "run_id": "2026-07-10_gpt-5.4-mini_medium_r3"},
     ]
     metrics = build_metrics(runs, synthetic=True, source="finalist-repeats")
-    assert metrics["n_configs"] == 3
-    assert len(set(metrics["config_ids"])) == 3
-    assert metrics["config_ids"] == [
+    # 3 individual repeats + 1 mean±range aggregate.
+    assert metrics["n_configs"] == 4
+    assert len(set(metrics["config_ids"])) == 4
+    assert metrics["config_ids"][:3] == [
         "2026-07-10_gpt-5.4-mini_medium_r1",
         "2026-07-10_gpt-5.4-mini_medium_r2",
         "2026-07-10_gpt-5.4-mini_medium_r3",
     ]
-    assert all(c["label"] == "mini / medium" for c in metrics["configs"])
-    # Group pill still lists every repeat (not collapsed to one mini-med id).
-    assert len(metrics["model_groups"]["mini"]["ids"]) == 3
+    assert metrics["config_ids"][3] == "agg_gpt-5.4-mini_medium"
+    # Colliding model×effort labels get · rN so chart pills/axes stay distinct.
+    assert [c["label"] for c in metrics["configs"] if not c.get("is_aggregate")] == [
+        "mini / medium · r1",
+        "mini / medium · r2",
+        "mini / medium · r3",
+    ]
+    agg = next(c for c in metrics["configs"] if c.get("is_aggregate"))
+    assert agg["n_repeats"] == 3
+    assert agg["subclass_acc"] == pytest.approx(0.85)
+    assert agg["subclass_acc_range"] == [0.85, 0.85]
+    # Group pill lists repeats + aggregate.
+    assert len(metrics["model_groups"]["mini"]["ids"]) == 4
+
+
+def test_single_pass_kind_for_banked_none_effort():
+    row = config_row_from_scored(
+        {
+            "run_id": "2026-07-06_gpt-5.4-nano_none_r1",
+            "model": "gpt-5.4-nano",
+            "effort": "none",
+            "kind": "single_pass",
+            "n_scored": 10,
+            "axes": {
+                "subclass": {"accuracy": 0.41, "accuracy_ci95": [0.3, 0.5], "macro_f1": 0.3},
+                "ai_native": {"accuracy": 0.8, "accuracy_ci95": [0.7, 0.9], "macro_f1": 0.8},
+                "rad": {"accuracy": 0.5, "accuracy_ci95": [0.4, 0.6], "macro_f1": 0.4},
+            },
+        }
+    )
+    assert row["kind"] == "single_pass"
+    assert row["effort_b"] == "none"
+    assert row["subclass_acc"] == 0.41
+
+
+def test_build_html_pareto_y_axis_is_data_driven():
+    """Generator must not ship the mock-only 60–95% Pareto band."""
+    _, mod = _load_eval_dashboard_builder()
+    html = mod.build_html(load_fixture(MOCK))
+    assert "range: [0.6, 0.95]" not in html
+    assert "yRange" in html
+    assert "effortCaption" in html
+    assert "Pass B ' + c.effort_b" not in html
+
+
+def test_committed_html_keeps_pareto_axis_in_sync():
+    """Checked-in eval_dashboard.html must match the generator's data-driven axis."""
+    from evals.paths import PROJECT_ROOT
+
+    html = (
+        PROJECT_ROOT
+        / "data visualization"
+        / "01_Presentation_Materials"
+        / "eval_dashboard.html"
+    ).read_text(encoding="utf-8")
+    assert "range: [0.6, 0.95]" not in html
+    assert "yRange" in html
+    assert "effortCaption" in html
 
 
 def test_projected_usd_none_when_cost_unavailable():
@@ -181,6 +285,88 @@ def _load_eval_dashboard_builder():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return argparse, mod
+
+
+def test_config_row_unknown_effort_when_metadata_missing():
+    """Missing effort must not silently become medium (mislabels the cell)."""
+    stub = {
+        "run_id": "2026-07-10_gpt-5.4-nano_r1",  # no effort token in id
+        "model": "gpt-5.4-nano",
+        "n_scored": 100,
+        "n_expected": 100,
+        "axes": {
+            "subclass": {"accuracy": 0.7, "accuracy_ci95": [0.6, 0.8], "macro_f1": 0.65},
+            "ai_native": {"accuracy": 0.9, "accuracy_ci95": [0.8, 1.0], "macro_f1": 0.9},
+            "rad": {"accuracy": 0.8, "accuracy_ci95": [0.7, 0.9], "macro_f1": 0.75},
+        },
+    }
+    row = config_row_from_scored(stub)
+    assert row["effort_b"] == "unknown"
+    assert row["label"] == "nano / unknown"
+    assert row["is_partial"] is False
+
+
+def test_config_row_marks_partial_when_n_scored_below_expected():
+    """--allow-partial screens must carry n_expected so the UI can warn."""
+    stub = {
+        "run_id": "2026-07-10_gpt-5.4-mini_medium_r1",
+        "model": "gpt-5.4-mini",
+        "effort_b": "medium",
+        "n_scored": 40,
+        "n_expected": 100,
+        "axes": {
+            "subclass": {"accuracy": 0.8, "accuracy_ci95": [0.7, 0.9], "macro_f1": 0.75},
+            "ai_native": {"accuracy": 0.9, "accuracy_ci95": [0.8, 1.0], "macro_f1": 0.9},
+            "rad": {"accuracy": 0.85, "accuracy_ci95": [0.8, 0.9], "macro_f1": 0.8},
+        },
+    }
+    row = config_row_from_scored(stub)
+    assert row["n_scored"] == 40
+    assert row["n_expected"] == 100
+    assert row["is_partial"] is True
+
+
+def test_unknown_effort_sorts_without_crashing():
+    """Unknown effort ranks after known efforts; sort must not KeyError."""
+    stubs = [
+        {
+            "run_id": "run_unknown",
+            "model": "gpt-5.4-nano",
+            "n_scored": 10,
+            "n_expected": 10,
+            "axes": {
+                "subclass": {"accuracy": 0.5, "macro_f1": 0.4},
+                "ai_native": {"accuracy": 0.5, "macro_f1": 0.4},
+                "rad": {"accuracy": 0.5, "macro_f1": 0.4},
+            },
+        },
+        {
+            "run_id": "run_low",
+            "model": "gpt-5.4-nano",
+            "effort_b": "low",
+            "n_scored": 10,
+            "n_expected": 10,
+            "axes": {
+                "subclass": {"accuracy": 0.5, "macro_f1": 0.4},
+                "ai_native": {"accuracy": 0.5, "macro_f1": 0.4},
+                "rad": {"accuracy": 0.5, "macro_f1": 0.4},
+            },
+        },
+    ]
+    metrics = build_metrics(stubs, synthetic=True, source="test")
+    efforts = [c["effort_b"] for c in metrics["configs"]]
+    assert efforts == ["low", "unknown"]
+
+
+def test_build_html_surfaces_partial_and_unknown_effort():
+    """Generator JS must expose partial badge + unknown effort captions."""
+    _, mod = _load_eval_dashboard_builder()
+    html = mod.build_html(load_fixture(MOCK))
+    assert "partial-badge" in html
+    assert "isPartial" in html
+    assert "sampleCaption" in html
+    assert "effort unknown" in html
+    assert "partial screen" in html
 
 
 def test_resolve_metrics_defaults_to_fixture_not_discovered_runs():

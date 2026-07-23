@@ -1,6 +1,6 @@
 """Stage 6: logprob -> binary-confidence extraction for Pass A responses.
 
-Pass A of the two-pass classifier answers {"ai_native": 0|1} in ~6 output
+Pass A of the classification runner answers {"ai_native": 0|1} in ~6 output
 tokens with logprobs on. This module turns one raw Responses API payload into
 a calibrated per-row confidence record: p(ai_native=1), top-1 probability,
 margin, entropy, and valid_mass (the probability mass the model put on the
@@ -50,6 +50,14 @@ DECISION_KEY: str = "ai_native"
 
 class LogprobExtractionError(ValueError):
     """A response payload does not match the shape this extractor relies on."""
+
+
+class BinaryConfidenceUnavailable(LogprobExtractionError):
+    """Both {0,1} candidates are not available at the decision token.
+
+    Raised instead of inventing a fake p=0/p=1 when the opposing digit is
+    missing from the (unmasked) candidate pool.
+    """
 
 
 @dataclass(frozen=True)
@@ -265,13 +273,16 @@ def extract_binary_confidence(response: dict[str, Any]) -> BinaryConfidence:
     for token, logprob in pool.items():
         mass[candidate_value(token)] += math.exp(logprob)  # type: ignore[index]
 
-    valid_mass = mass[0] + mass[1]
-    if valid_mass <= 0.0:
-        raise LogprobExtractionError(
-            "no unmasked {0,1} candidates at the decision token; "
-            "cannot renormalize"
+    # Both legal digits must carry evidence. A one-sided pool (API returned
+    # only the chosen digit, or the opposing digit was grammar-masked) would
+    # renormalize to fake p=0 or p=1 and poison calibration. Mark unavailable.
+    if mass[0] <= 0.0 or mass[1] <= 0.0:
+        raise BinaryConfidenceUnavailable(
+            "binary confidence unavailable: need unmasked evidence for both "
+            "{0,1} at the decision token (opposing digit missing from pool)"
         )
 
+    valid_mass = mass[0] + mass[1]
     p_one = mass[1] / valid_mass
     top1 = max(p_one, 1.0 - p_one)
     return BinaryConfidence(
@@ -296,13 +307,20 @@ def extract_run(raw_dir: Path) -> list[dict[str, Any]]:
 
     Two-pass runs bank Pass A as <custom_id>_a.json (preferred when present);
     single-pass effort=none runs bank <custom_id>.json. Returns one dict per
-    row, sorted by custom_id, ready for the scorer to consume as plain data.
+    extractable row, sorted by custom_id. Rows whose opposing digit is missing
+    are omitted (confidence unavailable); callers that require full coverage
+    must compare against the file count.
     """
     files = sorted(raw_dir.glob("*_a.json")) or sorted(raw_dir.glob("*.json"))
     rows: list[dict[str, Any]] = []
     for path in files:
         custom_id = path.stem.removesuffix("_a")
-        rows.append({"custom_id": custom_id, **extract_raw_file(path).as_dict()})
+        try:
+            rows.append({"custom_id": custom_id, **extract_raw_file(path).as_dict()})
+        except BinaryConfidenceUnavailable:
+            continue
+        except LogprobExtractionError:
+            raise
     return rows
 
 

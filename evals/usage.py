@@ -33,6 +33,33 @@ def cached_tokens_from_usage(usage: Any) -> int:
     return 0
 
 
+def token_totals(record: dict[str, Any]) -> dict[str, int]:
+    """input/output/reasoning/cached totals for one prediction record.
+
+    Single-pass records use flat fields; classification records use a_/b_
+    prefixes (summed). Missing fields default to 0. Callers that need
+    "was cached_tokens recorded at all?" use
+    ``evals.cost_extrapolate._records_have_cached_field`` separately.
+    """
+    if "a_input_tokens" in record:
+        keys = {
+            "input": ("a_input_tokens", "b_input_tokens"),
+            "output": ("a_output_tokens", "b_output_tokens"),
+            "reasoning": ("a_reasoning_tokens", "b_reasoning_tokens"),
+            "cached": ("a_cached_tokens", "b_cached_tokens"),
+        }
+        return {
+            kind: sum(int(record.get(k) or 0) for k in fields)
+            for kind, fields in keys.items()
+        }
+    return {
+        "input": int(record.get("input_tokens") or 0),
+        "output": int(record.get("output_tokens") or 0),
+        "reasoning": int(record.get("reasoning_tokens") or 0),
+        "cached": int(record.get("cached_tokens") or 0),
+    }
+
+
 def _get(obj: Any, key: str) -> Any:
     if isinstance(obj, dict):
         return obj.get(key)

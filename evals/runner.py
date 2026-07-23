@@ -53,9 +53,10 @@ from src.builder import (
     load_system_prompt,
 )
 from src.config import OPENAI_API_KEY, PROMPT_CACHE_KEY
-from src.formatter import format_user_message
+from src.formatter import build_custom_id, format_user_message
 
 from evals import config as cfg
+from evals.jsonl_io import append_jsonl, iter_jsonl
 from evals.paths import (
     CLASSIFIER_INPUT_CSV,
     GOLDEN_SET_CSV,
@@ -90,7 +91,7 @@ def _git_commit() -> str:
             subprocess.check_output(["git", "rev-parse", "HEAD"], text=True)
             .strip()
         )
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return "unknown"
 
 
@@ -147,7 +148,7 @@ def build_request_kwargs(row: dict[str, Any], system_prompt: str, schema: dict,
     max_output_tokens raised for reasoning headroom, plus reasoning/logprob/
     temperature knobs.
     """
-    cid = f"startup-{row['org_uuid']}"
+    cid = build_custom_id(row["org_uuid"])
     user_message = format_user_message(row)
     body = build_request_body(user_message, cid, system_prompt, schema, model)["body"]
 
@@ -165,25 +166,21 @@ def build_request_kwargs(row: dict[str, Any], system_prompt: str, schema: dict,
 
 
 def _completed_custom_ids(predictions_path: Path) -> set[str]:
+    """Resume set: custom_ids whose latest status is completed (or legacy).
+
+    Only rows with ``status`` missing (older runs) or ``status == "completed"``
+    count as done. Tolerates a truncated final JSONL line; fails on interior
+    corruption.
+    """
     if not predictions_path.exists():
         return set()
     done: set[str] = set()
-    for line in predictions_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            rec = json.loads(line)
-            # Only skip rows that completed successfully; incomplete or failed
-            # responses should be retried on resume. Records without a status
-            # field (from older runs) are treated as completed for compatibility.
-            status = rec.get("status")
-            if status is None or status == "completed":
-                done.add(rec["custom_id"])
-        except (json.JSONDecodeError, KeyError):
-            # A process killed mid-append can leave a truncated final line;
-            # that row simply gets re-run. Tolerate it rather than block resume.
-            logger.warning("Skipping malformed predictions line in %s", predictions_path)
+    for rec in iter_jsonl(predictions_path, tolerate_truncated_final=True):
+        status = rec.get("status")
+        if status is None or status == "completed":
+            cid = rec.get("custom_id")
+            if cid:
+                done.add(cid)
     return done
 
 
@@ -263,12 +260,12 @@ def run(model: str = cfg.EVAL_MODELS[0],
         logger.info("Resuming %s: %d rows already complete", run_id, len(done))
 
     client = OpenAI(api_key=OPENAI_API_KEY)
-    todo = [r for r in rows if f"startup-{r['org_uuid']}" not in done]
+    todo = [r for r in rows if build_custom_id(r["org_uuid"]) not in done]
     logger.info("Run %s: %d rows to classify (%s, effort=%s)",
                 run_id, len(todo), model, effort)
 
     for i, row in enumerate(todo, start=1):
-        cid = f"startup-{row['org_uuid']}"
+        cid = build_custom_id(row["org_uuid"])
         kwargs = build_request_kwargs(row, system_prompt, schema, model, effort)
         # Wall-clock latency around the API call; retry backoff is included,
         # so this is the honest per-row cost a production caller would feel.
@@ -281,8 +278,7 @@ def run(model: str = cfg.EVAL_MODELS[0],
         )
         record = _prediction_record(cid, row["org_uuid"], model, effort, resp,
                                     latency_s)
-        with predictions_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        append_jsonl(predictions_path, record)
 
         logger.info("  [%d/%d] %s -> %s (%s)",
                     i, len(todo), row.get("name", "")[:28],
@@ -310,6 +306,7 @@ def _build_config(run_id: str, model: str, effort: str, repeat: int,
                   n_rows: int) -> dict[str, Any]:
     return {
         "run_id": run_id,
+        "kind": "single_pass",
         "model": model,
         "reasoning_effort": effort,
         "repeat": repeat,
@@ -351,12 +348,12 @@ def _ensure_config(run_id: str, model: str, effort: str, repeat: int,
 def _print_dry_run(rows: Iterable[dict[str, Any]], system_prompt: str,
                    schema: dict, model: str, effort: str, run_id: str) -> None:
     rows = list(rows)
-    pricing = cfg.EVAL_MODEL_PRICING.get(model, {})
+    pricing = cfg.require_model_pricing(model)
     # Rough input-token proxy: 1 token ~= 4 chars of prompt + formatted row.
     prompt_chars = len(system_prompt) + len(json.dumps(schema))
     row_chars = sum(len(format_user_message(r)) for r in rows)
     est_input_tokens = (prompt_chars * len(rows) + row_chars) / 4
-    in_cost = est_input_tokens / 1e6 * pricing.get("input", 0.0)
+    in_cost = est_input_tokens / 1e6 * pricing["input"]
     logger.info("DRY RUN %s", run_id)
     logger.info("  model=%s effort=%s rows=%d", model, effort, len(rows))
     logger.info("  est input tokens ~%d, est input cost ~$%.4f "

@@ -6,7 +6,7 @@ Turns measured golden-set token usage into an interpretable ladder:
 2. Cache adjustment — measured cache rate + $ after cache discount
 3. Batch adjustment — 50% → production-equivalent $ on the golden n
 4. Scale — × (N_prod / n_golden) → full-dataset estimate
-5. Assumptions — N, cache source, discounts, two-pass, reasoning in output
+5. Assumptions — N, cache source, discounts, classification, reasoning in output
 
 Stacking matches ``src/tokens.py`` / ``src/merger.py``: batch discount on
 all tokens, then an extra cache discount on the cached portion of input
@@ -80,15 +80,9 @@ def _records_partial_cached_field(records: list[dict[str, Any]]) -> bool:
 
 
 def _sum_cached(records: list[dict[str, Any]]) -> int:
-    total = 0
-    for rec in records:
-        if "a_cached_tokens" in rec or "b_cached_tokens" in rec:
-            total += int(rec.get("a_cached_tokens") or 0) + int(
-                rec.get("b_cached_tokens") or 0
-            )
-        else:
-            total += int(rec.get("cached_tokens") or 0)
-    return total
+    from evals.usage import token_totals
+
+    return sum(token_totals(rec)["cached"] for rec in records)
 
 
 def extrapolate_production_cost(
@@ -101,7 +95,7 @@ def extrapolate_production_cost(
     cache_field_present: bool,
     n_prod: int = cfg.N_PROD_DEFAULT,
     n_prod_label: str = "alive_plus_dead",
-    architecture: str = "two-pass",
+    architecture: str = "classification",
 ) -> dict[str, Any]:
     """Build the five-step production cost ladder as a structured dict.
 
@@ -270,26 +264,18 @@ def production_cost_from_records(
     n_prod_label: str = "alive_plus_dead",
 ) -> dict[str, Any]:
     """Aggregate token totals from scored records, then extrapolate."""
-    total_in = 0
-    total_out = 0
-    for rec in records:
-        if "a_input_tokens" in rec:
-            total_in += int(rec.get("a_input_tokens") or 0) + int(
-                rec.get("b_input_tokens") or 0
-            )
-            total_out += int(rec.get("a_output_tokens") or 0) + int(
-                rec.get("b_output_tokens") or 0
-            )
-        else:
-            total_in += int(rec.get("input_tokens") or 0)
-            total_out += int(rec.get("output_tokens") or 0)
+    from evals.usage import token_totals
+
+    totals = [token_totals(rec) for rec in records]
+    total_in = sum(t["input"] for t in totals)
+    total_out = sum(t["output"] for t in totals)
 
     present = _records_have_cached_field(records)
     cached = _sum_cached(records) if present else None
     partial = _records_partial_cached_field(records)
 
     if any("a_input_tokens" in r for r in records):
-        detected_architecture = "two-pass"
+        detected_architecture = "classification"
     else:
         detected_architecture = "single-pass"
 

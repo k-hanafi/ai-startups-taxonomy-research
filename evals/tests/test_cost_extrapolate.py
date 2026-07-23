@@ -12,7 +12,7 @@ from evals import report as report_mod
 from evals import scoring
 
 
-def test_ladder_known_answer_two_pass_with_cache():
+def test_ladder_known_answer_classification_with_cache():
     # 1M input (500k cached) + 1M output on nano: sync in=$0.20, out=$1.25.
     # After cache: uncached 0.5M @ 0.20 = $0.10, cached 0.5M @ 0.10 = $0.05
     # → $0.15 + $1.25 = $1.40. After batch ×0.5 → $0.70.
@@ -25,7 +25,7 @@ def test_ladder_known_answer_two_pass_with_cache():
     }]
     est = ce.production_cost_from_records(records, "gpt-5.4-nano")
     assert est["available"] is True
-    assert est["assumptions"]["architecture"] == "two-pass"
+    assert est["assumptions"]["architecture"] == "classification"
     assert est["assumptions"]["n_prod"] == cfg.N_PROD_DEFAULT
     assert est["assumptions"]["cache_source"] == "measured_from_run"
 
@@ -85,6 +85,37 @@ def test_mixed_cached_field_coverage_is_unavailable():
     assert "mixed" in est["steps"]["2_cache"]["reason"].lower()
     # Must not silently treat the legacy row as a 0% cache hit.
     assert est["steps"]["2_cache"].get("cache_hit_rate") is None
+
+
+def test_token_totals_parity_scoring_vs_cost_extrapolate():
+    """Displayed cost and production projection must sum the same tokens."""
+    from evals.usage import token_totals
+
+    classification = {
+        "a_input_tokens": 100,
+        "b_input_tokens": 200,
+        "a_output_tokens": 10,
+        "b_output_tokens": 40,
+        "a_reasoning_tokens": 0,
+        "b_reasoning_tokens": 5,
+        "a_cached_tokens": 20,
+        "b_cached_tokens": 30,
+    }
+    single = {
+        "input_tokens": 300,
+        "output_tokens": 50,
+        "reasoning_tokens": 5,
+        "cached_tokens": 50,
+    }
+    assert token_totals(classification) == token_totals(single)
+    assert scoring._record_tokens(classification) == token_totals(classification)
+
+    est = ce.production_cost_from_records([classification], "gpt-5.4-nano")
+    cost = scoring.cost_and_tokens([classification], "gpt-5.4-nano")
+    assert est["steps"]["1_golden_sync"]["total_input_tokens"] == cost["total_input_tokens"]
+    assert est["steps"]["1_golden_sync"]["total_output_tokens"] == cost["total_output_tokens"]
+    assert est["steps"]["1_golden_sync"]["total_usd"] == pytest.approx(cost["total_usd"])
+    assert est["steps"]["2_cache"]["total_cached_tokens"] == cost["total_cached_tokens"]
 
 
 def test_format_cost_ladder_mentions_assumptions():
