@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alive vs Dead: survivorship-corrected V1 classification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+:root {
+  --bg: #ffffff;
+  --bg2: #ffffff;
+  --bg3: #f8f9fb;
+  --border: #e5e7eb;
+  --border2: #d1d5db;
+  --text: #1a1a1a;
+  --text2: #4a4a4a;
+  --muted: #8a8a8a;
+  --navy: #1e2a4a;
+  --navy-light: #f0f2f7;
+  --indigo: #4f46e5;
+  --indigo-light: #eef2ff;
+  --indigo-border: #c7d2fe;
+  --emerald: #059669;
+  --emerald-light: #ecfdf5;
+  --amber: #d97706;
+  --amber-light: #fffbeb;
+  --rose: #e11d48;
+  --rose-light: #fff1f2;
+  --cyan: #0891b2;
+  --violet: #7c3aed;
+  --slate: #475569;
+  --serif: 'Cormorant Garamond', Georgia, serif;
+  --sans: 'Inter', -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { font-family: var(--sans); background: var(--bg); color: var(--text); line-height: 1.7; font-size: 15px; }
+::selection { background: var(--navy); color: white; }
+
+.preview-banner {
+  position: sticky; top: 0; z-index: 200;
+  background: #b45309; color: #ffffff;
+  padding: 0.8rem 1.5rem; text-align: center;
+  font-size: 0.85rem; font-weight: 600; letter-spacing: 0.02em;
+  border-bottom: 3px solid #92400e;
+}
+.preview-banner code { font-family: var(--mono); font-size: 0.8rem; background: rgba(0,0,0,0.18); padding: 0.05rem 0.35rem; border-radius: 4px; }
+
+nav {
+  position: fixed; top: 0; left: 0; height: 100vh; width: 216px;
+  padding: 2.25rem 1.75rem; background: #000000; border-right: 1px solid rgba(255,255,255,0.08);
+  z-index: 100; display: flex; flex-direction: column; overflow-y: auto;
+}
+.nav-brand { font-family: var(--serif); font-size: 1rem; font-weight: 600; color: #ffffff; margin-bottom: 0.2rem; }
+.nav-sub { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.5); margin-bottom: 2.5rem; }
+.nav-section { margin-bottom: 1.5rem; }
+.nav-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(255,255,255,0.4); margin-bottom: 0.55rem; }
+nav ul { list-style: none; }
+nav ul li { margin-bottom: 0.3rem; }
+nav ul a { color: rgba(255,255,255,0.65); text-decoration: none; font-size: 0.8rem; display: block; padding: 0.15rem 0; transition: color 0.15s; }
+nav ul a:hover, nav ul a.active { color: #ffffff; font-weight: 500; }
+.nav-meta { margin-top: auto; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1); }
+.nav-meta p { font-size: 0.7rem; color: rgba(255,255,255,0.45); line-height: 1.6; }
+.nav-meta strong { color: rgba(255,255,255,0.7); }
+
+main { margin-left: 216px; }
+section {
+  padding: 5rem 4.5rem; max-width: 1100px;
+  border-bottom: 1px solid var(--border);
+  opacity: 0; transform: translateY(20px);
+  transition: opacity 0.65s ease, transform 0.65s ease;
+}
+section.visible { opacity: 1; transform: translateY(0); }
+section:last-of-type { border-bottom: none; }
+
+.section-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--navy); font-weight: 600; margin-bottom: 0.85rem; display: block; }
+h1 { font-family: var(--serif); font-size: clamp(2.2rem, 4vw, 3rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.4rem; color: var(--navy); }
+h2 { font-family: var(--serif); font-size: clamp(1.6rem, 2.8vw, 2rem); font-weight: 400; line-height: 1.2; margin-bottom: 0.85rem; color: var(--navy); }
+h3 { font-family: var(--serif); font-size: 1.2rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--navy); }
+p { color: var(--text2); font-size: 0.9rem; max-width: 720px; margin-bottom: 1.1rem; line-height: 1.75; }
+p:last-child { margin-bottom: 0; }
+
+.hero-metrics {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem;
+  margin: 2rem 0 1.5rem;
+}
+.hero-metrics.cols4 { grid-template-columns: repeat(4, 1fr); }
+.hero-metrics.cols3 { grid-template-columns: repeat(3, 1fr); }
+.metric-card {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 1.25rem 1.3rem; text-align: center;
+  transition: box-shadow 0.2s;
+}
+.metric-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+.metric-card.hl { border-color: var(--indigo-border); background: var(--indigo-light); }
+.metric-card.ok { border-color: #a7f3d0; background: var(--emerald-light); }
+.metric-card.bad { border-color: #fecdd3; background: var(--rose-light); }
+.mc-val { font-family: var(--serif); font-size: 2.2rem; line-height: 1; margin-bottom: 0.25rem; color: var(--navy); }
+.metric-card.hl .mc-val { color: var(--indigo); }
+.metric-card.ok .mc-val { color: var(--emerald); }
+.metric-card.bad .mc-val { color: var(--rose); }
+.mc-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.3rem; }
+.mc-ctx { font-size: 0.75rem; color: var(--muted); }
+
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 2rem 0; }
+.chart-row.single { grid-template-columns: 1fr; }
+.chart-box {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+  overflow: hidden;
+}
+.chart-box-header { padding: 1.1rem 1.4rem 0.75rem; border-bottom: 1px solid var(--border); }
+.chart-box-title { font-family: var(--serif); font-size: 1.05rem; font-weight: 600; color: var(--navy); margin-bottom: 0.3rem; }
+.chart-box-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
+.chart-body { padding: 0.5rem 0.5rem; }
+
+.insight { padding: 1.1rem 1.4rem; border-radius: 8px; margin: 1.5rem 0; font-size: 0.85rem; line-height: 1.7; }
+.insight p { font-size: 0.85rem; max-width: none; margin-bottom: 0.35rem; }
+.insight p:last-child { margin-bottom: 0; }
+.insight-blue { background: var(--indigo-light); border: 1px solid var(--indigo-border); color: var(--text2); }
+.insight-blue strong { color: #3730a3; }
+.insight-amber { background: var(--amber-light); border: 1px solid #fde68a; color: var(--text2); }
+.insight-amber strong { color: #92400e; }
+.insight-green { background: var(--emerald-light); border: 1px solid #a7f3d0; color: var(--text2); }
+.insight-green strong { color: #065f46; }
+
+.filter-bar {
+  display: flex; align-items: center; gap: 1.5rem;
+  padding: 0.85rem 1.4rem; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 8px; margin: 1.5rem 0; flex-wrap: wrap;
+}
+.filter-bar label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--navy); }
+.filter-bar .pill-group { display: flex; gap: 0; }
+.pill-btn {
+  font-family: var(--mono); font-size: 0.7rem; padding: 0.35rem 0.85rem;
+  border: 1px solid var(--border); background: var(--bg2); color: var(--text2);
+  cursor: pointer; transition: all 0.15s;
+}
+.pill-btn:first-child { border-radius: 5px 0 0 5px; }
+.pill-btn:last-child { border-radius: 0 5px 5px 0; }
+.pill-btn:not(:last-child) { border-right: none; }
+.pill-btn.active { background: var(--navy); color: white; border-color: var(--navy); }
+
+.slider-group { display: flex; align-items: center; gap: 0.6rem; }
+.slider-group input[type=range] { width: 120px; accent-color: var(--navy); }
+.slider-val { font-family: var(--mono); font-size: 0.75rem; color: var(--navy); font-weight: 600; min-width: 20px; }
+
+.methods-box {
+  background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px;
+  padding: 1.5rem 1.75rem; margin: 2rem 0;
+}
+.methods-box h3 { margin-bottom: 0.8rem; }
+.methods-box ol { margin-left: 1.2rem; }
+.methods-box li { color: var(--text2); font-size: 0.85rem; line-height: 1.7; margin-bottom: 0.55rem; }
+
+footer {
+  padding: 2.5rem 4.5rem; text-align: center; color: var(--muted);
+  font-size: 0.75rem; border-top: 1px solid var(--border); margin-left: 216px;
+  line-height: 1.8;
+}
+footer strong { color: var(--text2); }
+
+@media (max-width: 1100px) {
+  nav { display: none; } main { margin-left: 0; } section { padding: 3rem 1.5rem; }
+  .hero-metrics, .hero-metrics.cols4, .hero-metrics.cols3 { grid-template-columns: repeat(2, 1fr); }
+  .chart-row { grid-template-columns: 1fr; }
+  footer { margin-left: 0; padding: 2rem 1.5rem; }
+}
+@media print {
+  section { opacity: 1 !important; transform: none !important; }
+  nav { display: none; } main { margin-left: 0; }
+  .preview-banner { position: static; }
+}
+</style>
+</head>
+<body>
+
+<div class="preview-banner">PREVIEW BUILD: dead-cohort verdicts are still metadata-only stand-ins. The evidence-based dead classifications have not landed yet. Every dead-side number on this page is provisional and refreshes automatically once <code>survivorship_corrected.csv</code> exists (re-run the builder).</div>
+
+<nav>
+  <div class="nav-brand">Alive vs Dead</div>
+  <div class="nav-sub">Survivorship-corrected V1</div>
+  <div class="nav-section">
+    <div class="nav-label">Corrected baseline</div>
+    <ul>
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#landscape">AI-Native Landscape</a></li>
+      <li><a href="#rad">RAD Score Analysis</a></li>
+      <li><a href="#cohorts">Cohort Dynamics</a></li>
+      <li><a href="#confidence">Confidence Audit</a></li>
+    </ul>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Survivorship</div>
+    <ul>
+      <li><a href="#act1">1. The Bias Exists</a></li>
+      <li><a href="#act2">2. Who Dies</a></li>
+      <li><a href="#act3">3. Why They Die</a></li>
+      <li><a href="#act4">4. Robustness</a></li>
+    </ul>
+  </div>
+  <div class="nav-meta">
+    <p><strong>Universe</strong><br>41,023 companies<br>21,990 alive &middot; 19,033 dead</p>
+    <p style="margin-top:0.75rem;"><strong>Evidence</strong><br>Live Tavily crawl vs<br>pre-death archive snapshot</p>
+    <p style="margin-top:0.75rem;"><strong>Dead verdicts</strong><br>PREVIEW (provisional)</p>
+  </div>
+</nav>
+
+<main>
+
+<section id="overview">
+  <span class="section-label">Evidence-Only Universe</span>
+  <h1>Alive vs Dead: the Survivorship-Corrected Landscape</h1>
+  <p>
+    Every company on this dashboard was classified from <strong>real website evidence</strong>.
+    The alive cohort (21,990) is every company whose live site Tavily successfully
+    scraped. The dead cohort (19,033) is every company whose site is gone but whose
+    pre-death homepage was recovered from the Internet Archive and run through the
+    <strong>unchanged V1 classifier</strong>. Metadata-only classifications appear nowhere below:
+    the only thing that differs between the two cohorts is where the evidence came from.
+  </p>
+
+  <div class="hero-metrics">
+    <div class="metric-card hl">
+      <div class="mc-label">Universe</div>
+      <div class="mc-val">41,023</div>
+      <div class="mc-ctx">evidence-classified companies</div>
+    </div>
+    <div class="metric-card ok">
+      <div class="mc-label">Alive</div>
+      <div class="mc-val">21,990</div>
+      <div class="mc-ctx">live Tavily crawl</div>
+    </div>
+    <div class="metric-card bad">
+      <div class="mc-label">Dead</div>
+      <div class="mc-val">19,033</div>
+      <div class="mc-ctx">pre-death archive snapshot</div>
+    </div>
+    <div class="metric-card">
+      <div class="mc-label">Corrected AI-native rate</div>
+      <div class="mc-val">10.7%</div>
+      <div class="mc-ctx">-4.9 pts vs alive-only view</div>
+    </div>
+    <div class="metric-card">
+      <div class="mc-label">Median confidence</div>
+      <div class="mc-val">4</div>
+      <div class="mc-ctx">conf_classification (1&ndash;5)</div>
+    </div>
+  </div>
+
+  <div class="insight insight-blue">
+    <p><strong>Reading "dead".</strong> Dead means the live site could not be extracted today: a strong
+    proxy for failure, not a death certificate. Act 4 shows the findings hold on a strict subset
+    (site confirmed offline, non-thin archive history), and prints every other caveat that matters.</p>
+  </div>
+</section>
+
+<section id="landscape">
+  <span class="section-label">01. Landscape</span>
+  <h2>The AI-Native Startup Landscape, Corrected</h2>
+  <p>
+    In the corrected universe, <strong>10.7%</strong> (4,400) of
+    41,023 companies are AI-native. Thin and thick LLM wrappers are explicit subclasses
+    (1C and 1D) on the AI-native side; most non-AI-native companies fall into traditional tech (0A)
+    or non-tech (0C), with 0B capturing AI-augmented businesses.
+    Use the Evidence filter to see how the alive and dead cohorts differ.
+  </p>
+
+  <div class="filter-bar">
+    <label>Evidence</label>
+    <div class="pill-group" id="evidence-filter">
+      <button class="pill-btn active" data-val="ALL">All</button>
+      <button class="pill-btn" data-val="LIVE">Alive</button>
+      <button class="pill-btn" data-val="DEAD">Dead</button>
+    </div>
+    <label>Cohort</label>
+    <div class="pill-group" id="cohort-filter">
+      <button class="pill-btn active" data-val="ALL">All</button>
+      <button class="pill-btn" data-val="PRE-GENAI">PRE-GENAI</button>
+      <button class="pill-btn" data-val="GENAI-ERA">GENAI-ERA</button>
+    </div>
+    <label style="margin-left:auto;">Min Confidence</label>
+    <div class="slider-group">
+      <input type="range" id="conf-slider" min="1" max="5" value="1" step="1">
+      <span class="slider-val" id="conf-slider-val">1</span>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Subclass Distribution</div>
+        <div class="chart-box-desc">All 10 subclasses by count, filterable by evidence source, founding cohort, and confidence</div>
+      </div>
+      <div class="chart-body"><div id="chart-subclass" style="height:480px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">AI-Native Rate by Cohort</div>
+        <div class="chart-box-desc">PRE-GENAI vs GENAI-ERA, corrected universe</div>
+      </div>
+      <div class="chart-body"><div id="chart-ai-rate-cohort" style="height:360px;"></div></div>
+    </div>
+  </div>
+
+  <div class="insight insight-blue">
+    <p><strong>GENAI-ERA AI-native rate: 36.83%.</strong>
+    PRE-GENAI: 8.19%.
+    Post-2023 startups are dramatically more likely to build AI as the core product mechanism,
+    and that holds after adding the dead back in.</p>
+  </div>
+</section>
+
+<section id="rad">
+  <span class="section-label">02. Dependency</span>
+  <h2>RAD Score Analysis</h2>
+  <p>
+    4,393 companies in the
+    corrected universe carry a meaningful RAD score (excluding RAD-NA). Most are <strong>RAD-H</strong>:
+    structurally dependent on third-party GenAI APIs.
+  </p>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">RAD Score Distribution</div>
+        <div class="chart-box-desc">Structural dependency on third-party GenAI, corrected universe</div>
+      </div>
+      <div class="chart-body"><div id="chart-rad" style="height:360px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Subclass &times; RAD Heatmap</div>
+        <div class="chart-box-desc">Which subclasses are most API-dependent?</div>
+      </div>
+      <div class="chart-body"><div id="chart-heatmap" style="height:520px;"></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="cohorts">
+  <span class="section-label">03. Temporal</span>
+  <h2>Cohort Dynamics</h2>
+  <p>
+    GPT-4 launched March 2023; that is the cohort boundary. 3,633
+    companies (8.9%) in the corrected universe were founded after it.
+  </p>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Subclass Distribution by Cohort</div>
+        <div class="chart-box-desc">Which subclasses are new vs established?</div>
+      </div>
+      <div class="chart-body"><div id="chart-subclass-cohort" style="height:480px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">RAD Score by Cohort</div>
+        <div class="chart-box-desc">Are GENAI-ERA startups more API-dependent?</div>
+      </div>
+      <div class="chart-body"><div id="chart-rad-cohort" style="height:360px;"></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="confidence">
+  <span class="section-label">04. Data Quality</span>
+  <h2>Confidence &amp; Data Quality Audit</h2>
+  <p>
+    Distributions of <code>conf_classification</code> and <code>conf_rad</code> (1&ndash;5) across the
+    corrected universe, and mean classification confidence by subclass. The alive-vs-dead confidence
+    comparison lives in the Survivorship section (Act 4), where its evidence caveat is printed with it.
+  </p>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Classification Confidence Distribution</div>
+        <div class="chart-box-desc">conf_classification values 1&ndash;5 across all rows</div>
+      </div>
+      <div class="chart-body"><div id="chart-conf-class" style="height:380px;"></div></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">RAD Confidence Distribution</div>
+        <div class="chart-box-desc">conf_rad values 1&ndash;5 (excluding null/RAD-NA)</div>
+      </div>
+      <div class="chart-body"><div id="chart-conf-rad" style="height:380px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Confidence by Subclass</div>
+        <div class="chart-box-desc">Which categories are hardest to classify?</div>
+      </div>
+      <div class="chart-body"><div id="chart-conf-subclass" style="height:420px;"></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="act1">
+  <span class="section-label">Survivorship &middot; Act 1</span>
+  <h2>The Bias Exists</h2>
+  <p>
+    Any dataset built from live websites can only see companies that are still alive. If the dead
+    differ systematically from the living, every headline number inherits that bias. Here is the
+    direct measurement: the AI-native rate and full composition of the ecosystem, with and without
+    the recovered dead.
+  </p>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Headline correction: AI-native rate</div>
+        <div class="chart-box-desc">Biased = evidence-based alive only. Corrected = alive + evidence-based dead. Error bars are Wilson 95% CIs</div>
+      </div>
+      <div class="chart-body"><div id="chart-correction-rate" style="height:320px;"></div></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Composition before and after</div>
+        <div class="chart-box-desc">100% stacked subclass share, biased vs corrected</div>
+      </div>
+      <div class="chart-body"><div id="chart-composition" style="height:320px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Which subclasses gain or lose share after correction</div>
+        <div class="chart-box-desc">Corrected share minus biased share, in percentage points</div>
+      </div>
+      <div class="chart-body"><div id="chart-share-shift" style="height:400px;"></div></div>
+    </div>
+  </div>
+
+  <div class="insight insight-blue">
+    <p><strong>The survivor lens misstates the AI-native rate by 4.9 points</strong>
+    (15.6% biased vs 10.7% corrected). Flip analysis runs once the evidence-based verdicts land: it will quantify how often recovered evidence overturns a metadata-only label.</p>
+  </div>
+</section>
+
+<section id="act2">
+  <span class="section-label">Survivorship &middot; Act 2</span>
+  <h2>Who Dies</h2>
+  <p>
+    The composition shift in Act 1 comes from somewhere: certain kinds of companies die more.
+    This act compares the alive and dead cohorts directly: by subclass, by foundation-model
+    dependency (RAD), by founding era, by vertical, and by funding.
+  </p>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Subclass distribution: alive vs dead</div>
+        <div class="chart-box-desc">Share of each cohort. Stars mark BH-adjusted significant differences (two-proportion z-tests, alpha 0.05, 10 comparisons)</div>
+      </div>
+      <div class="chart-body"><div id="chart-subclass-survival" style="height:380px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Subclass over-representation among the dead</div>
+        <div class="chart-box-desc">Lift = dead share / alive share. Above 1.0 (red) means the genre dies more</div>
+      </div>
+      <div class="chart-body"><div id="chart-lift" style="height:320px;"></div></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Mortality by defensibility group</div>
+        <div class="chart-box-desc">Commoditizable (1C,1G) vs defensible (1A,1B,1E) vs other AI vs not AI</div>
+      </div>
+      <div class="chart-body"><div id="chart-mort-group" style="height:320px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Mortality by subclass</div>
+        <div class="chart-box-desc">Every taxonomy genre, dead / (dead + alive)</div>
+      </div>
+      <div class="chart-body"><div id="chart-mort-subclass" style="height:380px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Mortality by RAD score</div>
+        <div class="chart-box-desc">Among AI-native firms: does dependency track death?</div>
+      </div>
+      <div class="chart-body"><div id="chart-mort-rad" style="height:260px;"></div></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Mortality by founding era</div>
+        <div class="chart-box-desc">Raw rates; GENAI-ERA firms are younger, so this mostly measures exposure time (the regression controls for it)</div>
+      </div>
+      <div class="chart-body"><div id="chart-mort-era" style="height:260px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">AI-native mortality by vertical</div>
+        <div class="chart-box-desc">Primary category group, busiest verticals, descriptive only (small cells)</div>
+      </div>
+      <div class="chart-body"><div id="chart-vertical" style="height:320px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Funding distribution by survival status</div>
+        <div class="chart-box-desc">Share of each cohort per funding bucket. "unknown" is kept explicit: Crunchbase funding is unknown-heavy</div>
+      </div>
+      <div class="chart-body"><div id="chart-funding-share" style="height:320px;"></div></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Mortality by funding bucket</div>
+        <div class="chart-box-desc">Money buys survival time</div>
+      </div>
+      <div class="chart-body"><div id="chart-funding-mort" style="height:320px;"></div></div>
+    </div>
+  </div>
+
+  <div class="insight insight-green">
+    <p><strong>Dependency tracks death.</strong> RAD-H firms die at <strong>29.0%</strong> versus <strong>11.5%</strong> for RAD-L.
+    AI-native rate among the dead: 5.1% vs 15.6% among the living.
+    BH-significant subclasses at alpha 0.05: <strong>1B, 1C, 1D, 1E, 1F, 0A, 0B, 0C</strong> (omnibus chi-square p = 0.00e+00).</p>
+  </div>
+</section>
+
+<section id="act3">
+  <span class="section-label">Survivorship &middot; Act 3</span>
+  <h2>Why They Die</h2>
+  <p>
+    Raw mortality gaps can hide confounders: maybe AI firms are just younger, or worse funded, or
+    clustered in dying verticals. Two logistic models predict death directly. Markers are odds
+    ratios, bars are 95% confidence intervals: red = risk factor, green = protective,
+    gray = not significant. The dotted line at 1.0 is no effect.
+  </p>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Model 1: death across the full universe</div>
+        <div class="chart-box-desc">Outcome death=1. Predictors: AI-native, log funding, founding era, top verticals</div>
+      </div>
+      <div class="chart-body"><div id="chart-forest1" style="height:340px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Model 2: death among AI-native firms</div>
+        <div class="chart-box-desc">RAD level (vs RAD-L) and defensibility group (vs commoditizable), controlling for funding and era</div>
+      </div>
+      <div class="chart-body"><div id="chart-forest2" style="height:340px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single" id="forest3-box">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Model 3: funding &times; RAD interaction</div>
+        <div class="chart-box-desc">Does funding buffer high dependency? Shown only when the interaction model converges</div>
+      </div>
+      <div class="chart-body"><div id="chart-forest3" style="height:340px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">The dependency trap: funding &times; RAD mortality</div>
+        <div class="chart-box-desc">Darker red is deadlier. Cell labels show mortality and n</div>
+      </div>
+      <div class="chart-body"><div id="chart-trap" style="height:360px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Deaths over time vs model releases</div>
+        <div class="chart-box-desc">Last Wayback capture as the death anchor; exploratory and bounded by archive coverage</div>
+      </div>
+      <div class="chart-body"><div id="chart-temporal" style="height:360px;"></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="act4">
+  <span class="section-label">Survivorship &middot; Act 4</span>
+  <h2>Robustness and Honest Limits</h2>
+  <p>
+    The comparison is only as good as its weakest evidence. This act stress-tests the findings:
+    confidence quality, archive thinness, snapshot staleness, the strict dead definition, and the
+    coverage funnel showing exactly who is still missing.
+  </p>
+
+  <div class="chart-row single">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Classification confidence: alive vs dead</div>
+        <div class="chart-box-desc">Share of each cohort at each confidence level. CAVEAT: dead evidence is one archived homepage vs a multi-page live crawl, so a confidence gap partly reflects evidence quality, not company quality</div>
+      </div>
+      <div class="chart-body"><div id="chart-conf-survival" style="height:300px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Dead AI-native rate by archive thickness</div>
+        <div class="chart-box-desc">Companies with thin Wayback history vs regular archives</div>
+      </div>
+      <div class="chart-body"><div id="chart-thin" style="height:300px;"></div></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Dead AI-native rate by snapshot age</div>
+        <div class="chart-box-desc">Days between the classified snapshot and the death anchor</div>
+      </div>
+      <div class="chart-body"><div id="chart-age" style="height:300px;"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Strict dead definition</div>
+        <div class="chart-box-desc">AI-native rate: alive vs dead vs strict subset (site confirmed offline, non-thin history, n=7,286)</div>
+      </div>
+      <div class="chart-body"><div id="chart-strict" style="height:300px;"></div></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-box-header">
+        <div class="chart-box-title">Coverage funnel: who is still missing</div>
+        <div class="chart-box-desc">From 22,002 not-found companies to the evidence-classified dead cohort</div>
+      </div>
+      <div class="chart-body"><div id="chart-funnel" style="height:300px;"></div></div>
+    </div>
+  </div>
+
+  <div class="methods-box">
+    <h3>Methods and caveats (read before citing)</h3>
+    <ol>
+      <li><strong>"Dead" is a proxy.</strong> It means the live site could not be extracted today,
+      not that the company legally dissolved. The strict subset above shows the headline is robust
+      to a harsher definition.</li>
+      <li><strong>Evidence asymmetry.</strong> Dead companies are judged on a single archived
+      homepage; alive companies on a multi-page live crawl. Confidence and richness gaps partly
+      reflect this, and the classifier itself is identical on both sides.</li>
+      <li><strong>Temporal asymmetry.</strong> Dead companies are seen as of their pre-death
+      snapshot; alive companies as of today. Founding era is controlled in the regressions to
+      absorb part of this.</li>
+      <li><strong>Residual bias remains.</strong> 2958 not-found
+      companies have no usable archive at all, and they skew small and short-lived. The measured
+      correction is therefore a lower bound on the true survivorship bias.</li>
+      <li><strong>Funding is Crunchbase-reported</strong> and unknown-heavy; funding charts keep an
+      explicit "unknown" bucket rather than silently dropping rows.</li>
+      <li><strong>Cohort is a classifier output</strong> derived from founding date, not an
+      independent measurement.</li>
+      <li><strong>Statistics.</strong> Subclass stars are two-proportion z-tests with a
+      Benjamini-Hochberg correction across 10 comparisons at alpha 0.05; headline rates carry
+      Wilson 95% intervals; regressions are logistic with 95% CIs on odds ratios.</li>
+    </ol>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <strong>Classifier:</strong> V1 (gpt-5.4-nano, identical on both cohorts) &nbsp;&middot;&nbsp;
+  <strong>Universe:</strong> evidence-only (41,023 companies) &nbsp;&middot;&nbsp;
+  <strong>Dead verdicts:</strong> PREVIEW (provisional) &nbsp;&middot;&nbsp;
+  <strong>Generated:</strong> Jul 23, 2026
+  <br>
+  Regenerate with build_v1_alive_dead_dashboard.py. Dead-side numbers switch to evidence-based
+  automatically once survivorship_corrected.csv exists.
+</footer>
+
+<script>
+
+const MB = {"total": 41023, "ai_native_count": 4400, "ai_native_pct": 10.7, "genai_era_count": 3633, "genai_era_pct": 8.9, "median_conf": 4.0, "low_conf_count": 11418, "low_conf_pct": 27.8, "subclass_counts": {"1A": 73, "1B": 494, "1C": 132, "1D": 841, "1E": 2354, "1F": 392, "1G": 103, "0A": 33156, "0B": 209, "0C": 3269}, "rad_counts": {"RAD-H": 2115, "RAD-M": 2078, "RAD-L": 200, "RAD-NA": 36630}, "cohort_counts": {"PRE-GENAI": 37390, "GENAI-ERA": 3633}, "subclass_by_cohort": {"PRE-GENAI": {"1A": 52, "1B": 332, "1C": 85, "1D": 573, "1E": 1728, "1F": 208, "1G": 78, "0A": 31008, "0B": 190, "0C": 3136}, "GENAI-ERA": {"1A": 21, "1B": 162, "1C": 47, "1D": 268, "1E": 626, "1F": 184, "1G": 25, "0A": 2148, "0B": 19, "0C": 133}}, "ai_rate_by_cohort": {"PRE-GENAI": 8.19, "GENAI-ERA": 36.83}, "rad_by_cohort": {"PRE-GENAI": {"RAD-H": 1225, "RAD-M": 1670, "RAD-L": 163, "RAD-NA": 34332}, "GENAI-ERA": {"RAD-H": 890, "RAD-M": 408, "RAD-L": 37, "RAD-NA": 2298}}, "heatmap": {"1A": {"RAD-H": 20, "RAD-M": 24, "RAD-L": 29, "RAD-NA": 0}, "1B": {"RAD-H": 457, "RAD-M": 32, "RAD-L": 5, "RAD-NA": 0}, "1C": {"RAD-H": 132, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 0}, "1D": {"RAD-H": 259, "RAD-M": 530, "RAD-L": 52, "RAD-NA": 0}, "1E": {"RAD-H": 935, "RAD-M": 1332, "RAD-L": 87, "RAD-NA": 0}, "1F": {"RAD-H": 219, "RAD-M": 156, "RAD-L": 17, "RAD-NA": 0}, "1G": {"RAD-H": 89, "RAD-M": 4, "RAD-L": 10, "RAD-NA": 0}, "0A": {"RAD-H": 4, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 33152}, "0B": {"RAD-H": 0, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 209}, "0C": {"RAD-H": 0, "RAD-M": 0, "RAD-L": 0, "RAD-NA": 3269}}, "conf_class_dist": {"1": 3731, "2": 7687, "3": 3385, "4": 11812, "5": 14408}, "conf_rad_dist": {"1": 108, "2": 1349, "3": 2046, "4": 747, "5": 13}, "conf_by_subclass": {"1A": {"median": 4.0, "q1": 3.0, "q3": 4.0, "mean": 3.63, "count": 73}, "1B": {"median": 4.0, "q1": 3.0, "q3": 4.0, "mean": 3.45, "count": 494}, "1C": {"median": 2.0, "q1": 2.0, "q3": 3.0, "mean": 2.51, "count": 132}, "1D": {"median": 3.0, "q1": 3.0, "q3": 4.0, "mean": 3.19, "count": 841}, "1E": {"median": 4.0, "q1": 3.0, "q3": 4.0, "mean": 3.49, "count": 2354}, "1F": {"median": 4.0, "q1": 3.0, "q3": 4.0, "mean": 3.74, "count": 392}, "1G": {"median": 4.0, "q1": 2.0, "q3": 4.0, "mean": 3.39, "count": 103}, "0A": {"median": 4.0, "q1": 2.0, "q3": 5.0, "mean": 3.58, "count": 33156}, "0B": {"median": 2.0, "q1": 2.0, "q3": 3.0, "mean": 2.35, "count": 209}, "0C": {"median": 5.0, "q1": 4.0, "q3": 5.0, "mean": 4.39, "count": 3269}}};
+const MS = {"meta": {"preview": true, "gpt4_launch": "2023-03-14", "n_total": 44386, "n_universe": 41023, "n_survivor": 21990, "n_dead": 19033, "n_dead_recovered": 0, "n_dead_strict": 7286, "n_excluded": 3363}, "correction": {"biased": {"ai_native": {"n": 21990, "ai_native": 3424, "rate": 15.6, "ci": {"lo": 15.1, "hi": 16.06}}, "subclass": {"n": 21990, "counts": {"1A": 45, "1B": 342, "1C": 45, "1D": 652, "1E": 1949, "1F": 328, "1G": 61, "0A": 18459, "0B": 39, "0C": 70}, "share": {"1A": 0.2, "1B": 1.6, "1C": 0.2, "1D": 3.0, "1E": 8.9, "1F": 1.5, "1G": 0.3, "0A": 83.9, "0B": 0.2, "0C": 0.3}}, "rad": {"n": 21990, "counts": {"RAD-H": 1502, "RAD-M": 1744, "RAD-L": 177, "RAD-NA": 18567}, "share": {"RAD-H": 6.8, "RAD-M": 7.9, "RAD-L": 0.8, "RAD-NA": 84.4}}}, "corrected": {"ai_native": {"n": 41023, "ai_native": 4400, "rate": 10.7, "ci": {"lo": 10.43, "hi": 11.03}}, "subclass": {"n": 41023, "counts": {"1A": 73, "1B": 494, "1C": 132, "1D": 841, "1E": 2354, "1F": 392, "1G": 103, "0A": 33156, "0B": 209, "0C": 3269}, "share": {"1A": 0.2, "1B": 1.2, "1C": 0.3, "1D": 2.1, "1E": 5.7, "1F": 1.0, "1G": 0.3, "0A": 80.8, "0B": 0.5, "0C": 8.0}}, "rad": {"n": 41023, "counts": {"RAD-H": 2115, "RAD-M": 2078, "RAD-L": 200, "RAD-NA": 36630}, "share": {"RAD-H": 5.2, "RAD-M": 5.1, "RAD-L": 0.5, "RAD-NA": 89.3}}}}, "ai_vs_survival": {"ai_rate": {"survivor": {"n": 21990, "ai_native": 3424, "rate": 15.6, "ci": {"lo": 15.1, "hi": 16.06}}, "dead": {"n": 19033, "ai_native": 976, "rate": 5.1, "ci": {"lo": 4.82, "hi": 5.45}}, "dead_strict": {"n": 7286, "ai_native": 331, "rate": 4.5, "ci": {"lo": 4.09, "hi": 5.05}}}, "subclass_survivor": {"n": 21990, "counts": {"1A": 45, "1B": 342, "1C": 45, "1D": 652, "1E": 1949, "1F": 328, "1G": 61, "0A": 18459, "0B": 39, "0C": 70}, "share": {"1A": 0.2, "1B": 1.6, "1C": 0.2, "1D": 3.0, "1E": 8.9, "1F": 1.5, "1G": 0.3, "0A": 83.9, "0B": 0.2, "0C": 0.3}}, "subclass_dead": {"n": 19033, "counts": {"1A": 28, "1B": 152, "1C": 87, "1D": 189, "1E": 405, "1F": 64, "1G": 42, "0A": 14697, "0B": 170, "0C": 3199}, "share": {"1A": 0.1, "1B": 0.8, "1C": 0.5, "1D": 1.0, "1E": 2.1, "1F": 0.3, "1G": 0.2, "0A": 77.2, "0B": 0.9, "0C": 16.8}}, "subclass_lift": [{"subclass": "1A", "survivor": 0.2, "dead": 0.1, "lift": 0.5}, {"subclass": "1B", "survivor": 1.6, "dead": 0.8, "lift": 0.5}, {"subclass": "1C", "survivor": 0.2, "dead": 0.5, "lift": 2.5}, {"subclass": "1D", "survivor": 3.0, "dead": 1.0, "lift": 0.33}, {"subclass": "1E", "survivor": 8.9, "dead": 2.1, "lift": 0.24}, {"subclass": "1F", "survivor": 1.5, "dead": 0.3, "lift": 0.2}, {"subclass": "1G", "survivor": 0.3, "dead": 0.2, "lift": 0.67}, {"subclass": "0A", "survivor": 83.9, "dead": 77.2, "lift": 0.92}, {"subclass": "0B", "survivor": 0.2, "dead": 0.9, "lift": 4.5}, {"subclass": "0C", "survivor": 0.3, "dead": 16.8, "lift": 56.0}]}, "subclass_tests": {"available": true, "alpha": 0.05, "method": "BH", "n_survivor": 21990, "n_dead": 19033, "tests": [{"subclass": "1A", "survivor_share": 0.2, "dead_share": 0.15, "delta_pp": -0.06, "pvalue": 0.16800424403280056, "k1": 45, "k2": 28, "significant": false}, {"subclass": "1B", "survivor_share": 1.56, "dead_share": 0.8, "delta_pp": -0.76, "pvalue": 2.4375203886985598e-12, "k1": 342, "k2": 152, "significant": true}, {"subclass": "1C", "survivor_share": 0.2, "dead_share": 0.46, "delta_pp": 0.25, "pvalue": 6.708662980819362e-06, "k1": 45, "k2": 87, "significant": true}, {"subclass": "1D", "survivor_share": 2.96, "dead_share": 0.99, "delta_pp": -1.97, "pvalue": 7.060833243272699e-45, "k1": 652, "k2": 189, "significant": true}, {"subclass": "1E", "survivor_share": 8.86, "dead_share": 2.13, "delta_pp": -6.74, "pvalue": 4.2976883786006256e-188, "k1": 1949, "k2": 405, "significant": true}, {"subclass": "1F", "survivor_share": 1.49, "dead_share": 0.34, "delta_pp": -1.16, "pvalue": 3.757109587591763e-33, "k1": 328, "k2": 64, "significant": true}, {"subclass": "1G", "survivor_share": 0.28, "dead_share": 0.22, "delta_pp": -0.06, "pvalue": 0.2522128286981896, "k1": 61, "k2": 42, "significant": false}, {"subclass": "0A", "survivor_share": 83.94, "dead_share": 77.22, "delta_pp": -6.72, "pvalue": 1.0849588236100954e-66, "k1": 18459, "k2": 14697, "significant": true}, {"subclass": "0B", "survivor_share": 0.18, "dead_share": 0.89, "delta_pp": 0.72, "pvalue": 3.122911335604443e-24, "k1": 39, "k2": 170, "significant": true}, {"subclass": "0C", "survivor_share": 0.32, "dead_share": 16.81, "delta_pp": 16.49, "pvalue": 0.0, "k1": 70, "k2": 3199, "significant": true}], "chi2": {"stat": 4855.35, "pvalue": 0.0, "dof": 9}}, "rad_survival": {"by_rad": [{"label": "RAD-H", "dead": 613, "survivor": 1502, "n": 2115, "mortality": 29.0}, {"label": "RAD-M", "dead": 334, "survivor": 1744, "n": 2078, "mortality": 16.1}, {"label": "RAD-L", "dead": 23, "survivor": 177, "n": 200, "mortality": 11.5}], "by_subclass": [{"label": "1A", "dead": 28, "survivor": 45, "n": 73, "mortality": 38.4}, {"label": "1B", "dead": 152, "survivor": 342, "n": 494, "mortality": 30.8}, {"label": "1C", "dead": 87, "survivor": 45, "n": 132, "mortality": 65.9}, {"label": "1D", "dead": 189, "survivor": 652, "n": 841, "mortality": 22.5}, {"label": "1E", "dead": 405, "survivor": 1949, "n": 2354, "mortality": 17.2}, {"label": "1F", "dead": 64, "survivor": 328, "n": 392, "mortality": 16.3}, {"label": "1G", "dead": 42, "survivor": 61, "n": 103, "mortality": 40.8}, {"label": "0A", "dead": 14697, "survivor": 18459, "n": 33156, "mortality": 44.3}, {"label": "0B", "dead": 170, "survivor": 39, "n": 209, "mortality": 81.3}, {"label": "0C", "dead": 3199, "survivor": 70, "n": 3269, "mortality": 97.9}], "by_subclass_group": [{"label": "Commoditizable AI", "dead": 129, "survivor": 106, "n": 235, "mortality": 54.9}, {"label": "Other AI", "dead": 253, "survivor": 980, "n": 1233, "mortality": 20.5}, {"label": "Defensible AI", "dead": 585, "survivor": 2336, "n": 2921, "mortality": 20.0}, {"label": "Not AI", "dead": 18066, "survivor": 18568, "n": 36634, "mortality": 49.3}], "by_era": [{"label": "PRE-GENAI", "dead": 17890, "survivor": 19500, "n": 37390, "mortality": 47.8}, {"label": "GENAI-ERA", "dead": 1143, "survivor": 2490, "n": 3633, "mortality": 31.5}]}, "dependency_trap": {"funding_order": ["unknown", "<$1M", "$1-10M", "$10-100M", "$100M+"], "rad_order": ["RAD-H", "RAD-M", "RAD-L"], "cells": [[{"dead": 309, "survivor": 717, "n": 1026, "mortality": 30.1}, {"dead": 161, "survivor": 758, "n": 919, "mortality": 17.5}, {"dead": 10, "survivor": 70, "n": 80, "mortality": 12.5}], [{"dead": 162, "survivor": 264, "n": 426, "mortality": 38.0}, {"dead": 55, "survivor": 246, "n": 301, "mortality": 18.3}, {"dead": 0, "survivor": 22, "n": 22, "mortality": 0.0}], [{"dead": 99, "survivor": 352, "n": 451, "mortality": 22.0}, {"dead": 70, "survivor": 474, "n": 544, "mortality": 12.9}, {"dead": 5, "survivor": 40, "n": 45, "mortality": 11.1}], [{"dead": 41, "survivor": 151, "n": 192, "mortality": 21.4}, {"dead": 40, "survivor": 245, "n": 285, "mortality": 14.0}, {"dead": 5, "survivor": 32, "n": 37, "mortality": 13.5}], [{"dead": 2, "survivor": 18, "n": 20, "mortality": 10.0}, {"dead": 8, "survivor": 21, "n": 29, "mortality": 27.6}, {"dead": 3, "survivor": 13, "n": 16, "mortality": 18.8}]]}, "funding_survival": {"shares": [{"bucket": "unknown", "survivor_share": 74.7, "dead_share": 77.1, "survivor": 16430, "dead": 14683}, {"bucket": "<$1M", "survivor_share": 7.7, "dead_share": 10.1, "survivor": 1698, "dead": 1917}, {"bucket": "$1-10M", "survivor_share": 10.7, "dead_share": 8.5, "survivor": 2360, "dead": 1612}, {"bucket": "$10-100M", "survivor_share": 5.7, "dead_share": 3.7, "survivor": 1261, "dead": 696}, {"bucket": "$100M+", "survivor_share": 1.1, "dead_share": 0.7, "survivor": 241, "dead": 125}], "mortality": [{"label": "unknown", "dead": 14683, "survivor": 16430, "n": 31113, "mortality": 47.2}, {"label": "<$1M", "dead": 1917, "survivor": 1698, "n": 3615, "mortality": 53.0}, {"label": "$1-10M", "dead": 1612, "survivor": 2360, "n": 3972, "mortality": 40.6}, {"label": "$10-100M", "dead": 696, "survivor": 1261, "n": 1957, "mortality": 35.6}, {"label": "$100M+", "dead": 125, "survivor": 241, "n": 366, "mortality": 34.2}]}, "vertical": [{"group": "Artificial Intelligence (AI)", "dead": 685, "survivor": 1595, "n": 2280, "mortality": 30.0}, {"group": "Information Technology", "dead": 33, "survivor": 241, "n": 274, "mortality": 12.0}, {"group": "Apps", "dead": 46, "survivor": 185, "n": 231, "mortality": 19.9}, {"group": "Health Care", "dead": 16, "survivor": 157, "n": 173, "mortality": 9.2}, {"group": "Software", "dead": 35, "survivor": 121, "n": 156, "mortality": 22.4}, {"group": "Administrative Services", "dead": 24, "survivor": 116, "n": 140, "mortality": 17.1}, {"group": "Data and Analytics", "dead": 16, "survivor": 124, "n": 140, "mortality": 11.4}, {"group": "Financial Services", "dead": 6, "survivor": 125, "n": 131, "mortality": 4.6}], "temporal": {"months": ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05", "2022-06", "2022-07", "2022-08", "2022-09", "2022-10", "2022-11", "2022-12", "2023-01", "2023-02", "2023-03", "2023-04", "2023-05", "2023-06", "2023-07", "2023-08", "2023-09", "2023-10", "2023-11", "2023-12", "2024-01", "2024-02", "2024-03", "2024-04", "2024-05", "2024-06", "2024-07", "2024-08", "2024-09", "2024-10", "2024-11", "2024-12", "2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"], "total": [84, 31, 67, 58, 51, 41, 42, 50, 48, 46, 30, 68, 60, 72, 167, 72, 70, 154, 32, 35, 92, 89, 57, 147, 69, 83, 125, 167, 218, 130, 193, 260, 301, 152, 197, 322, 205, 517, 1136, 772, 286, 257, 745, 424, 413, 514, 481, 632, 768, 1028, 2251, 1467, 2487, 519], "commoditizable": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 2, 1, 2, 1, 1, 1, 2, 3, 0, 1, 2, 0, 4, 1, 2, 6, 2, 3, 1, 4, 3, 6, 8, 0, 3, 19, 17, 19, 9], "defensible": [1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 2, 0, 2, 3, 0, 2, 0, 0, 2, 1, 0, 2, 1, 2, 5, 2, 4, 3, 3, 3, 6, 4, 5, 7, 5, 10, 35, 19, 13, 14, 9, 16, 17, 13, 12, 20, 24, 28, 77, 66, 108, 32], "releases": [{"month": "2022-11", "label": "ChatGPT"}, {"month": "2023-03", "label": "GPT-4"}, {"month": "2023-11", "label": "GPT-4 Turbo"}, {"month": "2024-05", "label": "GPT-4o"}]}, "confidence": {"survivor": {"n": 21990, "mean": 4.21, "median": 4.0, "dist": {"1": 522, "2": 1378, "3": 1716, "4": 7638, "5": 10736}}, "dead": {"n": 19033, "mean": 2.94, "median": 2.0, "dist": {"1": 3209, "2": 6309, "3": 1669, "4": 4174, "5": 3672}}, "dead_recovered": {"n": 0, "mean": null, "median": null, "dist": {}}}, "sensitivity": {"by_thin_history": [{"label": "thin archive", "n": 678, "ai_native": 43, "rate": 6.3, "ci": {"lo": 4.74, "hi": 8.43}}, {"label": "regular archive", "n": 18355, "ai_native": 933, "rate": 5.1, "ci": {"lo": 4.77, "hi": 5.41}}], "by_snapshot_age": [{"label": "0-30d", "n": 403, "ai_native": 24, "rate": 6.0, "ci": {"lo": 4.03, "hi": 8.71}}, {"label": "31-90d", "n": 102, "ai_native": 7, "rate": 6.9, "ci": {"lo": 3.36, "hi": 13.49}}, {"label": "91-365d", "n": 16301, "ai_native": 887, "rate": 5.4, "ci": {"lo": 5.1, "hi": 5.8}}, {"label": "365d+", "n": 2227, "ai_native": 58, "rate": 2.6, "ci": {"lo": 2.02, "hi": 3.35}}]}, "funnel": {"stages": [{"label": "Not found by Tavily", "n": 22002}, {"label": "Usable pre-death snapshot", "n": 19044}, {"label": "Classified on recovered evidence", "n": 0}], "no_archive": 2958, "extract_shortfall": 19044}, "flips": {"available": false, "reason": "preview"}, "regression": {"model1": {"available": true, "n": 41023, "pseudo_r2": 0.0346, "terms": [{"term": "C(founding_era)[T.PRE-GENAI]", "odds_ratio": 1.604, "ci_low": 1.484, "ci_high": 1.733, "pvalue": 5.808012703782258e-33}, {"term": "C(cat_grp)[T.Advertising]", "odds_ratio": 1.039, "ci_low": 0.912, "ci_high": 1.185, "pvalue": 0.562763684240799}, {"term": "C(cat_grp)[T.Apps]", "odds_ratio": 1.731, "ci_low": 1.523, "ci_high": 1.969, "pvalue": 5.551095451126912e-17}, {"term": "C(cat_grp)[T.Artificial Intelligence (AI)]", "odds_ratio": 2.81, "ci_low": 2.476, "ci_high": 3.19, "pvalue": 1.5537177974525332e-57}, {"term": "C(cat_grp)[T.Commerce and Shopping]", "odds_ratio": 1.365, "ci_low": 1.214, "ci_high": 1.534, "pvalue": 1.8315109952264536e-07}, {"term": "C(cat_grp)[T.Financial Services]", "odds_ratio": 0.892, "ci_low": 0.804, "ci_high": 0.991, "pvalue": 0.03343647570622439}, {"term": "C(cat_grp)[T.Health Care]", "odds_ratio": 0.911, "ci_low": 0.811, "ci_high": 1.024, "pvalue": 0.11820872543457212}, {"term": "C(cat_grp)[T.Information Technology]", "odds_ratio": 1.162, "ci_low": 1.028, "ci_high": 1.314, "pvalue": 0.016006132868582653}, {"term": "C(cat_grp)[T.Other]", "odds_ratio": 1.155, "ci_low": 1.052, "ci_high": 1.267, "pvalue": 0.0023758954881181794}, {"term": "ai_native_int", "odds_ratio": 0.196, "ci_low": 0.179, "ci_high": 0.216, "pvalue": 5.4308216113238254e-244}, {"term": "log_funding", "odds_ratio": 0.993, "ci_low": 0.986, "ci_high": 1.001, "pvalue": 0.08350223934968688}]}, "model2": {"available": true, "n": 4393, "pseudo_r2": 0.0501, "terms": [{"term": "C(rad_score, Treatment('RAD-L'))[T.RAD-H]", "odds_ratio": 3.211, "ci_low": 2.043, "ci_high": 5.047, "pvalue": 4.286427230659175e-07}, {"term": "C(rad_score, Treatment('RAD-L'))[T.RAD-M]", "odds_ratio": 1.614, "ci_low": 1.024, "ci_high": 2.546, "pvalue": 0.03924226134768364}, {"term": "C(subclass_group)[T.Defensible AI]", "odds_ratio": 0.274, "ci_low": 0.207, "ci_high": 0.363, "pvalue": 2.5227900983719e-19}, {"term": "C(subclass_group)[T.Not AI]", "odds_ratio": 2.575, "ci_low": 0.261, "ci_high": 25.413, "pvalue": 0.4180420245592338}, {"term": "C(subclass_group)[T.Other AI]", "odds_ratio": 0.312, "ci_low": 0.23, "ci_high": 0.423, "pvalue": 7.331817841666975e-14}, {"term": "C(founding_era)[T.PRE-GENAI]", "odds_ratio": 1.471, "ci_low": 1.243, "ci_high": 1.741, "pvalue": 7.308311161936209e-06}, {"term": "log_funding", "odds_ratio": 0.973, "ci_low": 0.952, "ci_high": 0.996, "pvalue": 0.019776223653966467}]}, "model3": {"available": true, "n": 4393, "pseudo_r2": 0.0321, "terms": [{"term": "C(rad_score, Treatment('RAD-L'))[T.RAD-H]", "odds_ratio": 3.971, "ci_low": 1.984, "ci_high": 7.949, "pvalue": 9.851769204979213e-05}, {"term": "C(rad_score, Treatment('RAD-L'))[T.RAD-M]", "odds_ratio": 1.683, "ci_low": 0.835, "ci_high": 3.391, "pvalue": 0.14510233448643228}, {"term": "C(founding_era)[T.PRE-GENAI]", "odds_ratio": 1.507, "ci_low": 1.277, "ci_high": 1.778, "pvalue": 1.2367566639752612e-06}, {"term": "log_funding", "odds_ratio": 1.005, "ci_low": 0.885, "ci_high": 1.14, "pvalue": 0.9439932215714275}, {"term": "C(rad_score, Treatment('RAD-L'))[T.RAD-H]:log_funding", "odds_ratio": 0.959, "ci_low": 0.842, "ci_high": 1.092, "pvalue": 0.5272361495715308}, {"term": "C(rad_score, Treatment('RAD-L'))[T.RAD-M]:log_funding", "odds_ratio": 0.965, "ci_low": 0.846, "ci_high": 1.1, "pvalue": 0.595725112764963}]}}};
+const FILTER_DATA = {"ALL_ALL_1": {"subclass": {"1A": 73, "1B": 494, "1C": 132, "1D": 841, "1E": 2354, "1F": 392, "1G": 103, "0A": 33156, "0B": 209, "0C": 3269}, "total": 41023, "ai_native": 4400}, "ALL_ALL_2": {"subclass": {"1A": 72, "1B": 492, "1C": 127, "1D": 839, "1E": 2351, "1F": 392, "1G": 103, "0A": 29546, "0B": 194, "0C": 3176}, "total": 37292, "ai_native": 4376}, "ALL_ALL_3": {"subclass": {"1A": 61, "1B": 399, "1C": 50, "1D": 676, "1E": 2044, "1F": 351, "1G": 75, "0A": 22876, "0B": 66, "0C": 3007}, "total": 29605, "ai_native": 3656}, "ALL_ALL_4": {"subclass": {"1A": 43, "1B": 278, "1C": 21, "1D": 320, "1E": 1426, "1F": 285, "1G": 55, "0A": 20862, "0B": 22, "0C": 2908}, "total": 26220, "ai_native": 2428}, "ALL_ALL_5": {"subclass": {"1A": 16, "1B": 41, "1C": 1, "1D": 4, "1E": 51, "1F": 48, "1G": 13, "0A": 12241, "0B": 1, "0C": 1992}, "total": 14408, "ai_native": 174}, "ALL_PRE-GENAI_1": {"subclass": {"1A": 52, "1B": 332, "1C": 85, "1D": 573, "1E": 1728, "1F": 208, "1G": 78, "0A": 31008, "0B": 190, "0C": 3136}, "total": 37390, "ai_native": 3062}, "ALL_PRE-GENAI_2": {"subclass": {"1A": 51, "1B": 330, "1C": 80, "1D": 572, "1E": 1726, "1F": 208, "1G": 78, "0A": 27748, "0B": 176, "0C": 3049}, "total": 34018, "ai_native": 3045}, "ALL_PRE-GENAI_3": {"subclass": {"1A": 40, "1B": 261, "1C": 29, "1D": 447, "1E": 1497, "1F": 178, "1G": 54, "0A": 21552, "0B": 63, "0C": 2901}, "total": 27022, "ai_native": 2506}, "ALL_PRE-GENAI_4": {"subclass": {"1A": 25, "1B": 163, "1C": 11, "1D": 171, "1E": 1004, "1F": 137, "1G": 41, "0A": 19652, "0B": 21, "0C": 2809}, "total": 24034, "ai_native": 1552}, "ALL_PRE-GENAI_5": {"subclass": {"1A": 8, "1B": 18, "1C": 1, "1D": 3, "1E": 21, "1F": 16, "1G": 10, "0A": 11530, "0B": 1, "0C": 1932}, "total": 13540, "ai_native": 77}, "ALL_GENAI-ERA_1": {"subclass": {"1A": 21, "1B": 162, "1C": 47, "1D": 268, "1E": 626, "1F": 184, "1G": 25, "0A": 2148, "0B": 19, "0C": 133}, "total": 3633, "ai_native": 1338}, "ALL_GENAI-ERA_2": {"subclass": {"1A": 21, "1B": 162, "1C": 47, "1D": 267, "1E": 625, "1F": 184, "1G": 25, "0A": 1798, "0B": 18, "0C": 127}, "total": 3274, "ai_native": 1331}, "ALL_GENAI-ERA_3": {"subclass": {"1A": 21, "1B": 138, "1C": 21, "1D": 229, "1E": 547, "1F": 173, "1G": 21, "0A": 1324, "0B": 3, "0C": 106}, "total": 2583, "ai_native": 1150}, "ALL_GENAI-ERA_4": {"subclass": {"1A": 18, "1B": 115, "1C": 10, "1D": 149, "1E": 422, "1F": 148, "1G": 14, "0A": 1210, "0B": 1, "0C": 99}, "total": 2186, "ai_native": 876}, "ALL_GENAI-ERA_5": {"subclass": {"1A": 8, "1B": 23, "1C": 0, "1D": 1, "1E": 30, "1F": 32, "1G": 3, "0A": 711, "0B": 0, "0C": 60}, "total": 868, "ai_native": 97}, "LIVE_ALL_1": {"subclass": {"1A": 45, "1B": 342, "1C": 45, "1D": 652, "1E": 1949, "1F": 328, "1G": 61, "0A": 18459, "0B": 39, "0C": 70}, "total": 21990, "ai_native": 3424}, "LIVE_ALL_2": {"subclass": {"1A": 45, "1B": 342, "1C": 45, "1D": 652, "1E": 1948, "1F": 328, "1G": 61, "0A": 17945, "0B": 37, "0C": 65}, "total": 21468, "ai_native": 3421}, "LIVE_ALL_3": {"subclass": {"1A": 44, "1B": 325, "1C": 30, "1D": 613, "1E": 1886, "1F": 315, "1G": 54, "0A": 16737, "0B": 28, "0C": 58}, "total": 20090, "ai_native": 3267}, "LIVE_ALL_4": {"subclass": {"1A": 38, "1B": 256, "1C": 20, "1D": 314, "1E": 1420, "1F": 277, "1G": 48, "0A": 15930, "0B": 17, "0C": 54}, "total": 18374, "ai_native": 2373}, "LIVE_ALL_5": {"subclass": {"1A": 16, "1B": 40, "1C": 1, "1D": 3, "1E": 51, "1F": 48, "1G": 12, "0A": 10521, "0B": 1, "0C": 43}, "total": 10736, "ai_native": 171}, "LIVE_PRE-GENAI_1": {"subclass": {"1A": 27, "1B": 221, "1C": 28, "1D": 432, "1E": 1428, "1F": 175, "1G": 46, "0A": 17044, "0B": 35, "0C": 64}, "total": 19500, "ai_native": 2357}, "LIVE_PRE-GENAI_2": {"subclass": {"1A": 27, "1B": 221, "1C": 28, "1D": 432, "1E": 1427, "1F": 175, "1G": 46, "0A": 16568, "0B": 34, "0C": 59}, "total": 19017, "ai_native": 2356}, "LIVE_PRE-GENAI_3": {"subclass": {"1A": 26, "1B": 210, "1C": 16, "1D": 404, "1E": 1377, "1F": 163, "1G": 40, "0A": 15536, "0B": 26, "0C": 53}, "total": 17851, "ai_native": 2236}, "LIVE_PRE-GENAI_4": {"subclass": {"1A": 21, "1B": 152, "1C": 10, "1D": 167, "1E": 999, "1F": 136, "1G": 36, "0A": 14820, "0B": 16, "0C": 51}, "total": 16408, "ai_native": 1521}, "LIVE_PRE-GENAI_5": {"subclass": {"1A": 8, "1B": 18, "1C": 1, "1D": 2, "1E": 21, "1F": 16, "1G": 9, "0A": 9850, "0B": 1, "0C": 41}, "total": 9967, "ai_native": 75}, "LIVE_GENAI-ERA_1": {"subclass": {"1A": 18, "1B": 121, "1C": 17, "1D": 220, "1E": 521, "1F": 153, "1G": 15, "0A": 1415, "0B": 4, "0C": 6}, "total": 2490, "ai_native": 1067}, "LIVE_GENAI-ERA_2": {"subclass": {"1A": 18, "1B": 121, "1C": 17, "1D": 220, "1E": 521, "1F": 153, "1G": 15, "0A": 1377, "0B": 3, "0C": 6}, "total": 2451, "ai_native": 1065}, "LIVE_GENAI-ERA_3": {"subclass": {"1A": 18, "1B": 115, "1C": 14, "1D": 209, "1E": 509, "1F": 152, "1G": 14, "0A": 1201, "0B": 2, "0C": 5}, "total": 2239, "ai_native": 1031}, "LIVE_GENAI-ERA_4": {"subclass": {"1A": 17, "1B": 104, "1C": 10, "1D": 147, "1E": 421, "1F": 141, "1G": 12, "0A": 1110, "0B": 1, "0C": 3}, "total": 1966, "ai_native": 852}, "LIVE_GENAI-ERA_5": {"subclass": {"1A": 8, "1B": 22, "1C": 0, "1D": 1, "1E": 30, "1F": 32, "1G": 3, "0A": 671, "0B": 0, "0C": 2}, "total": 769, "ai_native": 96}, "DEAD_ALL_1": {"subclass": {"1A": 28, "1B": 152, "1C": 87, "1D": 189, "1E": 405, "1F": 64, "1G": 42, "0A": 14697, "0B": 170, "0C": 3199}, "total": 19033, "ai_native": 976}, "DEAD_ALL_2": {"subclass": {"1A": 27, "1B": 150, "1C": 82, "1D": 187, "1E": 403, "1F": 64, "1G": 42, "0A": 11601, "0B": 157, "0C": 3111}, "total": 15824, "ai_native": 955}, "DEAD_ALL_3": {"subclass": {"1A": 17, "1B": 74, "1C": 20, "1D": 63, "1E": 158, "1F": 36, "1G": 21, "0A": 6139, "0B": 38, "0C": 2949}, "total": 9515, "ai_native": 389}, "DEAD_ALL_4": {"subclass": {"1A": 5, "1B": 22, "1C": 1, "1D": 6, "1E": 6, "1F": 8, "1G": 7, "0A": 4932, "0B": 5, "0C": 2854}, "total": 7846, "ai_native": 55}, "DEAD_ALL_5": {"subclass": {"1A": 0, "1B": 1, "1C": 0, "1D": 1, "1E": 0, "1F": 0, "1G": 1, "0A": 1720, "0B": 0, "0C": 1949}, "total": 3672, "ai_native": 3}, "DEAD_PRE-GENAI_1": {"subclass": {"1A": 25, "1B": 111, "1C": 57, "1D": 141, "1E": 300, "1F": 33, "1G": 32, "0A": 13964, "0B": 155, "0C": 3072}, "total": 17890, "ai_native": 705}, "DEAD_PRE-GENAI_2": {"subclass": {"1A": 24, "1B": 109, "1C": 52, "1D": 140, "1E": 299, "1F": 33, "1G": 32, "0A": 11180, "0B": 142, "0C": 2990}, "total": 15001, "ai_native": 689}, "DEAD_PRE-GENAI_3": {"subclass": {"1A": 14, "1B": 51, "1C": 13, "1D": 43, "1E": 120, "1F": 15, "1G": 14, "0A": 6016, "0B": 37, "0C": 2848}, "total": 9171, "ai_native": 270}, "DEAD_PRE-GENAI_4": {"subclass": {"1A": 4, "1B": 11, "1C": 1, "1D": 4, "1E": 5, "1F": 1, "1G": 5, "0A": 4832, "0B": 5, "0C": 2758}, "total": 7626, "ai_native": 31}, "DEAD_PRE-GENAI_5": {"subclass": {"1A": 0, "1B": 0, "1C": 0, "1D": 1, "1E": 0, "1F": 0, "1G": 1, "0A": 1680, "0B": 0, "0C": 1891}, "total": 3573, "ai_native": 2}, "DEAD_GENAI-ERA_1": {"subclass": {"1A": 3, "1B": 41, "1C": 30, "1D": 48, "1E": 105, "1F": 31, "1G": 10, "0A": 733, "0B": 15, "0C": 127}, "total": 1143, "ai_native": 271}, "DEAD_GENAI-ERA_2": {"subclass": {"1A": 3, "1B": 41, "1C": 30, "1D": 47, "1E": 104, "1F": 31, "1G": 10, "0A": 421, "0B": 15, "0C": 121}, "total": 823, "ai_native": 266}, "DEAD_GENAI-ERA_3": {"subclass": {"1A": 3, "1B": 23, "1C": 7, "1D": 20, "1E": 38, "1F": 21, "1G": 7, "0A": 123, "0B": 1, "0C": 101}, "total": 344, "ai_native": 119}, "DEAD_GENAI-ERA_4": {"subclass": {"1A": 1, "1B": 11, "1C": 0, "1D": 2, "1E": 1, "1F": 7, "1G": 2, "0A": 100, "0B": 0, "0C": 96}, "total": 220, "ai_native": 24}, "DEAD_GENAI-ERA_5": {"subclass": {"1A": 0, "1B": 1, "1C": 0, "1D": 0, "1E": 0, "1F": 0, "1G": 0, "0A": 40, "0B": 0, "0C": 58}, "total": 99, "ai_native": 1}};
+const F1 = [{"label": "AI-native", "or": 0.196, "lo": 0.179, "hi": 0.216, "sig": true, "risk": false}, {"label": "Vertical: Financial Services", "or": 0.892, "lo": 0.804, "hi": 0.991, "sig": true, "risk": false}, {"label": "Vertical: Health Care", "or": 0.911, "lo": 0.811, "hi": 1.024, "sig": false, "risk": false}, {"label": "Funding (per 10x)", "or": 0.993, "lo": 0.986, "hi": 1.001, "sig": false, "risk": false}, {"label": "Vertical: Advertising", "or": 1.039, "lo": 0.912, "hi": 1.185, "sig": false, "risk": true}, {"label": "Vertical: Other", "or": 1.155, "lo": 1.052, "hi": 1.267, "sig": true, "risk": true}, {"label": "Vertical: Information Technology", "or": 1.162, "lo": 1.028, "hi": 1.314, "sig": true, "risk": true}, {"label": "Vertical: Commerce and Shopping", "or": 1.365, "lo": 1.214, "hi": 1.534, "sig": true, "risk": true}, {"label": "Founded PRE-GENAI", "or": 1.604, "lo": 1.484, "hi": 1.733, "sig": true, "risk": true}, {"label": "Vertical: Apps", "or": 1.731, "lo": 1.523, "hi": 1.969, "sig": true, "risk": true}, {"label": "Vertical: Artificial Intelligence (AI)", "or": 2.81, "lo": 2.476, "hi": 3.19, "sig": true, "risk": true}];
+const F2 = [{"label": "Defensible AI (vs Commoditizable)", "or": 0.274, "lo": 0.207, "hi": 0.363, "sig": true, "risk": false}, {"label": "Other AI (vs Commoditizable)", "or": 0.312, "lo": 0.23, "hi": 0.423, "sig": true, "risk": false}, {"label": "Funding (per 10x)", "or": 0.973, "lo": 0.952, "hi": 0.996, "sig": true, "risk": false}, {"label": "Founded PRE-GENAI", "or": 1.471, "lo": 1.243, "hi": 1.741, "sig": true, "risk": true}, {"label": "RAD-M (vs RAD-L)", "or": 1.614, "lo": 1.024, "hi": 2.546, "sig": true, "risk": true}, {"label": "Not AI (vs Commoditizable)", "or": 2.575, "lo": 0.261, "hi": 25.413, "sig": false, "risk": true}, {"label": "RAD-H (vs RAD-L)", "or": 3.211, "lo": 2.043, "hi": 5.047, "sig": true, "risk": true}];
+const F3 = [{"label": "RAD-H (vs RAD-L) x Funding (per 10x)", "or": 0.959, "lo": 0.842, "hi": 1.092, "sig": false, "risk": false}, {"label": "RAD-M (vs RAD-L) x Funding (per 10x)", "or": 0.965, "lo": 0.846, "hi": 1.1, "sig": false, "risk": false}, {"label": "Funding (per 10x)", "or": 1.005, "lo": 0.885, "hi": 1.14, "sig": false, "risk": true}, {"label": "Founded PRE-GENAI", "or": 1.507, "lo": 1.277, "hi": 1.778, "sig": true, "risk": true}, {"label": "RAD-M (vs RAD-L)", "or": 1.683, "lo": 0.835, "hi": 3.391, "sig": false, "risk": true}, {"label": "RAD-H (vs RAD-L)", "or": 3.971, "lo": 1.984, "hi": 7.949, "sig": true, "risk": true}];
+
+const SUBCLASS_ORDER = ["1A", "1B", "1C", "1D", "1E", "1F", "1G", "0A", "0B", "0C"];
+const SUBCLASS_LABELS = {"1A": "1A  Foundation Layer", "1B": "1B  AI-Native Tooling", "1C": "1C  Thin LLM Wrapper", "1D": "1D  Thick LLM Integrator", "1E": "1E  Applied Vertical AI", "1F": "1F  Autonomous Agents", "1G": "1G  Generative Content", "0A": "0A  Traditional Tech", "0B": "0B  AI-Augmented", "0C": "0C  Non-Tech"};
+const SUBCLASS_COLORS = {"1A": "#4f46e5", "1B": "#0891b2", "1C": "#e11d48", "1D": "#f59e0b", "1E": "#7c3aed", "1F": "#059669", "1G": "#d97706", "0A": "#94a3b8", "0B": "#64748b", "0C": "#cbd5e1"};
+const RAD_ORDER = ["RAD-H", "RAD-M", "RAD-L", "RAD-NA"];
+const RAD_COLORS = {"RAD-H": "#e11d48", "RAD-M": "#d97706", "RAD-L": "#059669", "RAD-NA": "#94a3b8"};
+const COHORT_COLORS = {"PRE-GENAI": "#64748b", "GENAI-ERA": "#4f46e5"};
+const RAD_NA_CLASSES = ["0A", "0B", "0C"];
+const ALIVE_COLOR = '#059669';
+const DEAD_COLOR = '#e11d48';
+const DEAD_STRICT_COLOR = '#9f1239';
+
+const cfg = {displayModeBar: false, responsive: true};
+const axisFont = {family: 'Inter, sans-serif', size: 11, color: '#4a4a4a'};
+const titleFont = {family: 'Inter, sans-serif', size: 12, color: '#1e2a4a'};
+const mono = {family: 'JetBrains Mono', size: 10};
+
+function layout(extra) {
+  return Object.assign({
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    margin: {l: 60, r: 24, t: 24, b: 48}, font: axisFont,
+    xaxis: {gridcolor: '#f0f0f0', zerolinecolor: '#e5e7eb'},
+    yaxis: {gridcolor: '#f0f0f0', zerolinecolor: '#e5e7eb'},
+  }, extra || {});
+}
+
+/* ------------------------- base sections (forked) ------------------------ */
+
+function renderSubclass() {
+  const labels = SUBCLASS_ORDER.slice().reverse();
+  const vals = labels.map(s => MB.subclass_counts[s]);
+  Plotly.newPlot('chart-subclass', [{
+    type: 'bar', orientation: 'h',
+    y: labels.map(s => SUBCLASS_LABELS[s]), x: vals,
+    marker: {color: labels.map(s => SUBCLASS_COLORS[s])},
+    text: vals.map(v => v.toLocaleString()), textposition: 'outside', textfont: mono,
+    hovertemplate: '%{y}<br>%{x:,} companies<extra></extra>',
+  }], layout({
+    yaxis: {automargin: true, tickfont: {family: 'JetBrains Mono', size: 11}},
+    xaxis: {title: {text: 'Number of startups', font: titleFont}},
+    margin: {l: 200, r: 60, t: 16, b: 44},
+  }), cfg);
+}
+
+function renderAiRateCohort() {
+  const cohorts = ['PRE-GENAI', 'GENAI-ERA'];
+  Plotly.newPlot('chart-ai-rate-cohort', [
+    {type: 'bar', name: 'AI-Native', x: cohorts, y: cohorts.map(c => MB.ai_rate_by_cohort[c]),
+     marker: {color: '#4f46e5'},
+     text: cohorts.map(c => MB.ai_rate_by_cohort[c] + '%'), textposition: 'outside',
+     textfont: {family: 'JetBrains Mono', size: 12, color: '#4f46e5'},
+     hovertemplate: '%{x}<br>AI-Native: %{y:.2f}%<extra></extra>'},
+    {type: 'bar', name: 'Not AI-Native', x: cohorts,
+     y: cohorts.map(c => (100 - MB.ai_rate_by_cohort[c]).toFixed(2)),
+     marker: {color: '#e2e8f0'},
+     hovertemplate: '%{x}<br>Not AI-Native: %{y}%<extra></extra>'},
+  ], layout({
+    barmode: 'group',
+    yaxis: {title: {text: 'Percentage', font: titleFont}, range: [0, 105]},
+    xaxis: {tickfont: {family: 'JetBrains Mono', size: 12}},
+    legend: {orientation: 'h', y: 1.08, x: 0.5, xanchor: 'center', font: {size: 11}},
+    margin: {l: 55, r: 24, t: 40, b: 44},
+  }), cfg);
+}
+
+function renderRad() {
+  const radActive = RAD_ORDER.filter(r => r !== 'RAD-NA');
+  Plotly.newPlot('chart-rad', [{
+    type: 'bar', x: radActive, y: radActive.map(r => MB.rad_counts[r]),
+    marker: {color: radActive.map(r => RAD_COLORS[r])},
+    text: radActive.map(r => MB.rad_counts[r].toLocaleString()),
+    textposition: 'outside', textfont: mono,
+    hovertemplate: '%{x}<br>%{y:,} companies<extra></extra>',
+  }], layout({
+    yaxis: {title: {text: 'Number of startups', font: titleFont}},
+    xaxis: {tickfont: {family: 'JetBrains Mono', size: 12}},
+    margin: {l: 65, r: 24, t: 16, b: 44},
+    annotations: [{
+      x: 0.98, y: 0.95, xref: 'paper', yref: 'paper',
+      text: 'Excluding ' + MB.rad_counts['RAD-NA'].toLocaleString() + ' RAD-NA',
+      showarrow: false, font: {size: 10, color: '#8a8a8a', family: 'Inter'}, xanchor: 'right',
+    }],
+  }), cfg);
+}
+
+function renderHeatmap() {
+  const radNA_classes = new Set(RAD_NA_CLASSES);
+  const yLabels = SUBCLASS_ORDER.map(s => SUBCLASS_LABELS[s]).concat(['Total']);
+  const cols = RAD_ORDER.concat(['Total']);
+  const radTotals = {};
+  RAD_ORDER.forEach(r => radTotals[r] = 0);
+  const rawGrid = [];
+  const rowTotals = [];
+  SUBCLASS_ORDER.forEach(s => {
+    const row = RAD_ORDER.map(r => MB.heatmap[s][r]);
+    rawGrid.push(row);
+    const total = radNA_classes.has(s) ? null : row.reduce((a, b) => a + b, 0);
+    rowTotals.push(total);
+    if (!radNA_classes.has(s)) RAD_ORDER.forEach((r, i) => radTotals[r] += row[i]);
+  });
+  const bottomRow = RAD_ORDER.map(r => (r === 'RAD-NA') ? null : radTotals[r]);
+  const bottomTotal = bottomRow.filter(v => v !== null).reduce((a, b) => a + b, 0);
+  bottomRow.push(bottomTotal);
+  const zHeat = rawGrid.map(row => row.slice());
+  zHeat.push(RAD_ORDER.map(() => null));
+  const zLog = zHeat.map(row => row.map(v => (v != null && v > 0) ? Math.log10(v) : null));
+  const textHeat = zHeat.map(row => row.map(v => (v != null && v > 0) ? v.toLocaleString() : ''));
+  const zFull = zLog.map(row => row.concat([null]));
+  const textFull = textHeat.map(row => row.concat(['']));
+  const annotations = [];
+  const boldFont = {family: 'JetBrains Mono', size: 11, color: '#1e2a4a'};
+  rowTotals.forEach((t, i) => annotations.push({
+    x: 'Total', y: yLabels[i],
+    text: (t !== null && t > 0) ? '<b>' + t.toLocaleString() + '</b>' : '',
+    showarrow: false, font: boldFont,
+  }));
+  RAD_ORDER.forEach((r, i) => annotations.push({
+    x: r, y: 'Total',
+    text: (bottomRow[i] !== null && bottomRow[i] > 0) ? '<b>' + bottomRow[i].toLocaleString() + '</b>' : '',
+    showarrow: false, font: boldFont,
+  }));
+  annotations.push({x: 'Total', y: 'Total', text: '<b>' + bottomTotal.toLocaleString() + '</b>',
+                    showarrow: false, font: boldFont});
+  Plotly.newPlot('chart-heatmap', [{
+    type: 'heatmap', z: zFull, x: cols, y: yLabels,
+    text: textFull, texttemplate: '%{text}',
+    colorscale: [[0, '#f8f9fb'], [0.2, '#eef2ff'], [0.4, '#c7d2fe'], [0.65, '#818cf8'], [1, '#3730a3']],
+    showscale: false, hovertemplate: '%{y}<br>%{x}: %{text}<extra></extra>', xgap: 2, ygap: 2,
+  }], layout({
+    yaxis: {automargin: true, tickfont: {family: 'JetBrains Mono', size: 10}, autorange: 'reversed'},
+    xaxis: {side: 'top', tickfont: {family: 'JetBrains Mono', size: 11}},
+    margin: {l: 190, r: 16, t: 40, b: 16},
+    annotations: annotations,
+  }), cfg);
+}
+
+function renderSubclassCohort() {
+  const labels = SUBCLASS_ORDER.slice().reverse().map(s => SUBCLASS_LABELS[s]);
+  const traces = ['PRE-GENAI', 'GENAI-ERA'].map(c => ({
+    type: 'bar', orientation: 'h', name: c, y: labels,
+    x: SUBCLASS_ORDER.slice().reverse().map(s => MB.subclass_by_cohort[c][s]),
+    marker: {color: COHORT_COLORS[c]},
+    hovertemplate: c + '<br>%{y}: %{x:,}<extra></extra>',
+  }));
+  Plotly.newPlot('chart-subclass-cohort', traces, layout({
+    barmode: 'group',
+    yaxis: {automargin: true, tickfont: {family: 'JetBrains Mono', size: 10}},
+    xaxis: {title: {text: 'Number of startups', font: titleFont}},
+    legend: {orientation: 'h', y: 1.06, x: 0.5, xanchor: 'center', font: {size: 11}},
+    margin: {l: 200, r: 24, t: 40, b: 44},
+  }), cfg);
+}
+
+function renderRadCohort() {
+  const radActive = RAD_ORDER.filter(r => r !== 'RAD-NA');
+  const traces = ['PRE-GENAI', 'GENAI-ERA'].map(c => ({
+    type: 'bar', name: c, x: radActive, y: radActive.map(r => MB.rad_by_cohort[c][r]),
+    marker: {color: COHORT_COLORS[c]},
+    text: radActive.map(r => MB.rad_by_cohort[c][r].toLocaleString()),
+    textposition: 'outside', textfont: mono,
+    hovertemplate: c + '<br>%{x}: %{y:,}<extra></extra>',
+  }));
+  Plotly.newPlot('chart-rad-cohort', traces, layout({
+    barmode: 'group',
+    yaxis: {title: {text: 'Number of startups', font: titleFont}},
+    xaxis: {tickfont: {family: 'JetBrains Mono', size: 12}},
+    legend: {orientation: 'h', y: 1.06, x: 0.5, xanchor: 'center', font: {size: 11}},
+    margin: {l: 65, r: 24, t: 40, b: 44},
+  }), cfg);
+}
+
+function renderConfDist(id, dist) {
+  const levels = Object.keys(dist).map(Number).sort();
+  const vals = levels.map(l => dist[l]);
+  const colors = levels.map(l => l <= 2 ? '#e11d48' : l === 3 ? '#d97706' : '#059669');
+  Plotly.newPlot(id, [{
+    type: 'bar', x: levels, y: vals, marker: {color: colors},
+    text: vals.map(v => v.toLocaleString()), textposition: 'outside', textfont: mono,
+    hovertemplate: 'Confidence %{x}<br>%{y:,} companies<extra></extra>',
+  }], layout({
+    xaxis: {title: {text: 'Confidence Level', font: titleFont}, dtick: 1,
+            tickfont: {family: 'JetBrains Mono', size: 13}},
+    yaxis: {title: {text: 'Count', font: titleFont}},
+    margin: {l: 70, r: 24, t: 16, b: 50},
+  }), cfg);
+}
+
+function renderConfSubclass() {
+  const labels = SUBCLASS_ORDER.map(s => SUBCLASS_LABELS[s]);
+  const means = SUBCLASS_ORDER.map(s => MB.conf_by_subclass[s].mean);
+  Plotly.newPlot('chart-conf-subclass', [{
+    type: 'bar', name: 'Mean confidence', x: labels, y: means,
+    marker: {color: SUBCLASS_ORDER.map(s => SUBCLASS_COLORS[s])},
+    text: means.map(v => v.toFixed(1)), textposition: 'outside', textfont: mono,
+    hovertemplate: '%{x}<br>Mean: %{y:.2f}<extra></extra>',
+  }], layout({
+    yaxis: {title: {text: 'Mean Confidence', font: titleFont}, range: [0, 5.5]},
+    xaxis: {tickangle: -35, tickfont: {family: 'JetBrains Mono', size: 9}},
+    margin: {l: 55, r: 24, t: 16, b: 120},
+    shapes: [{type: 'line', x0: -0.5, x1: SUBCLASS_ORDER.length - 0.5, y0: 3, y1: 3,
+              line: {color: '#d97706', width: 1, dash: 'dot'}}],
+    annotations: [{x: SUBCLASS_ORDER.length - 0.7, y: 3.15, text: 'Threshold = 3',
+                   showarrow: false, font: {size: 10, color: '#d97706', family: 'JetBrains Mono'}}],
+  }), cfg);
+}
+
+/* ------------------------ flagship: shared helpers ----------------------- */
+
+function grouped(id, x, a, b, na, nb, ca, cb, yTitle, annos) {
+  Plotly.newPlot(id, [
+    {type: 'bar', name: na, x: x, y: a, marker: {color: ca},
+     hovertemplate: na + '<br>%{x}: %{y}<extra></extra>'},
+    {type: 'bar', name: nb, x: x, y: b, marker: {color: cb},
+     hovertemplate: nb + '<br>%{x}: %{y}<extra></extra>'},
+  ], layout({
+    barmode: 'group',
+    yaxis: {title: {text: yTitle, font: titleFont}},
+    xaxis: {tickfont: {family: 'JetBrains Mono', size: 11}},
+    legend: {orientation: 'h', y: 1.15, x: 0.5, xanchor: 'center', font: {size: 11}},
+    margin: {l: 60, r: 16, t: 36, b: 44},
+    annotations: annos || [],
+  }), cfg);
+}
+
+function mortBars(id, items, colors) {
+  const it = items.slice().reverse();
+  Plotly.newPlot(id, [{
+    type: 'bar', orientation: 'h',
+    y: it.map(d => d.label), x: it.map(d => d.mortality),
+    marker: {color: colors ? it.map(d => colors[d.label] || '#475569') : '#4f46e5'},
+    text: it.map(d => d.mortality.toFixed(1) + '%  (n=' + d.n.toLocaleString() + ')'),
+    textposition: 'outside', textfont: mono,
+    hovertemplate: '%{y}<br>Mortality %{x:.1f}%<extra></extra>',
+  }], layout({
+    yaxis: {automargin: true, tickfont: {family: 'JetBrains Mono', size: 11}},
+    xaxis: {title: {text: 'Mortality rate (dead / dead+alive)', font: titleFont}, ticksuffix: '%'},
+    margin: {l: 150, r: 100, t: 16, b: 44},
+  }), cfg);
+}
+
+function forest(id, rows) {
+  if (!rows.length) {
+    document.getElementById(id).innerHTML =
+      '<p style="padding:1rem;color:#8a8a8a;font-size:0.8rem;">Model not available for this run.</p>';
+    return;
+  }
+  Plotly.newPlot(id, [{
+    type: 'scatter', mode: 'markers', x: rows.map(r => r.or), y: rows.map(r => r.label),
+    marker: {color: rows.map(r => !r.sig ? '#94a3b8' : (r.risk ? DEAD_COLOR : ALIVE_COLOR)), size: 9},
+    error_x: {type: 'data', symmetric: false,
+              array: rows.map(r => r.hi - r.or), arrayminus: rows.map(r => r.or - r.lo),
+              color: '#9aa3b2', thickness: 1.4, width: 4},
+    hovertemplate: '%{y}<br>OR %{x:.2f} [%{customdata[0]:.2f}, %{customdata[1]:.2f}]<extra></extra>',
+    customdata: rows.map(r => [r.lo, r.hi]),
+  }], layout({
+    xaxis: {type: 'log', title: {text: 'Odds ratio of death (log scale)', font: titleFont}},
+    yaxis: {automargin: true, tickfont: {size: 11}},
+    shapes: [{type: 'line', x0: 1, x1: 1, y0: -0.5, y1: rows.length - 0.5,
+              line: {color: '#1e2a4a', width: 1, dash: 'dot'}}],
+    margin: {l: 210, r: 24, t: 16, b: 44},
+  }), cfg);
+}
+
+/* ------------------------------- Act 1 ----------------------------------- */
+
+function renderCorrectionRate() {
+  const b = MS.correction.biased.ai_native, c = MS.correction.corrected.ai_native;
+  Plotly.newPlot('chart-correction-rate', [{
+    type: 'bar', x: ['Alive only (biased)', 'Alive + dead (corrected)'],
+    y: [b.rate, c.rate],
+    marker: {color: ['#94a3b8', '#4f46e5']},
+    error_y: {type: 'data', symmetric: false,
+              array: [b.ci.hi - b.rate, c.ci.hi - c.rate],
+              arrayminus: [b.rate - b.ci.lo, c.rate - c.ci.lo],
+              color: '#475569', thickness: 1.4, width: 6},
+    text: [b.rate + '%', c.rate + '%'], textposition: 'outside', textfont: mono,
+    customdata: [[b.n, b.ci.lo, b.ci.hi], [c.n, c.ci.lo, c.ci.hi]],
+    hovertemplate: '%{x}<br>%{y:.1f}% AI-native (95% CI %{customdata[1]}-%{customdata[2]})' +
+                   '<br>n=%{customdata[0]:,}<extra></extra>',
+  }], layout({
+    yaxis: {title: {text: 'AI-native rate', font: titleFont}, ticksuffix: '%'},
+    xaxis: {tickfont: {family: 'JetBrains Mono', size: 11}},
+    margin: {l: 60, r: 16, t: 24, b: 44},
+  }), cfg);
+}
+
+function renderComposition() {
+  const views = [['biased', 'Alive only (biased)'], ['corrected', 'Alive + dead (corrected)']];
+  const traces = SUBCLASS_ORDER.map(s => ({
+    type: 'bar', orientation: 'h', name: s,
+    y: views.map(v => v[1]),
+    x: views.map(v => MS.correction[v[0]].subclass.share[s]),
+    marker: {color: SUBCLASS_COLORS[s]},
+    hovertemplate: s + ': %{x:.1f}%<extra>%{y}</extra>',
+  }));
+  Plotly.newPlot('chart-composition', traces, layout({
+    barmode: 'stack',
+    xaxis: {title: {text: 'Share of universe', font: titleFont}, ticksuffix: '%', range: [0, 100]},
+    yaxis: {automargin: true, tickfont: {family: 'JetBrains Mono', size: 11}},
+    legend: {orientation: 'h', y: 1.25, x: 0.5, xanchor: 'center',
+             font: {family: 'JetBrains Mono', size: 9}},
+    margin: {l: 170, r: 16, t: 52, b: 44},
+  }), cfg);
+}
+
+function renderShareShift() {
+  const rows = SUBCLASS_ORDER.map(s => ({
+    s: s,
+    d: Math.round((MS.correction.corrected.subclass.share[s] - MS.correction.biased.subclass.share[s]) * 100) / 100,
+  })).reverse();
+  Plotly.newPlot('chart-share-shift', [{
+    type: 'bar', orientation: 'h',
+    y: rows.map(r => SUBCLASS_LABELS[r.s]), x: rows.map(r => r.d),
+    marker: {color: rows.map(r => r.d >= 0 ? ALIVE_COLOR : DEAD_COLOR)},
+    text: rows.map(r => (r.d >= 0 ? '+' : '') + r.d.toFixed(2) + ' pp'),
+    textposition: 'outside', textfont: mono,
+    hovertemplate: '%{y}<br>%{x:+.2f} pp after correction<extra></extra>',
+  }], layout({
+    yaxis: {automargin: true, tickfont: {family: 'JetBrains Mono', size: 10}},
+    xaxis: {title: {text: 'Change in ecosystem share (percentage points)', font: titleFont}},
+    margin: {l: 200, r: 70, t: 16, b: 44},
+  }), cfg);
+}
+
+/* ------------------------------- Act 2 ----------------------------------- */
+
+function renderSubclassSurvival() {
+  const t = MS.subclass_tests;
+  const sigSet = new Set(t.available ? t.tests.filter(r => r.significant).map(r => r.subclass) : []);
+  const surv = MS.ai_vs_survival.subclass_survivor.share;
+  const dead = MS.ai_vs_survival.subclass_dead.share;
+  const annos = SUBCLASS_ORDER.filter(s => sigSet.has(s)).map(s => ({
+    x: s, y: Math.max(surv[s], dead[s]), yshift: 14, text: '<b>*</b>',
+    showarrow: false, font: {size: 15, color: '#1e2a4a'},
+  }));
+  grouped('chart-subclass-survival', SUBCLASS_ORDER,
+    SUBCLASS_ORDER.map(s => surv[s]), SUBCLASS_ORDER.map(s => dead[s]),
+    'Alive', 'Dead', ALIVE_COLOR, DEAD_COLOR, 'Share of cohort (%)', annos);
+}
+
+function renderLift() {
+  const r = MS.ai_vs_survival.subclass_lift.filter(d => d.lift !== null);
+  Plotly.newPlot('chart-lift', [{
+    type: 'bar', x: r.map(d => d.subclass), y: r.map(d => d.lift),
+    marker: {color: r.map(d => d.lift >= 1 ? DEAD_COLOR : ALIVE_COLOR)},
+    text: r.map(d => d.lift.toFixed(2) + 'x'), textposition: 'outside', textfont: mono,
+    hovertemplate: '%{x}<br>Dead share %{customdata[0]}% vs alive %{customdata[1]}%<extra></extra>',
+    customdata: r.map(d => [d.dead, d.survivor]),
+  }], layout({
+    yaxis: {title: {text: 'Over-representation among the dead', font: titleFont}},
+    xaxis: {tickfont: {family: 'JetBrains Mono', size: 11}},
+    shapes: [{type: 'line', x0: -0.5, x1: r.length - 0.5, y0: 1, y1: 1,
+              line: {color: '#475569', width: 1, dash: 'dot'}}],
+    margin: {l: 60, r: 16, t: 16, b: 44},
+  }), cfg);
+}
+
+function renderEraMortality() {
+  const rows = MS.rad_survival.by_era;
+  Plotly.newPlot('chart-mort-era', [{
+    type: 'bar', x: rows.map(r => r.label), y: rows.map(r => r.mortality),
+    marker: {color: rows.map(r => COHORT_COLORS[r.label] || '#475569')},
+    text: rows.map(r => r.mortality.toFixed(1) + '%  (n=' + r.n.toLocaleString() + ')'),
+    textposition: 'outside', textfont: mono,
+    hovertemplate: '%{x}<br>Mortality %{y:.1f}%<extra></extra>',
+  }], layout({
+    yaxis: {title: {text: 'Mortality rate', font: titleFont}, ticksuffix: '%'},
+    xaxis: {tickfont: {family: 'JetBrains Mono', size: 12}},
+    margin: {l: 60, r: 16, t: 24, b: 44},
+  }), cfg);
+}
+
+function renderFundingShare() {
+  const rows = MS.funding_survival.shares;
+  grouped('chart-funding-share', rows.map(r => r.bucket),
+    rows.map(r => r.survivor_share), rows.map(r => r.dead_share),
+    'Alive', 'Dead', ALIVE_COLOR, DEAD_COLOR, 'Share of cohort (%)');
+}
+
+function renderFundingMort() {
+  mortBars('chart-funding-mort',
+    MS.funding_survival.mortality.map(r => ({label: r.label, mortality: r.mortality, n: r.n})), null);
+}
+
+/* ------------------------------- Act 3 ----------------------------------- */
+
+function renderTrap() {
+  const grid = MS.dependency_trap;
+  const z = grid.cells.map(row => row.map(c => c.mortality));
+  const txt = grid.cells.map(row => row.map(c =>
+    c.mortality === null ? '' : c.mortality.toFixed(0) + '%<br>n=' + c.n));
+  Plotly.newPlot('chart-trap', [{
+    type: 'heatmap', x: grid.rad_order, y: grid.funding_order, z: z,
+    text: txt, texttemplate: '%{text}', textfont: {family: 'JetBrains Mono', size: 11},
+    colorscale: [[0, '#ecfdf5'], [0.5, '#fde68a'], [1, '#e11d48']],
+    hovertemplate: 'Funding %{y}<br>%{x}<br>Mortality %{z:.1f}%<extra></extra>',
+    colorbar: {title: {text: 'Mortality %', font: {size: 10}}, thickness: 12, len: 0.9},
+    xgap: 3, ygap: 3,
+  }], layout({
+    xaxis: {tickfont: {family: 'JetBrains Mono', size: 11}, side: 'top'},
+    yaxis: {tickfont: {family: 'JetBrains Mono', size: 11}, autorange: 'reversed'},
+    margin: {l: 80, r: 16, t: 36, b: 16},
+  }), cfg);
+}
+
+function renderTemporal() {
+  const t = MS.temporal;
+  const shapes = t.releases.filter(r => t.months.includes(r.month)).map(r => ({
+    type: 'line', x0: r.month, x1: r.month, y0: 0, y1: 1, yref: 'paper',
+    line: {color: '#475569', width: 1, dash: 'dot'},
+  }));
+  const annos = t.releases.filter(r => t.months.includes(r.month)).map(r => ({
+    x: r.month, y: 1, yref: 'paper', yanchor: 'bottom', text: r.label, showarrow: false,
+    font: {size: 9, color: '#475569', family: 'JetBrains Mono'},
+  }));
+  Plotly.newPlot('chart-temporal', [
+    {type: 'bar', name: 'All dead', x: t.months, y: t.total, marker: {color: '#cbd5e1'},
+     hovertemplate: '%{x}<br>%{y} deaths<extra></extra>'},
+    {type: 'scatter', mode: 'lines', name: 'Commoditizable (1C,1G)', x: t.months, y: t.commoditizable,
+     line: {color: DEAD_COLOR, width: 2}},
+    {type: 'scatter', mode: 'lines', name: 'Defensible (1A,1B,1E)', x: t.months, y: t.defensible,
+     line: {color: ALIVE_COLOR, width: 2}},
+  ], layout({
+    yaxis: {title: {text: 'Last-seen (death) count', font: titleFont}},
+    xaxis: {tickfont: {size: 9}, nticks: 16},
+    legend: {orientation: 'h', y: 1.16, x: 0.5, xanchor: 'center', font: {size: 10}},
+    shapes: shapes, annotations: annos,
+    margin: {l: 60, r: 24, t: 44, b: 44},
+  }), cfg);
+}
+
+/* ------------------------------- Act 4 ----------------------------------- */
+
+function renderConfSurvival() {
+  const levels = [1, 2, 3, 4, 5];
+  const conf = MS.confidence;
+  const sPct = levels.map(l => conf.survivor.n ? (conf.survivor.dist[l] || 0) / conf.survivor.n * 100 : 0);
+  const dPct = levels.map(l => conf.dead.n ? (conf.dead.dist[l] || 0) / conf.dead.n * 100 : 0);
+  grouped('chart-conf-survival', levels.map(String), sPct, dPct,
+    'Alive', 'Dead', ALIVE_COLOR, DEAD_COLOR, 'Share of cohort (%)');
+}
+
+function aiRateBars(id, rows, colors) {
+  Plotly.newPlot(id, [{
+    type: 'bar', x: rows.map(r => r.label), y: rows.map(r => r.rate),
+    marker: {color: colors},
+    error_y: {type: 'data', symmetric: false,
+              array: rows.map(r => r.ci.hi - r.rate), arrayminus: rows.map(r => r.rate - r.ci.lo),
+              color: '#475569', thickness: 1.2, width: 5},
+    text: rows.map(r => r.rate.toFixed(1) + '%'), textposition: 'outside', textfont: mono,
+    customdata: rows.map(r => r.n),
+    hovertemplate: '%{x}<br>%{y:.1f}% AI-native<br>n=%{customdata:,}<extra></extra>',
+  }], layout({
+    yaxis: {title: {text: 'AI-native rate', font: titleFont}, ticksuffix: '%'},
+    xaxis: {tickfont: {family: 'JetBrains Mono', size: 10}},
+    margin: {l: 60, r: 16, t: 24, b: 44},
+  }), cfg);
+}
+
+function renderThin() {
+  aiRateBars('chart-thin', MS.sensitivity.by_thin_history, ['#d97706', '#4f46e5']);
+}
+
+function renderAge() {
+  aiRateBars('chart-age', MS.sensitivity.by_snapshot_age,
+    MS.sensitivity.by_snapshot_age.map(() => '#4f46e5'));
+}
+
+function renderStrict() {
+  const ar = MS.ai_vs_survival.ai_rate;
+  aiRateBars('chart-strict', [
+    {label: 'Alive', ...ar.survivor},
+    {label: 'Dead (evidence)', ...ar.dead},
+    {label: 'Dead (strict subset)', ...ar.dead_strict},
+  ], [ALIVE_COLOR, DEAD_COLOR, DEAD_STRICT_COLOR]);
+}
+
+function renderFunnel() {
+  const st = MS.funnel.stages;
+  Plotly.newPlot('chart-funnel', [{
+    type: 'funnel', y: st.map(s => s.label), x: st.map(s => s.n),
+    marker: {color: ['#94a3b8', '#4f46e5', DEAD_COLOR]},
+    textinfo: 'value+percent initial',
+    textfont: {family: 'JetBrains Mono', size: 12},
+    hovertemplate: '%{y}<br>%{x:,} companies<extra></extra>',
+  }], layout({
+    yaxis: {automargin: true, tickfont: {family: 'JetBrains Mono', size: 11}},
+    margin: {l: 210, r: 24, t: 16, b: 24},
+  }), cfg);
+}
+
+/* ------------------------------- render all ------------------------------ */
+
+renderSubclass();
+renderAiRateCohort();
+renderRad();
+renderHeatmap();
+renderSubclassCohort();
+renderRadCohort();
+renderConfDist('chart-conf-class', MB.conf_class_dist);
+renderConfDist('chart-conf-rad', MB.conf_rad_dist);
+renderConfSubclass();
+
+renderCorrectionRate();
+renderComposition();
+renderShareShift();
+renderSubclassSurvival();
+renderLift();
+mortBars('chart-mort-subclass', MS.rad_survival.by_subclass, SUBCLASS_COLORS);
+mortBars('chart-mort-group', MS.rad_survival.by_subclass_group, null);
+mortBars('chart-mort-rad', MS.rad_survival.by_rad,
+  {'RAD-H': '#e11d48', 'RAD-M': '#d97706', 'RAD-L': '#059669'});
+renderEraMortality();
+mortBars('chart-vertical', MS.vertical.map(v => ({label: v.group, mortality: v.mortality, n: v.n})), null);
+renderFundingShare();
+renderFundingMort();
+forest('chart-forest1', F1);
+forest('chart-forest2', F2);
+if (F3.length) {
+  forest('chart-forest3', F3);
+} else {
+  const box = document.getElementById('forest3-box');
+  if (box) box.style.display = 'none';
+}
+renderTrap();
+renderTemporal();
+renderConfSurvival();
+renderThin();
+renderAge();
+renderStrict();
+renderFunnel();
+
+/* ------------------------- scroll + nav wiring --------------------------- */
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.06, rootMargin: '0px 0px -30px 0px' });
+document.querySelectorAll('section').forEach(s => observer.observe(s));
+document.getElementById('overview').classList.add('visible');
+
+const navLinks = document.querySelectorAll('nav ul a');
+const navObs = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const link = document.querySelector('nav ul a[href="#' + e.target.id + '"]');
+      if (link) link.classList.add('active');
+    }
+  });
+}, { threshold: 0.25 });
+document.querySelectorAll('section').forEach(s => navObs.observe(s));
+
+/* --------------------------- Landscape filters --------------------------- */
+
+(function() {
+  let currentEvidence = 'ALL';
+  let currentCohort = 'ALL';
+  let currentMinConf = 1;
+
+  function updateSubclassChart() {
+    const fd = FILTER_DATA[currentEvidence + '_' + currentCohort + '_' + currentMinConf];
+    if (!fd) return;
+    const labels = SUBCLASS_ORDER.slice().reverse();
+    const vals = labels.map(s => fd.subclass[s]);
+    Plotly.react('chart-subclass', [{
+      type: 'bar', orientation: 'h',
+      y: labels.map(s => SUBCLASS_LABELS[s]), x: vals,
+      marker: {color: labels.map(s => SUBCLASS_COLORS[s])},
+      text: vals.map(v => v.toLocaleString()), textposition: 'outside', textfont: mono,
+      hovertemplate: '%{y}<br>%{x:,} companies<extra></extra>',
+    }], layout({
+      yaxis: {automargin: true, tickfont: {family: 'JetBrains Mono', size: 11}},
+      xaxis: {title: {text: 'Number of startups (' + fd.total.toLocaleString() + ' shown)', font: titleFont}},
+      margin: {l: 200, r: 60, t: 16, b: 44},
+    }), cfg);
+  }
+
+  function wirePills(groupId, setter) {
+    document.querySelectorAll('#' + groupId + ' .pill-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#' + groupId + ' .pill-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        setter(btn.dataset.val);
+        updateSubclassChart();
+      });
+    });
+  }
+  wirePills('evidence-filter', v => currentEvidence = v);
+  wirePills('cohort-filter', v => currentCohort = v);
+
+  const slider = document.getElementById('conf-slider');
+  const sliderVal = document.getElementById('conf-slider-val');
+  slider.addEventListener('input', () => {
+    currentMinConf = parseInt(slider.value);
+    sliderVal.textContent = currentMinConf;
+    updateSubclassChart();
+  });
+})();
+
+</script>
+
+</body>
+</html>
