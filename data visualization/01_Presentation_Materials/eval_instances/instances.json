@@ -1,0 +1,32 @@
+{
+  "instances": [
+    {
+      "n": 1,
+      "archived_utc": "2026-07-24T20:32:13.913744+00:00",
+      "file": "eval_instance_01.html",
+      "identity": "9df0c1850107",
+      "synthetic": true,
+      "n_configs": 9,
+      "source": "evals/tests/fixtures/dashboard/dashboard_mock_runs.json",
+      "run": {
+        "synthetic": true,
+        "n_runs": 9,
+        "started_first": null,
+        "started_last": null,
+        "models": [
+          "gpt-5.4-nano",
+          "gpt-5.4-mini",
+          "gpt-5.6-luna"
+        ],
+        "model_groups": [
+          "nano",
+          "mini",
+          "luna"
+        ],
+        "n_gold": null,
+        "git_commit": null
+      },
+      "rebuilt_utc": "2026-07-24T22:22:39.644659+00:00"
+    }
+  ]
+}

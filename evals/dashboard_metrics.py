@@ -10,11 +10,12 @@ exist.
 
 from __future__ import annotations
 
+import datetime
 import json
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from evals.paths import PROJECT_ROOT, RUNS_DIR, run_scored_path
+from evals.paths import PROJECT_ROOT, RUNS_DIR, run_config_path, run_scored_path
 
 DEFAULT_FIXTURE = (
     PROJECT_ROOT
@@ -119,17 +120,80 @@ def _disambiguate_repeat_labels(configs: list[dict[str, Any]]) -> None:
 
 
 def _projected_usd(scored: dict[str, Any]) -> Optional[float]:
+    """Leaderboard $ from the sync cost ladder only (step 3_scale).
+
+    No fallback to screen.projected_usd: that field can hold a stale
+    batch-era total while the popover reads the ladder (or shows
+    production as not recorded). Missing / blocked scale → None so the
+    table and breakdown stay honest together.
+    """
     est = scored.get("production_cost_estimate") or {}
     if not est:
         return None
     steps = est.get("steps") or {}
-    scale = steps.get("4_scale") or {}
+    scale = steps.get("3_scale") or {}
     if scale.get("available") and scale.get("estimated_production_usd") is not None:
         return float(scale["estimated_production_usd"])
-    screen = scored.get("screen") or {}
-    if screen.get("projected_usd") is not None:
-        return float(screen["projected_usd"])
     return None
+
+
+def _cost_breakdown(scored: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Popover payload: the recorded arithmetic behind the projected $.
+
+    Reads only what scored.json actually recorded (production_cost_estimate
+    ladder + the cost block's token totals / pricing / per-pass split).
+    Missing fields stay None and the UI renders them as "not recorded";
+    nothing is recomputed or invented here.
+    """
+    est = scored.get("production_cost_estimate") or {}
+    cost = scored.get("cost") or {}
+    if not est and not cost:
+        return None
+    assumptions = est.get("assumptions") or {}
+    steps = est.get("steps") or {}
+    s1 = steps.get("1_golden_sync") or {}
+    s2 = steps.get("2_cache") or {}
+    s3 = steps.get("3_scale") or {}
+
+    def _f(value: Any) -> Optional[float]:
+        return float(value) if value is not None else None
+
+    def _i(value: Any) -> Optional[int]:
+        return int(value) if value is not None else None
+
+    return {
+        "available": bool(est.get("available")),
+        "reason": est.get("reason"),
+        "model": assumptions.get("model") or cost.get("model") or scored.get("model"),
+        # Scoring-time prices from the cost block only. Falling back to the
+        # current config table could show prices the ladder was not computed
+        # with, so absent pricing renders as "not recorded" instead.
+        "pricing_per_mtok": cost.get("pricing_per_mtok"),
+        "n_golden": _i(assumptions.get("n_golden", s1.get("n_rows", cost.get("n_rows")))),
+        "n_prod": _i(assumptions.get("n_prod", s3.get("n_prod"))),
+        "n_prod_label": assumptions.get("n_prod_label") or s3.get("n_prod_label"),
+        "cache_discount": _f(assumptions.get("cache_discount", s2.get("cache_discount"))),
+        "cache_source": assumptions.get("cache_source"),
+        "total_input_tokens": _i(
+            s1.get("total_input_tokens", cost.get("total_input_tokens"))
+        ),
+        "total_output_tokens": _i(
+            s1.get("total_output_tokens", cost.get("total_output_tokens"))
+        ),
+        "total_cached_tokens": _i(
+            s2.get("total_cached_tokens", cost.get("total_cached_tokens"))
+        ),
+        "per_pass": cost.get("per_pass"),
+        "golden_sync_usd": _f(s1.get("total_usd", est.get("golden_sync_usd"))),
+        "cache_hit_rate": _f(s2.get("cache_hit_rate")),
+        "golden_after_cache_usd": _f(s2.get("total_usd_after_cache")),
+        "scale_factor": _f(s3.get("scale_factor")),
+        "estimated_production_usd": _f(s3.get("estimated_production_usd")),
+        "estimated_usd_per_company": _f(s3.get("estimated_usd_per_company")),
+        "cache_step_reason": (
+            s2.get("reason") if s2 and not s2.get("available") else None
+        ),
+    }
 
 
 def _ci_half_width(ci: Optional[list[float]], accuracy: float) -> Optional[float]:
@@ -310,10 +374,12 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
             subclass.get("macro_f1", screen.get("macro_f1", 0.0))
         ),
         "projected_usd": _projected_usd(scored),
+        "cost_breakdown": _cost_breakdown(scored),
         "mean_confidence": _mean_confidence(cal, screen),
         "share_above_90": _share_above_90(cal, screen),
         "ece": _ece(cal, screen),
         "reliability_bins": rel.get("bins") if rel else screen.get("reliability_bins"),
+        "selective_curve": (cal or {}).get("selective_prediction"),
         "selective_acc_50": (
             _selective_at_coverage(cal, 0.5)
             if cal
@@ -409,10 +475,13 @@ def _aggregate_finalist_repeats(configs: list[dict[str, Any]]) -> list[dict[str,
             "rad_acc": sum(float(r["rad_acc"]) for r in rows) / len(rows),
             "macro_f1": sum(float(r["macro_f1"]) for r in rows) / len(rows),
             "projected_usd": (sum(costs) / len(costs)) if costs else None,
+            # Mean of repeats has no single measured ladder behind it.
+            "cost_breakdown": None,
             "mean_confidence": None,
             "share_above_90": None,
             "ece": (sum(eces) / len(eces)) if eces else None,
             "reliability_bins": None,
+            "selective_curve": None,
             "selective_acc_50": None,
             "vs_baseline": None,
             "latency_p50": None,
@@ -426,6 +495,374 @@ def _aggregate_finalist_repeats(configs: list[dict[str, Any]]) -> list[dict[str,
     return extras
 
 
+# ---------------------------------------------------------------------------
+# Pipeline-robustness checks (tab 1)
+# ---------------------------------------------------------------------------
+#
+# Three production-readiness checks aggregated over the loaded runs. Each
+# check reads only what the runs actually recorded: statuses are "pass",
+# "fail", or "pending" (nothing recorded yet), never invented at render time.
+
+TOKENIZATION_MEANING = (
+    "For each model, the yes-or-no AI-native gate (Pass A) runs once on the "
+    "same 100 labeled golden-set companies, and that one result is reused "
+    "across every Pass B effort setting. This check confirms a confidence "
+    "score was recovered for every one of those companies, so the confidence "
+    "charts are built on the full golden set rather than a silent subset."
+)
+TOKENIZATION_FOOTNOTE = (
+    "Technical note: a confidence value is only recorded after the extractor "
+    "verifies the exact decision token in the raw response, so any drift "
+    "fails loudly instead of silently reading the wrong token."
+)
+VALID_MASS_MEANING = (
+    "Before renormalizing to a probability, the raw probability mass on the "
+    "two legal answers (0 and 1) is recorded per row. Mass near 1.0 means "
+    "the model put essentially all its probability on legal answers, so the "
+    "renormalized confidence is trustworthy."
+)
+BATCH_PARITY_MEANING = (
+    "The same request bodies were submitted through both the sync and Batch "
+    "APIs. Identical parameters were echoed back and the same logprob "
+    "payload shape returned, so confidence measured sync transfers to "
+    "Batch-based production runs."
+)
+
+
+def _fmt_count(value: Any) -> str:
+    return f"{int(value):,}"
+
+
+def _dedupe_by_model(
+    runs: list[dict[str, Any]], block: str
+) -> dict[str, dict[str, Any]]:
+    """model -> recorded robustness sub-block (first per model).
+
+    Robustness evidence is a Pass A / model property (Pass A is banked once
+    per model), so identical blocks repeated across effort arms count once.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for scored in runs:
+        payload = (scored.get("robustness") or {}).get(block)
+        if not payload:
+            continue
+        model = str(
+            scored.get("model") or _parse_model_from_run_id(str(scored.get("run_id") or ""))
+        )
+        out.setdefault(model or "unknown", payload)
+    return out
+
+
+def _tokenization_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Unique Pass A confidence coverage, deduped by model.
+
+    scoring.calibration_report records n (rows with confidence) vs n_eligible
+    (rows that could carry one). Pass A is banked once per model and reused
+    across the Pass B effort arms, so the same calibration block repeats in
+    every matrix cell for that model. Counting follows _dedupe_by_model's
+    convention: the first recorded calibration block per model counts once,
+    never summed across efforts (banked blocks are byte-identical across
+    efforts, so first-recorded equals any other pick). A real per-model gap
+    (n < n_eligible) is present in every copy of that model's banked block,
+    so deduping cannot hide it.
+    """
+    recorded: dict[str, dict[str, Any]] = {}
+    for scored in runs:
+        cal = scored.get("calibration") or {}
+        if cal.get("n") is None or cal.get("n_eligible") is None:
+            continue
+        model = str(
+            scored.get("model")
+            or _parse_model_from_run_id(str(scored.get("run_id") or ""))
+            or "unknown"
+        )
+        recorded.setdefault(model, cal)
+
+    per_model: list[dict[str, Any]] = []
+    total_n = total_eligible = 0
+    any_gap = False
+    for model, cal in recorded.items():
+        n, n_eligible = int(cal["n"]), int(cal["n_eligible"])
+        total_n += n
+        total_eligible += n_eligible
+        gap = n < n_eligible
+        any_gap = any_gap or gap
+        per_model.append({
+            "model": model,
+            "status": "fail" if gap else "pass",
+            "detail": (
+                f"{_fmt_count(n)} of {_fmt_count(n_eligible)} "
+                "golden-set companies"
+            ),
+        })
+    if not recorded:
+        status = "pending"
+        stats = []
+        note = (
+            "Extraction coverage is recorded when runs are scored with "
+            "--confidence-from-raw (calibration.n vs n_eligible)."
+        )
+    else:
+        status = "fail" if any_gap else "pass"
+        stats = [
+            {
+                "label": "Companies with confidence recovered",
+                "value": (
+                    f"{_fmt_count(total_n)} of {_fmt_count(total_eligible)}"
+                ),
+            },
+            {"label": "Models checked", "value": _fmt_count(len(recorded))},
+        ]
+        note = None
+    return {
+        "id": "tokenization_pinned",
+        "title": "Pass A confidence recovered on the golden set",
+        "status": status,
+        "meaning": TOKENIZATION_MEANING,
+        "footnote": TOKENIZATION_FOOTNOTE,
+        "stats": stats,
+        "per_model": per_model,
+        "pending_note": note,
+    }
+
+
+def _valid_mass_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    recorded = _dedupe_by_model(runs, "valid_mass")
+    per_model: list[dict[str, Any]] = []
+    below_total = 0
+    min_mass: Optional[float] = None
+    threshold: Optional[float] = None
+    for model, block in recorded.items():
+        n_below = block.get("n_below_threshold")
+        block_min = block.get("min")
+        threshold = block.get("threshold", threshold)
+        fail = n_below is not None and int(n_below) > 0
+        below_total += int(n_below or 0)
+        if block_min is not None:
+            min_mass = block_min if min_mass is None else min(min_mass, block_min)
+        detail = f"min mass {block_min}" if block_min is not None else "recorded"
+        if n_below is not None:
+            detail += f", {int(n_below)} row(s) below threshold"
+        per_model.append({
+            "model": model,
+            "status": "fail" if fail else "pass",
+            "detail": detail,
+        })
+    if not recorded:
+        return {
+            "id": "probability_mass",
+            "title": "Probability mass accounted",
+            "status": "pending",
+            "meaning": VALID_MASS_MEANING,
+            "stats": [],
+            "per_model": [],
+            "pending_note": (
+                "Per-row valid_mass lives in each run's raw/ logprob "
+                "responses (machine-local). It surfaces here once scoring "
+                "records a robustness.valid_mass summary."
+            ),
+        }
+    stats = []
+    if min_mass is not None:
+        stats.append({"label": "Minimum valid mass", "value": f"{min_mass}"})
+    if threshold is not None:
+        stats.append({"label": "Threshold", "value": f"{threshold}"})
+    stats.append({"label": "Rows below threshold", "value": _fmt_count(below_total)})
+    return {
+        "id": "probability_mass",
+        "title": "Probability mass accounted",
+        "status": "fail" if below_total > 0 else "pass",
+        "meaning": VALID_MASS_MEANING,
+        "stats": stats,
+        "per_model": per_model,
+        "pending_note": None,
+    }
+
+
+def _batch_parity_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    recorded = _dedupe_by_model(runs, "batch_parity")
+    per_model: list[dict[str, Any]] = []
+    any_fail = False
+    any_pending = False
+    total_checks = total_failed = 0
+    n_rows: Optional[int] = None
+    for model, block in recorded.items():
+        raw = block.get("verdict")
+        verdict = str(raw).strip().upper() if raw is not None else ""
+        if not verdict:
+            status = "pending"
+            any_pending = True
+            verdict_label = "not recorded yet"
+        elif verdict == "PASS":
+            status = "pass"
+            verdict_label = verdict
+        else:
+            status = "fail"
+            any_fail = True
+            verdict_label = verdict
+        total_checks += int(block.get("n_checks") or 0)
+        total_failed += int(block.get("n_failed") or 0)
+        if block.get("n_rows") is not None:
+            n_rows = int(block["n_rows"])
+        per_model.append({
+            "model": model,
+            "status": status,
+            "detail": (
+                f"verdict {verdict_label}, "
+                f"{int(block.get('n_failed') or 0)} of "
+                f"{int(block.get('n_checks') or 0)} checks failed"
+            ),
+        })
+    if not recorded:
+        return {
+            "id": "batch_parity",
+            "title": "Sync-batch parity verified",
+            "status": "pending",
+            "meaning": BATCH_PARITY_MEANING,
+            "stats": [],
+            "per_model": [],
+            "pending_note": (
+                "Parity verdicts come from the batch-parity smoke "
+                "(python -m evals batch-parity). They surface here once a "
+                "robustness.batch_parity summary is recorded with the run."
+            ),
+        }
+    if any_fail:
+        overall = "fail"
+        pending_note = None
+    elif any_pending:
+        overall = "pending"
+        pending_note = (
+            "A batch_parity block is present but the PASS/FAIL verdict is "
+            "still missing. Re-run the batch-parity smoke (or finish "
+            "scoring) before treating this check as settled."
+        )
+    else:
+        overall = "pass"
+        pending_note = None
+    stats = [
+        {"label": "Models verified", "value": _fmt_count(len(recorded))},
+        {"label": "Checks failed", "value": f"{total_failed:,} of {total_checks:,}"},
+    ]
+    if n_rows is not None:
+        stats.append({"label": "Rows per smoke", "value": f"{n_rows} x 2 APIs"})
+    return {
+        "id": "batch_parity",
+        "title": "Sync-batch parity verified",
+        "status": overall,
+        "meaning": BATCH_PARITY_MEANING,
+        "stats": stats,
+        "per_model": per_model,
+        "pending_note": pending_note,
+    }
+
+
+def build_robustness(scored_runs: list[dict[str, Any]]) -> dict[str, Any]:
+    """The pipeline-robustness checks panel payload (tab 1)."""
+    checks = [
+        _tokenization_check(scored_runs),
+        _valid_mass_check(scored_runs),
+        _batch_parity_check(scored_runs),
+    ]
+    return {"checks": checks}
+
+
+def _text(value: Any) -> Optional[str]:
+    """Non-empty stripped string, or None."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _parse_iso(value: Optional[str]) -> Optional[datetime.datetime]:
+    """Timezone-aware datetime from an ISO string, or None when unparseable."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed
+
+
+def build_run_instance(
+    scored_runs: Iterable[dict[str, Any]],
+    *,
+    synthetic: bool = False,
+) -> dict[str, Any]:
+    """Identity of the runs behind this dashboard: which eval instance is this?
+
+    Start times are each run's ``created_utc`` from config.json, injected by
+    the loaders. Runs that never recorded one leave the span empty rather
+    than falling back to a scoring or page-build timestamp. Golden size and
+    commit report only when every run agrees, so a mixed load cannot claim a
+    single provenance it does not have.
+    """
+    runs = list(scored_runs)
+
+    # Sort on the parsed instant, not the raw text: offsets can differ.
+    dated: list[tuple[datetime.datetime, str]] = []
+    models: list[str] = []
+    commits: set[str] = set()
+    golds: set[int] = set()
+    for scored in runs:
+        started = _text(scored.get("run_started_utc"))
+        parsed = _parse_iso(started)
+        if parsed is not None and started is not None:
+            dated.append((parsed, started))
+
+        model = _text(scored.get("model")) or _text(
+            _parse_model_from_run_id(str(scored.get("run_id") or ""))
+        )
+        if model and model not in models:
+            models.append(model)
+
+        commit = _text(scored.get("git_commit"))
+        if commit:
+            commits.add(commit)
+
+        n_gold = scored.get("n_gold")
+        if isinstance(n_gold, int) and not isinstance(n_gold, bool):
+            golds.add(n_gold)
+    dated.sort(key=lambda pair: pair[0])
+
+    return {
+        "synthetic": synthetic,
+        "n_runs": len(runs),
+        "started_first": dated[0][1] if dated else None,
+        "started_last": dated[-1][1] if dated else None,
+        "models": models,
+        "model_groups": [_short_model(m) for m in models],
+        "n_gold": golds.pop() if len(golds) == 1 else None,
+        "git_commit": next(iter(commits))[:7] if len(commits) == 1 else None,
+    }
+
+
+def _run_config_meta(config_path: Path) -> dict[str, Any]:
+    """Run start time and commit from a run's config.json, empty when absent.
+
+    scored.json records when scoring ran; config.json records when the eval
+    run itself started, which is the identity the dashboard card reports.
+    """
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    meta: dict[str, Any] = {}
+    started = _text(data.get("created_utc"))
+    if started:
+        meta["run_started_utc"] = started
+    commit = _text(data.get("git_commit"))
+    if commit:
+        meta["git_commit"] = commit
+    return meta
+
+
 def build_metrics(
     scored_runs: Iterable[dict[str, Any]],
     *,
@@ -433,6 +870,7 @@ def build_metrics(
     source: str = "",
 ) -> dict[str, Any]:
     """Build the chart-ready metrics dict (configs + filter keys)."""
+    scored_runs = list(scored_runs)
     configs = [config_row_from_scored(s) for s in scored_runs]
     _disambiguate_repeat_labels(configs)
     configs.extend(_aggregate_finalist_repeats(configs))
@@ -441,6 +879,8 @@ def build_metrics(
         "synthetic": synthetic,
         "source": source,
         "n_configs": len(configs),
+        "run_instance": build_run_instance(scored_runs, synthetic=synthetic),
+        "robustness": build_robustness(scored_runs),
         "configs": configs,
         "config_ids": [c["id"] for c in configs],
         "model_groups": _model_groups(configs),
@@ -492,7 +932,9 @@ def load_from_run_ids(run_ids: Iterable[str]) -> dict[str, Any]:
         if not path.exists():
             missing.append(run_id)
             continue
-        runs.append(load_scored_json(path))
+        runs.append(
+            {**load_scored_json(path), **_run_config_meta(run_config_path(run_id))}
+        )
     if missing:
         raise FileNotFoundError(
             "Missing scored.json for: " + ", ".join(missing)
@@ -506,7 +948,12 @@ def load_from_run_ids(run_ids: Iterable[str]) -> dict[str, Any]:
 
 def load_from_scored_paths(paths: Iterable[Path]) -> dict[str, Any]:
     """Load one or more scored.json paths into dashboard metrics."""
-    runs = [load_scored_json(Path(p)) for p in paths]
+    runs: list[dict[str, Any]] = []
+    for raw_path in paths:
+        path = Path(raw_path)
+        runs.append(
+            {**load_scored_json(path), **_run_config_meta(path.parent / "config.json")}
+        )
     return build_metrics(
         runs,
         synthetic=False,

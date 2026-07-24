@@ -203,6 +203,14 @@ def main() -> None:
         default=None,
         help="Output HTML path (default: Presentation Materials/eval_dashboard.html)",
     )
+    p_dash.add_argument(
+        "--save-instance",
+        action="store_true",
+        help=(
+            "Also archive this build as eval_instances/eval_instance_NN.html "
+            "(automatic for real runs; use this to keep a mock build)"
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -381,11 +389,9 @@ def main() -> None:
             runs=args.runs,
             output=Path(args.output) if args.output else mod.OUTPUT_PATH,
         )
-        metrics = mod.resolve_metrics(ns)
-        ns.output.parent.mkdir(parents=True, exist_ok=True)
-        ns.output.write_text(mod.build_html(metrics), encoding="utf-8")
-        mode = "SYNTHETIC" if metrics.get("synthetic") else "scored"
-        print(f"[{mode}] {metrics['n_configs']} configs → {ns.output}")
+        mod.write_dashboard(
+            mod.resolve_metrics(ns), ns.output, save_instance=args.save_instance
+        )
         return
 
     # Later stages land in subsequent PRs; fail loudly instead of silently.

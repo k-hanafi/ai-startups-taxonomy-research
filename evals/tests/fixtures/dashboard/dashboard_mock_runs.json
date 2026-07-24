@@ -1,6 +1,6 @@
 {
   "synthetic": true,
-  "note": "SYNTHETIC locked-matrix mock for the eval dashboard skeleton. Numbers are design placeholders, not measured eval results. Pass A metrics (ai_native accuracy, ECE, mean_confidence, share≥0.9) are identical across Pass B efforts within each model, matching the bank-once Pass A design. Replace by loading real evals/runs/*/scored.json after the paid sweep.",
+  "note": "SYNTHETIC locked-matrix mock for the Classifier Eval Suite. Numbers are design placeholders, not measured eval results. Pass A metrics (ai_native accuracy, calibration, confidence, robustness) are identical across Pass B efforts within each model, matching the bank-once Pass A design. Calibration blocks (reliability bins, ECE, selective curve, mean confidence, share above 0.9) were all computed from the same 100 synthetic per-row confidence/correctness pairs per model, so every derived number recomputes from every other; nano seeds the documented early signal (ECE near 0.077, top-half confidence fully correct). Cost blocks + production_cost_estimate ladders were generated with evals.cost_extrapolate.extrapolate_production_cost on synthetic token totals, so the popover arithmetic recomputes exactly to the displayed projected $ (sync Responses API pricing with the cache discount; no Batch API discount, since production two-pass runs sync). Replace by loading real evals/runs/*/scored.json after the paid sweep.",
   "scored_runs": [
     {
       "run_id": "mock_gpt-5.4-nano_low_r1",
@@ -10,33 +10,308 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.93, "accuracy_ci95": [0.88, 0.98], "macro_f1": 0.92},
-        "subclass": {"accuracy": 0.68, "accuracy_ci95": [0.588, 0.772], "macro_f1": 0.62},
-        "rad": {"accuracy": 0.76, "accuracy_ci95": [0.68, 0.84], "macro_f1": 0.74}
+        "ai_native": {
+          "accuracy": 0.93,
+          "accuracy_ci95": [
+            0.88,
+            0.98
+          ],
+          "macro_f1": 0.92
+        },
+        "subclass": {
+          "accuracy": 0.68,
+          "accuracy_ci95": [
+            0.588,
+            0.772
+          ],
+          "macro_f1": 0.62
+        },
+        "rad": {
+          "accuracy": 0.76,
+          "accuracy_ci95": [
+            0.68,
+            0.84
+          ],
+          "macro_f1": 0.74
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 93, "accuracy": 0.72},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.71},
-        "boundary_disagreement": {"n": 100, "rate": 0.08}
+        "subclass_family_conditional": {
+          "n": 93,
+          "accuracy": 0.72
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.71
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.08
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 95}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.4-nano",
+          "architecture": "classification",
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 246000,
+            "total_usd": 0.5575,
+            "mean_usd_per_row": 0.005575,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 0.4625,
+            "mean_usd_per_row": 0.004625000000000001,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 189.97650000000002,
+            "estimated_usd_per_company": 0.004625000000000001,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 0.5575,
+          "golden_after_cache_usd": 0.4625,
+          "estimated_production_usd": 189.97650000000002,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 2.4, "p95": 5.9, "mean": 2.8, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 2.4,
+          "p95": 5.9,
+          "mean": 2.8,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.071, "bins": []},
+        "axis": "ai_native",
+        "n": 100,
+        "n_eligible": 100,
+        "reliability": {
+          "bins": [
+            {
+              "range": [
+                0.0,
+                0.1
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.1,
+                0.2
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.2,
+                0.3
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.3,
+                0.4
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.4,
+                0.5
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.5,
+                0.6
+              ],
+              "count": 4,
+              "mean_confidence": 0.53,
+              "accuracy": 0.75
+            },
+            {
+              "range": [
+                0.6,
+                0.7
+              ],
+              "count": 10,
+              "mean_confidence": 0.62,
+              "accuracy": 0.8
+            },
+            {
+              "range": [
+                0.7,
+                0.8
+              ],
+              "count": 20,
+              "mean_confidence": 0.7475,
+              "accuracy": 0.85
+            },
+            {
+              "range": [
+                0.8,
+                0.9
+              ],
+              "count": 20,
+              "mean_confidence": 0.8775,
+              "accuracy": 0.95
+            },
+            {
+              "range": [
+                0.9,
+                1.0
+              ],
+              "count": 46,
+              "mean_confidence": 0.964,
+              "accuracy": 1.0
+            }
+          ],
+          "ece": 0.07836
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 0.98},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.93}
+          {
+            "coverage": 0.1,
+            "n": 10,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.2,
+            "n": 20,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.3,
+            "n": 30,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.4,
+            "n": 40,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.6,
+            "n": 60,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.7,
+            "n": 70,
+            "accuracy": 0.985714
+          },
+          {
+            "coverage": 0.8,
+            "n": 80,
+            "accuracy": 0.9875
+          },
+          {
+            "coverage": 0.9,
+            "n": 90,
+            "accuracy": 0.955556
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.93
+          }
         ]
       },
       "screen": {
         "id": "nano-low",
         "label": "nano / low",
-        "mean_confidence": 0.83,
+        "mean_confidence": 0.85164,
         "share_above_90": 0.46,
-        "selective_acc_50": 0.98
+        "selective_acc_50": 1.0
+      },
+      "cost": {
+        "model": "gpt-5.4-nano",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 246000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 245200,
+            "reasoning": 185200
+          }
+        },
+        "total_usd": 0.5575,
+        "mean_usd_per_row": 0.005575,
+        "pricing_per_mtok": {
+          "input": 0.2,
+          "output": 1.25
+        }
+      },
+      "robustness": {
+        "valid_mass": {
+          "n": 100,
+          "min": 0.9931,
+          "p50": 0.9991,
+          "mean": 0.9985,
+          "threshold": 0.98,
+          "n_below_threshold": 0
+        },
+        "batch_parity": {
+          "verdict": "PASS",
+          "n_rows": 10,
+          "n_checks": 190,
+          "n_failed": 0
+        }
       }
     },
     {
@@ -47,33 +322,308 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.93, "accuracy_ci95": [0.88, 0.98], "macro_f1": 0.92},
-        "subclass": {"accuracy": 0.74, "accuracy_ci95": [0.655, 0.825], "macro_f1": 0.69},
-        "rad": {"accuracy": 0.81, "accuracy_ci95": [0.74, 0.88], "macro_f1": 0.78}
+        "ai_native": {
+          "accuracy": 0.93,
+          "accuracy_ci95": [
+            0.88,
+            0.98
+          ],
+          "macro_f1": 0.92
+        },
+        "subclass": {
+          "accuracy": 0.74,
+          "accuracy_ci95": [
+            0.655,
+            0.825
+          ],
+          "macro_f1": 0.69
+        },
+        "rad": {
+          "accuracy": 0.81,
+          "accuracy_ci95": [
+            0.74,
+            0.88
+          ],
+          "macro_f1": 0.78
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 93, "accuracy": 0.78},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.77},
-        "boundary_disagreement": {"n": 100, "rate": 0.06}
+        "subclass_family_conditional": {
+          "n": 93,
+          "accuracy": 0.78
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.77
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.06
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 118}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.4-nano",
+          "architecture": "classification",
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 336000,
+            "total_usd": 0.67,
+            "mean_usd_per_row": 0.0067,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 0.5750000000000001,
+            "mean_usd_per_row": 0.005750000000000001,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 236.187,
+            "estimated_usd_per_company": 0.00575,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 0.67,
+          "golden_after_cache_usd": 0.5750000000000001,
+          "estimated_production_usd": 236.187,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 3.1, "p95": 7.8, "mean": 3.6, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 3.1,
+          "p95": 7.8,
+          "mean": 3.6,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.071, "bins": []},
+        "axis": "ai_native",
+        "n": 100,
+        "n_eligible": 100,
+        "reliability": {
+          "bins": [
+            {
+              "range": [
+                0.0,
+                0.1
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.1,
+                0.2
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.2,
+                0.3
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.3,
+                0.4
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.4,
+                0.5
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.5,
+                0.6
+              ],
+              "count": 4,
+              "mean_confidence": 0.53,
+              "accuracy": 0.75
+            },
+            {
+              "range": [
+                0.6,
+                0.7
+              ],
+              "count": 10,
+              "mean_confidence": 0.62,
+              "accuracy": 0.8
+            },
+            {
+              "range": [
+                0.7,
+                0.8
+              ],
+              "count": 20,
+              "mean_confidence": 0.7475,
+              "accuracy": 0.85
+            },
+            {
+              "range": [
+                0.8,
+                0.9
+              ],
+              "count": 20,
+              "mean_confidence": 0.8775,
+              "accuracy": 0.95
+            },
+            {
+              "range": [
+                0.9,
+                1.0
+              ],
+              "count": 46,
+              "mean_confidence": 0.964,
+              "accuracy": 1.0
+            }
+          ],
+          "ece": 0.07836
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 0.98},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.93}
+          {
+            "coverage": 0.1,
+            "n": 10,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.2,
+            "n": 20,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.3,
+            "n": 30,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.4,
+            "n": 40,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.6,
+            "n": 60,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.7,
+            "n": 70,
+            "accuracy": 0.985714
+          },
+          {
+            "coverage": 0.8,
+            "n": 80,
+            "accuracy": 0.9875
+          },
+          {
+            "coverage": 0.9,
+            "n": 90,
+            "accuracy": 0.955556
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.93
+          }
         ]
       },
       "screen": {
         "id": "nano-med",
         "label": "nano / medium",
-        "mean_confidence": 0.83,
+        "mean_confidence": 0.85164,
         "share_above_90": 0.46,
-        "selective_acc_50": 0.98
+        "selective_acc_50": 1.0
+      },
+      "cost": {
+        "model": "gpt-5.4-nano",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 336000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 335200,
+            "reasoning": 275200
+          }
+        },
+        "total_usd": 0.67,
+        "mean_usd_per_row": 0.0067,
+        "pricing_per_mtok": {
+          "input": 0.2,
+          "output": 1.25
+        }
+      },
+      "robustness": {
+        "valid_mass": {
+          "n": 100,
+          "min": 0.9931,
+          "p50": 0.9991,
+          "mean": 0.9985,
+          "threshold": 0.98,
+          "n_below_threshold": 0
+        },
+        "batch_parity": {
+          "verdict": "PASS",
+          "n_rows": 10,
+          "n_checks": 190,
+          "n_failed": 0
+        }
       }
     },
     {
@@ -84,33 +634,308 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.93, "accuracy_ci95": [0.88, 0.98], "macro_f1": 0.92},
-        "subclass": {"accuracy": 0.76, "accuracy_ci95": [0.678, 0.842], "macro_f1": 0.71},
-        "rad": {"accuracy": 0.82, "accuracy_ci95": [0.75, 0.89], "macro_f1": 0.79}
+        "ai_native": {
+          "accuracy": 0.93,
+          "accuracy_ci95": [
+            0.88,
+            0.98
+          ],
+          "macro_f1": 0.92
+        },
+        "subclass": {
+          "accuracy": 0.76,
+          "accuracy_ci95": [
+            0.678,
+            0.842
+          ],
+          "macro_f1": 0.71
+        },
+        "rad": {
+          "accuracy": 0.82,
+          "accuracy_ci95": [
+            0.75,
+            0.89
+          ],
+          "macro_f1": 0.79
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 93, "accuracy": 0.80},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.79},
-        "boundary_disagreement": {"n": 100, "rate": 0.05}
+        "subclass_family_conditional": {
+          "n": 93,
+          "accuracy": 0.8
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.79
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.05
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 175}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.4-nano",
+          "architecture": "classification",
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 558000,
+            "total_usd": 0.9475,
+            "mean_usd_per_row": 0.009475,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 0.8525,
+            "mean_usd_per_row": 0.008525,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 350.1729,
+            "estimated_usd_per_company": 0.008525000000000001,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 0.9475,
+          "golden_after_cache_usd": 0.8525,
+          "estimated_production_usd": 350.1729,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 4.0, "p95": 9.6, "mean": 4.7, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 4.0,
+          "p95": 9.6,
+          "mean": 4.7,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.071, "bins": []},
+        "axis": "ai_native",
+        "n": 100,
+        "n_eligible": 100,
+        "reliability": {
+          "bins": [
+            {
+              "range": [
+                0.0,
+                0.1
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.1,
+                0.2
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.2,
+                0.3
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.3,
+                0.4
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.4,
+                0.5
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.5,
+                0.6
+              ],
+              "count": 4,
+              "mean_confidence": 0.53,
+              "accuracy": 0.75
+            },
+            {
+              "range": [
+                0.6,
+                0.7
+              ],
+              "count": 10,
+              "mean_confidence": 0.62,
+              "accuracy": 0.8
+            },
+            {
+              "range": [
+                0.7,
+                0.8
+              ],
+              "count": 20,
+              "mean_confidence": 0.7475,
+              "accuracy": 0.85
+            },
+            {
+              "range": [
+                0.8,
+                0.9
+              ],
+              "count": 20,
+              "mean_confidence": 0.8775,
+              "accuracy": 0.95
+            },
+            {
+              "range": [
+                0.9,
+                1.0
+              ],
+              "count": 46,
+              "mean_confidence": 0.964,
+              "accuracy": 1.0
+            }
+          ],
+          "ece": 0.07836
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 0.98},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.93}
+          {
+            "coverage": 0.1,
+            "n": 10,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.2,
+            "n": 20,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.3,
+            "n": 30,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.4,
+            "n": 40,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.6,
+            "n": 60,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.7,
+            "n": 70,
+            "accuracy": 0.985714
+          },
+          {
+            "coverage": 0.8,
+            "n": 80,
+            "accuracy": 0.9875
+          },
+          {
+            "coverage": 0.9,
+            "n": 90,
+            "accuracy": 0.955556
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.93
+          }
         ]
       },
       "screen": {
         "id": "nano-high",
         "label": "nano / high",
-        "mean_confidence": 0.83,
+        "mean_confidence": 0.85164,
         "share_above_90": 0.46,
-        "selective_acc_50": 0.98
+        "selective_acc_50": 1.0
+      },
+      "cost": {
+        "model": "gpt-5.4-nano",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 558000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 557200,
+            "reasoning": 497200
+          }
+        },
+        "total_usd": 0.9475,
+        "mean_usd_per_row": 0.009475,
+        "pricing_per_mtok": {
+          "input": 0.2,
+          "output": 1.25
+        }
+      },
+      "robustness": {
+        "valid_mass": {
+          "n": 100,
+          "min": 0.9931,
+          "p50": 0.9991,
+          "mean": 0.9985,
+          "threshold": 0.98,
+          "n_below_threshold": 0
+        },
+        "batch_parity": {
+          "verdict": "PASS",
+          "n_rows": 10,
+          "n_checks": 190,
+          "n_failed": 0
+        }
       }
     },
     {
@@ -121,33 +946,308 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.96, "accuracy_ci95": [0.92, 1.0], "macro_f1": 0.95},
-        "subclass": {"accuracy": 0.78, "accuracy_ci95": [0.70, 0.86], "macro_f1": 0.74},
-        "rad": {"accuracy": 0.83, "accuracy_ci95": [0.76, 0.90], "macro_f1": 0.80}
+        "ai_native": {
+          "accuracy": 0.96,
+          "accuracy_ci95": [
+            0.92,
+            1.0
+          ],
+          "macro_f1": 0.95
+        },
+        "subclass": {
+          "accuracy": 0.78,
+          "accuracy_ci95": [
+            0.7,
+            0.86
+          ],
+          "macro_f1": 0.74
+        },
+        "rad": {
+          "accuracy": 0.83,
+          "accuracy_ci95": [
+            0.76,
+            0.9
+          ],
+          "macro_f1": 0.8
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 96, "accuracy": 0.81},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.79},
-        "boundary_disagreement": {"n": 100, "rate": 0.07}
+        "subclass_family_conditional": {
+          "n": 96,
+          "accuracy": 0.81
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.79
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.07
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 290}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.4-mini",
+          "architecture": "classification",
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 184000,
+            "total_usd": 1.7654999999999998,
+            "mean_usd_per_row": 0.017654999999999997,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 1.40925,
+            "mean_usd_per_row": 0.014092499999999999,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 578.86353,
+            "estimated_usd_per_company": 0.014092499999999999,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 1.7654999999999998,
+          "golden_after_cache_usd": 1.40925,
+          "estimated_production_usd": 578.86353,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 3.8, "p95": 9.1, "mean": 4.4, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 3.8,
+          "p95": 9.1,
+          "mean": 4.4,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.038, "bins": []},
+        "axis": "ai_native",
+        "n": 100,
+        "n_eligible": 100,
+        "reliability": {
+          "bins": [
+            {
+              "range": [
+                0.0,
+                0.1
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.1,
+                0.2
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.2,
+                0.3
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.3,
+                0.4
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.4,
+                0.5
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.5,
+                0.6
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.6,
+                0.7
+              ],
+              "count": 4,
+              "mean_confidence": 0.6725,
+              "accuracy": 0.75
+            },
+            {
+              "range": [
+                0.7,
+                0.8
+              ],
+              "count": 15,
+              "mean_confidence": 0.7725,
+              "accuracy": 0.866667
+            },
+            {
+              "range": [
+                0.8,
+                0.9
+              ],
+              "count": 20,
+              "mean_confidence": 0.8845,
+              "accuracy": 0.95
+            },
+            {
+              "range": [
+                0.9,
+                1.0
+              ],
+              "count": 61,
+              "mean_confidence": 0.974,
+              "accuracy": 1.0
+            }
+          ],
+          "ece": 0.046185
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 0.99},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.96}
+          {
+            "coverage": 0.1,
+            "n": 10,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.2,
+            "n": 20,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.3,
+            "n": 30,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.4,
+            "n": 40,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.6,
+            "n": 60,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.7,
+            "n": 70,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.8,
+            "n": 80,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.9,
+            "n": 90,
+            "accuracy": 0.988889
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.96
+          }
         ]
       },
       "screen": {
         "id": "mini-low",
         "label": "mini / low",
-        "mean_confidence": 0.88,
+        "mean_confidence": 0.913815,
         "share_above_90": 0.61,
-        "selective_acc_50": 0.99
+        "selective_acc_50": 1.0
+      },
+      "cost": {
+        "model": "gpt-5.4-mini",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 184000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 183200,
+            "reasoning": 123200
+          }
+        },
+        "total_usd": 1.7655,
+        "mean_usd_per_row": 0.017655,
+        "pricing_per_mtok": {
+          "input": 0.75,
+          "output": 4.5
+        }
+      },
+      "robustness": {
+        "valid_mass": {
+          "n": 100,
+          "min": 0.9954,
+          "p50": 0.9994,
+          "mean": 0.999,
+          "threshold": 0.98,
+          "n_below_threshold": 0
+        },
+        "batch_parity": {
+          "verdict": "PASS",
+          "n_rows": 10,
+          "n_checks": 190,
+          "n_failed": 0
+        }
       }
     },
     {
@@ -158,33 +1258,308 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.96, "accuracy_ci95": [0.92, 1.0], "macro_f1": 0.95},
-        "subclass": {"accuracy": 0.82, "accuracy_ci95": [0.745, 0.895], "macro_f1": 0.78},
-        "rad": {"accuracy": 0.85, "accuracy_ci95": [0.78, 0.92], "macro_f1": 0.82}
+        "ai_native": {
+          "accuracy": 0.96,
+          "accuracy_ci95": [
+            0.92,
+            1.0
+          ],
+          "macro_f1": 0.95
+        },
+        "subclass": {
+          "accuracy": 0.82,
+          "accuracy_ci95": [
+            0.745,
+            0.895
+          ],
+          "macro_f1": 0.78
+        },
+        "rad": {
+          "accuracy": 0.85,
+          "accuracy_ci95": [
+            0.78,
+            0.92
+          ],
+          "macro_f1": 0.82
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 96, "accuracy": 0.85},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.83},
-        "boundary_disagreement": {"n": 100, "rate": 0.05}
+        "subclass_family_conditional": {
+          "n": 96,
+          "accuracy": 0.85
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.83
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.05
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 412}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.4-mini",
+          "architecture": "classification",
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 317000,
+            "total_usd": 2.364,
+            "mean_usd_per_row": 0.023639999999999998,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 2.00775,
+            "mean_usd_per_row": 0.0200775,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 824.70339,
+            "estimated_usd_per_company": 0.0200775,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 2.364,
+          "golden_after_cache_usd": 2.00775,
+          "estimated_production_usd": 824.70339,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 4.6, "p95": 11.2, "mean": 5.5, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 4.6,
+          "p95": 11.2,
+          "mean": 5.5,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.038, "bins": []},
+        "axis": "ai_native",
+        "n": 100,
+        "n_eligible": 100,
+        "reliability": {
+          "bins": [
+            {
+              "range": [
+                0.0,
+                0.1
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.1,
+                0.2
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.2,
+                0.3
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.3,
+                0.4
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.4,
+                0.5
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.5,
+                0.6
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.6,
+                0.7
+              ],
+              "count": 4,
+              "mean_confidence": 0.6725,
+              "accuracy": 0.75
+            },
+            {
+              "range": [
+                0.7,
+                0.8
+              ],
+              "count": 15,
+              "mean_confidence": 0.7725,
+              "accuracy": 0.866667
+            },
+            {
+              "range": [
+                0.8,
+                0.9
+              ],
+              "count": 20,
+              "mean_confidence": 0.8845,
+              "accuracy": 0.95
+            },
+            {
+              "range": [
+                0.9,
+                1.0
+              ],
+              "count": 61,
+              "mean_confidence": 0.974,
+              "accuracy": 1.0
+            }
+          ],
+          "ece": 0.046185
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 0.99},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.96}
+          {
+            "coverage": 0.1,
+            "n": 10,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.2,
+            "n": 20,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.3,
+            "n": 30,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.4,
+            "n": 40,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.6,
+            "n": 60,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.7,
+            "n": 70,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.8,
+            "n": 80,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.9,
+            "n": 90,
+            "accuracy": 0.988889
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.96
+          }
         ]
       },
       "screen": {
         "id": "mini-med",
         "label": "mini / medium",
-        "mean_confidence": 0.88,
+        "mean_confidence": 0.913815,
         "share_above_90": 0.61,
-        "selective_acc_50": 0.99
+        "selective_acc_50": 1.0
+      },
+      "cost": {
+        "model": "gpt-5.4-mini",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 317000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 316200,
+            "reasoning": 256200
+          }
+        },
+        "total_usd": 2.364,
+        "mean_usd_per_row": 0.02364,
+        "pricing_per_mtok": {
+          "input": 0.75,
+          "output": 4.5
+        }
+      },
+      "robustness": {
+        "valid_mass": {
+          "n": 100,
+          "min": 0.9954,
+          "p50": 0.9994,
+          "mean": 0.999,
+          "threshold": 0.98,
+          "n_below_threshold": 0
+        },
+        "batch_parity": {
+          "verdict": "PASS",
+          "n_rows": 10,
+          "n_checks": 190,
+          "n_failed": 0
+        }
       }
     },
     {
@@ -195,33 +1570,308 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.96, "accuracy_ci95": [0.92, 1.0], "macro_f1": 0.95},
-        "subclass": {"accuracy": 0.84, "accuracy_ci95": [0.768, 0.912], "macro_f1": 0.80},
-        "rad": {"accuracy": 0.86, "accuracy_ci95": [0.79, 0.93], "macro_f1": 0.83}
+        "ai_native": {
+          "accuracy": 0.96,
+          "accuracy_ci95": [
+            0.92,
+            1.0
+          ],
+          "macro_f1": 0.95
+        },
+        "subclass": {
+          "accuracy": 0.84,
+          "accuracy_ci95": [
+            0.768,
+            0.912
+          ],
+          "macro_f1": 0.8
+        },
+        "rad": {
+          "accuracy": 0.86,
+          "accuracy_ci95": [
+            0.79,
+            0.93
+          ],
+          "macro_f1": 0.83
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 96, "accuracy": 0.87},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.85},
-        "boundary_disagreement": {"n": 100, "rate": 0.04}
+        "subclass_family_conditional": {
+          "n": 96,
+          "accuracy": 0.87
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.85
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.04
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 580}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.4-mini",
+          "architecture": "classification",
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 498000,
+            "total_usd": 3.1785,
+            "mean_usd_per_row": 0.031785,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 2.82225,
+            "mean_usd_per_row": 0.028222499999999998,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 1159.26741,
+            "estimated_usd_per_company": 0.028222499999999998,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 3.1785,
+          "golden_after_cache_usd": 2.82225,
+          "estimated_production_usd": 1159.26741,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 5.8, "p95": 13.4, "mean": 6.9, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 5.8,
+          "p95": 13.4,
+          "mean": 6.9,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.038, "bins": []},
+        "axis": "ai_native",
+        "n": 100,
+        "n_eligible": 100,
+        "reliability": {
+          "bins": [
+            {
+              "range": [
+                0.0,
+                0.1
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.1,
+                0.2
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.2,
+                0.3
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.3,
+                0.4
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.4,
+                0.5
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.5,
+                0.6
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.6,
+                0.7
+              ],
+              "count": 4,
+              "mean_confidence": 0.6725,
+              "accuracy": 0.75
+            },
+            {
+              "range": [
+                0.7,
+                0.8
+              ],
+              "count": 15,
+              "mean_confidence": 0.7725,
+              "accuracy": 0.866667
+            },
+            {
+              "range": [
+                0.8,
+                0.9
+              ],
+              "count": 20,
+              "mean_confidence": 0.8845,
+              "accuracy": 0.95
+            },
+            {
+              "range": [
+                0.9,
+                1.0
+              ],
+              "count": 61,
+              "mean_confidence": 0.974,
+              "accuracy": 1.0
+            }
+          ],
+          "ece": 0.046185
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 0.99},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.96}
+          {
+            "coverage": 0.1,
+            "n": 10,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.2,
+            "n": 20,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.3,
+            "n": 30,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.4,
+            "n": 40,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.6,
+            "n": 60,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.7,
+            "n": 70,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.8,
+            "n": 80,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.9,
+            "n": 90,
+            "accuracy": 0.988889
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.96
+          }
         ]
       },
       "screen": {
         "id": "mini-high",
         "label": "mini / high",
-        "mean_confidence": 0.88,
+        "mean_confidence": 0.913815,
         "share_above_90": 0.61,
-        "selective_acc_50": 0.99
+        "selective_acc_50": 1.0
+      },
+      "cost": {
+        "model": "gpt-5.4-mini",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 498000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 497200,
+            "reasoning": 437200
+          }
+        },
+        "total_usd": 3.1785,
+        "mean_usd_per_row": 0.031785,
+        "pricing_per_mtok": {
+          "input": 0.75,
+          "output": 4.5
+        }
+      },
+      "robustness": {
+        "valid_mass": {
+          "n": 100,
+          "min": 0.9954,
+          "p50": 0.9994,
+          "mean": 0.999,
+          "threshold": 0.98,
+          "n_below_threshold": 0
+        },
+        "batch_parity": {
+          "verdict": "PASS",
+          "n_rows": 10,
+          "n_checks": 190,
+          "n_failed": 0
+        }
       }
     },
     {
@@ -232,33 +1882,308 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.97, "accuracy_ci95": [0.94, 1.0], "macro_f1": 0.96},
-        "subclass": {"accuracy": 0.81, "accuracy_ci95": [0.734, 0.886], "macro_f1": 0.77},
-        "rad": {"accuracy": 0.84, "accuracy_ci95": [0.77, 0.91], "macro_f1": 0.81}
+        "ai_native": {
+          "accuracy": 0.97,
+          "accuracy_ci95": [
+            0.94,
+            1.0
+          ],
+          "macro_f1": 0.96
+        },
+        "subclass": {
+          "accuracy": 0.81,
+          "accuracy_ci95": [
+            0.734,
+            0.886
+          ],
+          "macro_f1": 0.77
+        },
+        "rad": {
+          "accuracy": 0.84,
+          "accuracy_ci95": [
+            0.77,
+            0.91
+          ],
+          "macro_f1": 0.81
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 97, "accuracy": 0.83},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.81},
-        "boundary_disagreement": {"n": 100, "rate": 0.06}
+        "subclass_family_conditional": {
+          "n": 97,
+          "accuracy": 0.83
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.81
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.06
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 980}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.6-luna",
+          "architecture": "classification",
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 666000,
+            "total_usd": 5.246,
+            "mean_usd_per_row": 0.05246000000000001,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 4.771000000000001,
+            "mean_usd_per_row": 0.04771000000000001,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 1959.7359600000002,
+            "estimated_usd_per_company": 0.04771,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 5.246,
+          "golden_after_cache_usd": 4.771000000000001,
+          "estimated_production_usd": 1959.7359600000002,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 6.2, "p95": 14.8, "mean": 7.4, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 6.2,
+          "p95": 14.8,
+          "mean": 7.4,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.041, "bins": []},
+        "axis": "ai_native",
+        "n": 100,
+        "n_eligible": 100,
+        "reliability": {
+          "bins": [
+            {
+              "range": [
+                0.0,
+                0.1
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.1,
+                0.2
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.2,
+                0.3
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.3,
+                0.4
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.4,
+                0.5
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.5,
+                0.6
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.6,
+                0.7
+              ],
+              "count": 4,
+              "mean_confidence": 0.6725,
+              "accuracy": 0.75
+            },
+            {
+              "range": [
+                0.7,
+                0.8
+              ],
+              "count": 8,
+              "mean_confidence": 0.7725,
+              "accuracy": 0.875
+            },
+            {
+              "range": [
+                0.8,
+                0.9
+              ],
+              "count": 18,
+              "mean_confidence": 0.8795,
+              "accuracy": 0.944444
+            },
+            {
+              "range": [
+                0.9,
+                1.0
+              ],
+              "count": 70,
+              "mean_confidence": 0.969,
+              "accuracy": 1.0
+            }
+          ],
+          "ece": 0.04469
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 1.0},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.97}
+          {
+            "coverage": 0.1,
+            "n": 10,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.2,
+            "n": 20,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.3,
+            "n": 30,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.4,
+            "n": 40,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.6,
+            "n": 60,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.7,
+            "n": 70,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.8,
+            "n": 80,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.9,
+            "n": 90,
+            "accuracy": 0.988889
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.97
+          }
         ]
       },
       "screen": {
         "id": "luna-low",
         "label": "luna / low",
-        "mean_confidence": 0.90,
-        "share_above_90": 0.70,
+        "mean_confidence": 0.92531,
+        "share_above_90": 0.7,
         "selective_acc_50": 1.0
+      },
+      "cost": {
+        "model": "gpt-5.6-luna",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 666000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 665200,
+            "reasoning": 605200
+          }
+        },
+        "total_usd": 5.246,
+        "mean_usd_per_row": 0.05246,
+        "pricing_per_mtok": {
+          "input": 1.0,
+          "output": 6.0
+        }
+      },
+      "robustness": {
+        "valid_mass": {
+          "n": 100,
+          "min": 0.9948,
+          "p50": 0.9993,
+          "mean": 0.9989,
+          "threshold": 0.98,
+          "n_below_threshold": 0
+        },
+        "batch_parity": {
+          "verdict": "PASS",
+          "n_rows": 10,
+          "n_checks": 190,
+          "n_failed": 0
+        }
       }
     },
     {
@@ -269,33 +2194,308 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.97, "accuracy_ci95": [0.94, 1.0], "macro_f1": 0.96},
-        "subclass": {"accuracy": 0.85, "accuracy_ci95": [0.78, 0.92], "macro_f1": 0.81},
-        "rad": {"accuracy": 0.87, "accuracy_ci95": [0.81, 0.93], "macro_f1": 0.84}
+        "ai_native": {
+          "accuracy": 0.97,
+          "accuracy_ci95": [
+            0.94,
+            1.0
+          ],
+          "macro_f1": 0.96
+        },
+        "subclass": {
+          "accuracy": 0.85,
+          "accuracy_ci95": [
+            0.78,
+            0.92
+          ],
+          "macro_f1": 0.81
+        },
+        "rad": {
+          "accuracy": 0.87,
+          "accuracy_ci95": [
+            0.81,
+            0.93
+          ],
+          "macro_f1": 0.84
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 97, "accuracy": 0.87},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.85},
-        "boundary_disagreement": {"n": 100, "rate": 0.04}
+        "subclass_family_conditional": {
+          "n": 97,
+          "accuracy": 0.87
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.85
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.04
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 1450}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.6-luna",
+          "architecture": "classification",
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 1047000,
+            "total_usd": 7.532,
+            "mean_usd_per_row": 0.07532,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 7.057,
+            "mean_usd_per_row": 0.07057000000000001,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 2898.7333200000003,
+            "estimated_usd_per_company": 0.07057000000000001,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 7.532,
+          "golden_after_cache_usd": 7.057,
+          "estimated_production_usd": 2898.7333200000003,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 7.9, "p95": 18.2, "mean": 9.5, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 7.9,
+          "p95": 18.2,
+          "mean": 9.5,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.041, "bins": []},
+        "axis": "ai_native",
+        "n": 100,
+        "n_eligible": 100,
+        "reliability": {
+          "bins": [
+            {
+              "range": [
+                0.0,
+                0.1
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.1,
+                0.2
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.2,
+                0.3
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.3,
+                0.4
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.4,
+                0.5
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.5,
+                0.6
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.6,
+                0.7
+              ],
+              "count": 4,
+              "mean_confidence": 0.6725,
+              "accuracy": 0.75
+            },
+            {
+              "range": [
+                0.7,
+                0.8
+              ],
+              "count": 8,
+              "mean_confidence": 0.7725,
+              "accuracy": 0.875
+            },
+            {
+              "range": [
+                0.8,
+                0.9
+              ],
+              "count": 18,
+              "mean_confidence": 0.8795,
+              "accuracy": 0.944444
+            },
+            {
+              "range": [
+                0.9,
+                1.0
+              ],
+              "count": 70,
+              "mean_confidence": 0.969,
+              "accuracy": 1.0
+            }
+          ],
+          "ece": 0.04469
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 1.0},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.97}
+          {
+            "coverage": 0.1,
+            "n": 10,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.2,
+            "n": 20,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.3,
+            "n": 30,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.4,
+            "n": 40,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.6,
+            "n": 60,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.7,
+            "n": 70,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.8,
+            "n": 80,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.9,
+            "n": 90,
+            "accuracy": 0.988889
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.97
+          }
         ]
       },
       "screen": {
         "id": "luna-med",
         "label": "luna / medium",
-        "mean_confidence": 0.90,
-        "share_above_90": 0.70,
+        "mean_confidence": 0.92531,
+        "share_above_90": 0.7,
         "selective_acc_50": 1.0
+      },
+      "cost": {
+        "model": "gpt-5.6-luna",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 1047000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 1046200,
+            "reasoning": 986200
+          }
+        },
+        "total_usd": 7.532,
+        "mean_usd_per_row": 0.07532,
+        "pricing_per_mtok": {
+          "input": 1.0,
+          "output": 6.0
+        }
+      },
+      "robustness": {
+        "valid_mass": {
+          "n": 100,
+          "min": 0.9948,
+          "p50": 0.9993,
+          "mean": 0.9989,
+          "threshold": 0.98,
+          "n_below_threshold": 0
+        },
+        "batch_parity": {
+          "verdict": "PASS",
+          "n_rows": 10,
+          "n_checks": 190,
+          "n_failed": 0
+        }
       }
     },
     {
@@ -306,33 +2506,308 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.97, "accuracy_ci95": [0.94, 1.0], "macro_f1": 0.96},
-        "subclass": {"accuracy": 0.86, "accuracy_ci95": [0.792, 0.928], "macro_f1": 0.82},
-        "rad": {"accuracy": 0.88, "accuracy_ci95": [0.82, 0.94], "macro_f1": 0.85}
+        "ai_native": {
+          "accuracy": 0.97,
+          "accuracy_ci95": [
+            0.94,
+            1.0
+          ],
+          "macro_f1": 0.96
+        },
+        "subclass": {
+          "accuracy": 0.86,
+          "accuracy_ci95": [
+            0.792,
+            0.928
+          ],
+          "macro_f1": 0.82
+        },
+        "rad": {
+          "accuracy": 0.88,
+          "accuracy_ci95": [
+            0.82,
+            0.94
+          ],
+          "macro_f1": 0.85
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 97, "accuracy": 0.88},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.86},
-        "boundary_disagreement": {"n": 100, "rate": 0.03}
+        "subclass_family_conditional": {
+          "n": 97,
+          "accuracy": 0.88
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.86
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.03
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 2100}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.6-luna",
+          "architecture": "classification",
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 1575000,
+            "total_usd": 10.7,
+            "mean_usd_per_row": 0.107,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 10.225,
+            "mean_usd_per_row": 0.10225,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 4200.021,
+            "estimated_usd_per_company": 0.10225,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 10.7,
+          "golden_after_cache_usd": 10.225,
+          "estimated_production_usd": 4200.021,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 9.8, "p95": 22.5, "mean": 11.8, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 9.8,
+          "p95": 22.5,
+          "mean": 11.8,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.041, "bins": []},
+        "axis": "ai_native",
+        "n": 100,
+        "n_eligible": 100,
+        "reliability": {
+          "bins": [
+            {
+              "range": [
+                0.0,
+                0.1
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.1,
+                0.2
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.2,
+                0.3
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.3,
+                0.4
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.4,
+                0.5
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.5,
+                0.6
+              ],
+              "count": 0,
+              "mean_confidence": null,
+              "accuracy": null
+            },
+            {
+              "range": [
+                0.6,
+                0.7
+              ],
+              "count": 4,
+              "mean_confidence": 0.6725,
+              "accuracy": 0.75
+            },
+            {
+              "range": [
+                0.7,
+                0.8
+              ],
+              "count": 8,
+              "mean_confidence": 0.7725,
+              "accuracy": 0.875
+            },
+            {
+              "range": [
+                0.8,
+                0.9
+              ],
+              "count": 18,
+              "mean_confidence": 0.8795,
+              "accuracy": 0.944444
+            },
+            {
+              "range": [
+                0.9,
+                1.0
+              ],
+              "count": 70,
+              "mean_confidence": 0.969,
+              "accuracy": 1.0
+            }
+          ],
+          "ece": 0.04469
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 1.0},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.97}
+          {
+            "coverage": 0.1,
+            "n": 10,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.2,
+            "n": 20,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.3,
+            "n": 30,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.4,
+            "n": 40,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.6,
+            "n": 60,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.7,
+            "n": 70,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.8,
+            "n": 80,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 0.9,
+            "n": 90,
+            "accuracy": 0.988889
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.97
+          }
         ]
       },
       "screen": {
         "id": "luna-high",
         "label": "luna / high",
-        "mean_confidence": 0.90,
-        "share_above_90": 0.70,
+        "mean_confidence": 0.92531,
+        "share_above_90": 0.7,
         "selective_acc_50": 1.0
+      },
+      "cost": {
+        "model": "gpt-5.6-luna",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 1575000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 1574200,
+            "reasoning": 1514200
+          }
+        },
+        "total_usd": 10.7,
+        "mean_usd_per_row": 0.107,
+        "pricing_per_mtok": {
+          "input": 1.0,
+          "output": 6.0
+        }
+      },
+      "robustness": {
+        "valid_mass": {
+          "n": 100,
+          "min": 0.9948,
+          "p50": 0.9993,
+          "mean": 0.9989,
+          "threshold": 0.98,
+          "n_below_threshold": 0
+        },
+        "batch_parity": {
+          "verdict": "PASS",
+          "n_rows": 10,
+          "n_checks": 190,
+          "n_failed": 0
+        }
       }
     }
   ]
