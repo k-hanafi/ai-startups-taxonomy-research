@@ -733,6 +733,13 @@ function layout(extra) {
     xaxis: {gridcolor: '#222222', zeroline: false, linecolor: '#2a2a2a', tickfont: numFont},
     yaxis: {gridcolor: '#222222', zeroline: false, linecolor: '#2a2a2a', tickfont: numFont},
     legend: {orientation: 'h', y: 1.14, x: 0, font: {size: 11, color: '#a8abb0'}},
+    // Plotly defaults the hover box to the trace color, which is unreadable
+    // on the dark theme; pin it to a dark panel with light text everywhere.
+    hoverlabel: {
+      bgcolor: '#1c1f26',
+      bordercolor: '#3a3f4b',
+      font: {family: 'Inter, Segoe UI, sans-serif', size: 12, color: '#e8e8ea'},
+    },
   }, extra || {});
 }
 
@@ -963,9 +970,11 @@ function isPartial(c) {
 }
 
 function sampleCaption(c) {
+  // "100 of 100 rows scored" = golden-set coverage, never an accuracy;
+  // the old "100/100 scored" read as a score out of 100.
   if (c.n_scored == null && c.n_expected == null) return '';
-  if (c.n_expected != null) return String(c.n_scored ?? '?') + '/' + c.n_expected + ' scored';
-  return String(c.n_scored) + ' scored';
+  if (c.n_expected != null) return String(c.n_scored ?? '?') + ' of ' + c.n_expected + ' rows scored';
+  return String(c.n_scored) + ' rows scored';
 }
 
 // --- Tab 2: model benchmarks -------------------------------------------------
@@ -1027,6 +1036,20 @@ function renderPareto() {
   }
   const pad = Math.max(0.03, (yHi - yLo) * 0.12);
   const yRange = [Math.max(0, yLo - pad), Math.min(1, yHi + pad)];
+  // Explicit dollar ticks on the log axis: Plotly's default log labels render
+  // minor ticks as bare digits (2, 3, 4...), which reads as broken. A 1-2-5
+  // ladder covers any cost range, mock or real.
+  const xs = plottable.map(c => c.projected_usd);
+  const xLo = Math.min(...xs);
+  const xHi = Math.max(...xs);
+  const tickVals = [];
+  for (let e = Math.floor(Math.log10(xLo)) - 1; e <= Math.ceil(Math.log10(xHi)); e++) {
+    for (const m of [1, 2, 5]) {
+      const v = m * Math.pow(10, e);
+      if (v >= xLo / 1.4 && v <= xHi * 1.4) tickVals.push(v);
+    }
+  }
+  const xRange = [Math.log10(xLo) - 0.12, Math.log10(xHi) + 0.14];
   const traces = plottable.map(c => {
     const partial = isPartial(c);
     const nBit = sampleCaption(c);
@@ -1049,7 +1072,7 @@ function renderPareto() {
       },
       error_y: c.subclass_ci == null ? undefined : {
         type: 'data', array: [c.subclass_ci], visible: true,
-        color: '#444444', thickness: 1, width: 3,
+        color: '#7a7e85', thickness: 1, width: 3,
       },
       hovertemplate: c.label + '<br>subclass %{y:.1%}<br>cost %{x:$,.0f}' +
         hoverExtra + '<extra></extra>',
@@ -1058,7 +1081,9 @@ function renderPareto() {
   Plotly.newPlot('chart-pareto', traces, layout({
     xaxis: {
       title: {text: 'Projected production cost, USD (log scale)', font: axisFont},
-      type: 'log', gridcolor: '#222222', zeroline: false, tickfont: numFont,
+      type: 'log', range: xRange,
+      tickvals: tickVals, ticktext: tickVals.map(money),
+      gridcolor: '#222222', zeroline: false, tickfont: numFont,
     },
     yaxis: {
       title: {text: 'Subclass accuracy', font: axisFont},
