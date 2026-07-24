@@ -120,6 +120,13 @@ def _disambiguate_repeat_labels(configs: list[dict[str, Any]]) -> None:
 
 
 def _projected_usd(scored: dict[str, Any]) -> Optional[float]:
+    """Leaderboard $ from the sync cost ladder only (step 3_scale).
+
+    No fallback to screen.projected_usd: that field can hold a stale
+    batch-era total while the popover reads the ladder (or shows
+    production as not recorded). Missing / blocked scale → None so the
+    table and breakdown stay honest together.
+    """
     est = scored.get("production_cost_estimate") or {}
     if not est:
         return None
@@ -127,9 +134,6 @@ def _projected_usd(scored: dict[str, Any]) -> Optional[float]:
     scale = steps.get("3_scale") or {}
     if scale.get("available") and scale.get("estimated_production_usd") is not None:
         return float(scale["estimated_production_usd"])
-    screen = scored.get("screen") or {}
-    if screen.get("projected_usd") is not None:
-        return float(screen["projected_usd"])
     return None
 
 
@@ -679,21 +683,32 @@ def _batch_parity_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
     recorded = _dedupe_by_model(runs, "batch_parity")
     per_model: list[dict[str, Any]] = []
     any_fail = False
+    any_pending = False
     total_checks = total_failed = 0
     n_rows: Optional[int] = None
     for model, block in recorded.items():
-        verdict = str(block.get("verdict") or "").upper()
-        fail = verdict != "PASS"
-        any_fail = any_fail or fail
+        raw = block.get("verdict")
+        verdict = str(raw).strip().upper() if raw is not None else ""
+        if not verdict:
+            status = "pending"
+            any_pending = True
+            verdict_label = "not recorded yet"
+        elif verdict == "PASS":
+            status = "pass"
+            verdict_label = verdict
+        else:
+            status = "fail"
+            any_fail = True
+            verdict_label = verdict
         total_checks += int(block.get("n_checks") or 0)
         total_failed += int(block.get("n_failed") or 0)
         if block.get("n_rows") is not None:
             n_rows = int(block["n_rows"])
         per_model.append({
             "model": model,
-            "status": "fail" if fail else "pass",
+            "status": status,
             "detail": (
-                f"verdict {verdict or 'unknown'}, "
+                f"verdict {verdict_label}, "
                 f"{int(block.get('n_failed') or 0)} of "
                 f"{int(block.get('n_checks') or 0)} checks failed"
             ),
@@ -712,6 +727,19 @@ def _batch_parity_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
                 "robustness.batch_parity summary is recorded with the run."
             ),
         }
+    if any_fail:
+        overall = "fail"
+        pending_note = None
+    elif any_pending:
+        overall = "pending"
+        pending_note = (
+            "A batch_parity block is present but the PASS/FAIL verdict is "
+            "still missing. Re-run the batch-parity smoke (or finish "
+            "scoring) before treating this check as settled."
+        )
+    else:
+        overall = "pass"
+        pending_note = None
     stats = [
         {"label": "Models verified", "value": _fmt_count(len(recorded))},
         {"label": "Checks failed", "value": f"{total_failed:,} of {total_checks:,}"},
@@ -721,11 +749,11 @@ def _batch_parity_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "id": "batch_parity",
         "title": "Sync-batch parity verified",
-        "status": "fail" if any_fail else "pass",
+        "status": overall,
         "meaning": BATCH_PARITY_MEANING,
         "stats": stats,
         "per_model": per_model,
-        "pending_note": None,
+        "pending_note": pending_note,
     }
 
 

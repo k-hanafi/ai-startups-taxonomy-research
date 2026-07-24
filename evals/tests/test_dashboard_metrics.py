@@ -299,6 +299,37 @@ def test_robustness_valid_mass_and_parity_fail_paths():
     assert by_id["tokenization_pinned"]["status"] == "pending"
 
 
+def test_robustness_parity_empty_verdict_is_pending():
+    """Incomplete batch_parity summaries must not paint a false fail."""
+    stub = _axes_stub(robustness={
+        "batch_parity": {
+            "verdict": "",
+            "n_rows": 10,
+            "n_checks": 0,
+            "n_failed": 0,
+        },
+    })
+    metrics = build_metrics([stub], synthetic=False, source="test")
+    parity = next(
+        c for c in metrics["robustness"]["checks"] if c["id"] == "batch_parity"
+    )
+    assert parity["status"] == "pending"
+    assert parity["pending_note"]
+    assert parity["per_model"][0]["status"] == "pending"
+
+
+def test_robustness_parity_missing_verdict_is_pending():
+    stub = _axes_stub(robustness={
+        "batch_parity": {"n_rows": 10, "n_checks": 5, "n_failed": 0},
+    })
+    metrics = build_metrics([stub], synthetic=False, source="test")
+    parity = next(
+        c for c in metrics["robustness"]["checks"] if c["id"] == "batch_parity"
+    )
+    assert parity["status"] == "pending"
+    assert parity["per_model"][0]["status"] == "pending"
+
+
 def test_fixture_cost_breakdowns_recompute_to_displayed_total():
     """Every fixture row's popover arithmetic must recompute by hand."""
     metrics = load_fixture(MOCK)
@@ -619,6 +650,37 @@ def test_projected_usd_none_when_cost_unavailable():
     }
     row = config_row_from_scored(stub)
     assert row["projected_usd"] is None
+
+
+def test_projected_usd_ignores_stale_screen_fallback():
+    """Blocked ladder + old screen.projected_usd must not disagree with popover."""
+    stub = {
+        "run_id": "2026-07-10_gpt-5.4-nano_low_r1",
+        "model": "gpt-5.4-nano",
+        "effort_b": "low",
+        "n_scored": 10,
+        "axes": {
+            "subclass": {
+                "accuracy": 0.7,
+                "accuracy_ci95": [0.6, 0.8],
+                "macro_f1": 0.65,
+            },
+            "ai_native": {"accuracy": 0.9, "accuracy_ci95": [0.8, 1.0], "macro_f1": 0.9},
+            "rad": {"accuracy": 0.8, "accuracy_ci95": [0.7, 0.9], "macro_f1": 0.75},
+        },
+        "screen": {"projected_usd": 999.0},
+        "production_cost_estimate": {
+            "available": False,
+            "steps": {
+                "3_scale": {"available": False, "estimated_production_usd": None},
+            },
+        },
+        "latency": {"latency_s": {"p50": 2.0, "p95": 5.0}},
+        "calibration": None,
+    }
+    row = config_row_from_scored(stub)
+    assert row["projected_usd"] is None
+    assert row["cost_breakdown"]["estimated_production_usd"] is None
 
 
 def _load_eval_dashboard_builder():
