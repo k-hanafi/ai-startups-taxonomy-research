@@ -928,6 +928,11 @@ def build_html(mb: dict, ms: dict, filter_data: dict) -> str:
     n_not_found = funnel["stages"][0]["n"] if funnel["stages"] else 0
     today = datetime.date.today().strftime("%b %d, %Y")
 
+    # Median confidence is 5 (over half the universe self-reports 5), which
+    # makes a median KPI card uninformative; show the mean instead.
+    conf_dist = mb["conf_class_dist"]
+    mean_conf = sum(k * v for k, v in conf_dist.items()) / max(sum(conf_dist.values()), 1)
+
     f1 = _forest(ms["regression"]["model1"])
     f2 = _forest(ms["regression"]["model2"])
     f3 = _forest(ms["regression"].get("model3", {}))
@@ -1067,9 +1072,9 @@ def build_html(mb: dict, ms: dict, filter_data: dict) -> str:
       <div class="mc-ctx">{"+" if delta >= 0 else ""}{delta} pts vs alive-only view</div>
     </div>
     <div class="metric-card">
-      <div class="mc-label">Median confidence</div>
-      <div class="mc-val">{mb["median_conf"]:.0f}</div>
-      <div class="mc-ctx">conf_classification (1&ndash;5)</div>
+      <div class="mc-label">Mean confidence</div>
+      <div class="mc-val">{mean_conf:.1f} / 5</div>
+      <div class="mc-ctx">conf_classification; median 5</div>
     </div>
   </div>
 
