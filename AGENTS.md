@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-24 · Active branch: `eval/suite-redesign` (Classifier Eval Suite: three-tab eval dashboard redesign with robustness checks, confidence correlation, run-instance card)
+Last updated: 2026-07-24 · Active branch: `eval/suite-redesign` (Classifier Eval Suite: three-tab eval dashboard redesign with robustness checks, confidence correlation, run-instance card, kept instance archive)
 
 ---
 
@@ -179,6 +179,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 |------|---------|
 | `dashboard_metrics.py` | Eval dashboard metrics: scored.json/fixture → chart metrics (ECE, reliability bins, selective curves, vs_baseline, Pass B isolating fields, finalist mean±range aggregates, per-config `cost_breakdown` for the cost popover) + `build_robustness` (tokenization / valid_mass / batch-parity checks with pass/fail/pending statuses, nothing fabricated) + `build_run_instance` (which run the page is for; start times read from each run's `config.json` `created_utc`). No OpenAI import. |
 | `tests/fixtures/dashboard/dashboard_mock_runs.json` | Synthetic locked matrix; Pass A metrics identical across efforts within each model (bank-once design); calibration blocks derive from one set of 100 synthetic rows per model (nano seeds the ECE ~0.077 early signal); per-run robustness blocks |
+| `instances.py` | Numbered dashboard archive: writes `eval_instance_NN.html` + `index.html` + `instances.json` under `01_Presentation_Materials/eval_instances/`; an instance is keyed on the runs behind it (start span + config ids), so rebuilding the same sweep replaces it instead of taking a new number. Also owns the run-headline / run-meta text shared with the suite header card. |
 | `config.py` | Locked matrix `EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`; `PASS_A_TOP_LOGPROBS=2` (binary); legacy `TOP_LOGPROBS` for old single-pass only |
 | `classification.py` | Pass A/B classification runner; Pass A auto-banks under `evals/runs/pass_a_banks/<model>/` (reuse by default; `--rerun-pass-a` / `--pass-a-from` escapes) |
 | `logprob_extract.py` | Pass A confidence; requires both `{0,1}` candidates or marks unavailable |
@@ -188,11 +189,12 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 ### Other
 | Path | Purpose |
 |------|---------|
-| `data visualization/01_Presentation_Materials/*.html` | Generated dashboards |
+| `data visualization/01_Presentation_Materials/*.html` | Generated dashboards (`eval_dashboard.html` is overwritten every build) |
+| `data visualization/01_Presentation_Materials/eval_instances/` | Kept eval suite builds: `eval_instance_NN.html` pages, `index.html` to browse them, `instances.json` registry |
 | `data visualization/02_Analysis_Code/*.py` | Scripts that build those dashboards |
 | `data visualization/02_Analysis_Code/survivorship_analysis.py` | Survivor-vs-dead compute on the evidence-only universe: distributions, BH-tested subclass deltas, funding/thin-history/snapshot-age cuts, coverage funnel, 3 logistic models (pure metrics dict; PREVIEW from production if `survivorship_corrected.csv` absent) |
 | `data visualization/02_Analysis_Code/build_v1_alive_dead_dashboard.py` | Flagship V1 alive-vs-dead dashboard: 5 corrected base sections + 4-act survivorship story (bias / who dies / why / robustness); writes `v1_alive_dead_cohort.html`; loud PREVIEW banner pre-merge (replaces the retired `build_survivorship_insights_dashboard.py`) |
-| `data visualization/02_Analysis_Code/build_eval_dashboard.py` | Classifier Eval Suite (flat enterprise SPA, three tabs): Pipeline robustness (checks panel), Model benchmarks (leaderboard + cost-ladder popover + Pareto + latency, chips + search), Confidence correctness correlation (reliability diagram, ECE, selective curves). Header run-instance card names the run (synthetic on the fixture, run date and time on real loads). Defaults to mock fixture; `--runs`/`--scored` for real runs. Writes `eval_dashboard.html`. |
+| `data visualization/02_Analysis_Code/build_eval_dashboard.py` | Classifier Eval Suite (flat enterprise SPA, three tabs): Pipeline robustness (checks panel), Model benchmarks (leaderboard + cost-ladder popover + Pareto + latency, chips + search), Confidence correctness correlation (reliability diagram, ECE, selective curves). Header run-instance card names the run (synthetic on the fixture, run date and time on real loads). Defaults to mock fixture; `--runs`/`--scored` for real runs. Writes `eval_dashboard.html` via `write_dashboard`, which archives real runs to `eval_instances/` automatically (mock builds need `--save-instance`). |
 | `tests/` | pytest for the live pipeline (schema, formatter, tokens, enrichment, tavily runner) |
 | `wayback_machine/tests/` | pytest for wayback (golden cleaner, cohort, state, config, budget, probe) |
 | `keys/` | API key env files, e.g. `keys/openai.env` (`OPENAI_API_KEY`). Git-ignored + cursor-ignored. **Never commit.** |
@@ -252,7 +254,8 @@ python -m evals run-classification --model gpt-5.4-nano --effort-b low --require
 # later efforts for the same model auto-reuse Pass A (bank at evals/runs/pass_a_banks/<model>/)
 # escape: --rerun-pass-a  |  advanced pin: --pass-a-from <run_id>
 python -m evals dashboard                       # build eval_dashboard.html from mock matrix (default)
-python -m evals dashboard --runs <run_id>...    # real scored.json only (no auto-discovery)
+python -m evals dashboard --runs <run_id>...    # real scored.json only (no auto-discovery); auto-archives to eval_instances/
+python -m evals dashboard --save-instance       # also keep this mock build as eval_instance_NN.html
 python -m evals score <run_id> --confidence-from-raw [--baseline <run_id>]
 python -m evals score <run_id> --allow-partial                 # incomplete n_scored only
 python -m evals score <run_id> --allow-partial-confidence      # incomplete raw confidence only
@@ -286,6 +289,7 @@ python -m evals score <run_id> --allow-partial-confidence      # incomplete raw 
 | Dashboards | `data visualization/02_Analysis_Code/` |
 | Alive-vs-dead dashboard / survivorship stats | `survivorship_analysis.py` (compute) + `build_v1_alive_dead_dashboard.py` (render); rebuild after `merge_survivorship.py` to leave PREVIEW mode |
 | Eval dashboard (Classifier Eval Suite) | `evals/dashboard_metrics.py` (metrics + robustness checks) + `build_eval_dashboard.py` (three tabs: robustness / benchmarks / confidence; mock fixture until paid matrix runs; `--runs` for real data) |
+| Kept dashboard builds / instance index | `evals/instances.py` (numbering, registry, index page) |
 | Eval matrix / scoring | `evals/config.py` (`EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`); `run-classification` (auto Pass A bank); `matrix`; `score --confidence-from-raw [--baseline]` |
 
 ## Maintaining this file

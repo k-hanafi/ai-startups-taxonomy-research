@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eval instances</title>
+<style>
+:root {
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --border: #2a2a2a;
+  --text: #e8e8ea;
+  --text2: #a8abb0;
+  --muted: #7a7e85;
+  --accent: #5b8fc4;
+  --sans: "Inter", "Segoe UI", -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.appbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--border);
+  padding: 18px 36px;
+}
+.brand { font-size: 17px; font-weight: 600; letter-spacing: -0.015em; }
+.brand small { margin-left: 12px; font-size: 12px; font-weight: 400; color: var(--muted); }
+.appbar-meta { font-size: 12px; font-family: var(--mono); color: var(--muted); }
+main { padding: 28px 36px 48px; max-width: 1100px; }
+.lede { color: var(--text2); max-width: 70ch; margin-bottom: 24px; }
+table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); }
+th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: none; }
+td.num { font-family: var(--mono); color: var(--text2); white-space: nowrap; }
+td.meta { color: var(--text2); }
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  margin-left: 8px;
+}
+.empty { border: 1px solid var(--border); background: var(--surface); padding: 20px; color: var(--text2); }
+footer { margin-top: 28px; font-size: 12px; color: var(--muted); }
+code { font-family: var(--mono); font-size: 0.92em; }
+</style>
+</head>
+<body>
+<header class="appbar">
+  <div class="brand">Classifier Eval Suite<small>instance archive</small></div>
+  <div class="appbar-meta">1 archived</div>
+</header>
+<main>
+  <p class="lede">Each row is one saved build of the eval suite, kept so a scored
+  run stays viewable after later builds. The working page
+  (<a href="../eval_dashboard.html">eval_dashboard.html</a>) is overwritten every
+  time the dashboard is rebuilt.</p>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Eval instance</th><th>Configs</th><th>Archived</th><th>File</th></tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="num">01</td>
+      <td>
+        <a href="eval_instance_01.html">Synthetic data (mock matrix)</a>
+        <div class="meta">nano, mini, luna</div>
+      </td>
+      <td class="num">9</td>
+      <td class="meta">Jul 24, 2026, 4:19 PM</td>
+      <td class="num">eval_instance_01.html</td>
+    </tr>
+    </tbody>
+  </table>
+  <footer>Index rewritten 2026-07-24. Times shown in this machine's local timezone.</footer>
+</main>
+</body>
+</html>

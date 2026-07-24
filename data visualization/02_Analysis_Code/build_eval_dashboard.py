@@ -36,13 +36,14 @@ from evals.dashboard_metrics import (  # noqa: E402
     load_fixture,
     load_from_scored_paths,
 )
-
-OUTPUT_PATH = (
-    _PROJECT_ROOT
-    / "data visualization"
-    / "01_Presentation_Materials"
-    / "eval_dashboard.html"
+from evals.instances import (  # noqa: E402
+    archive_instance,
+    format_run_headline,
+    run_meta_bits,
 )
+from evals.paths import EVAL_DASHBOARD_HTML  # noqa: E402
+
+OUTPUT_PATH = EVAL_DASHBOARD_HTML
 
 # Muted categorical palette for model-group chart series (lifted for dark bg).
 GROUP_COLORS = {
@@ -1277,60 +1278,6 @@ def _robustness_panel_html(metrics: dict) -> str:
     return "".join(parts)
 
 
-def _clock(moment: datetime.datetime) -> str:
-    """2:47 PM. Built by hand: %-I is not portable across platforms."""
-    hour = moment.hour % 12 or 12
-    meridiem = "AM" if moment.hour < 12 else "PM"
-    return f"{hour}:{moment.minute:02d} {meridiem}"
-
-
-def _day(moment: datetime.datetime) -> str:
-    return f"{moment.strftime('%b')} {moment.day}, {moment.year}"
-
-
-def _local(iso: str | None) -> datetime.datetime | None:
-    """Recorded UTC instant in the build machine's local timezone."""
-    if not iso:
-        return None
-    try:
-        parsed = datetime.datetime.fromisoformat(iso)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
-    return parsed.astimezone()
-
-
-def _run_headline(run: dict) -> str:
-    """Which eval instance this page is for, in one line."""
-    n_runs = int(run.get("n_runs") or 0)
-    lead = "Eval run" if n_runs == 1 else f"{n_runs} eval runs"
-    first = _local(run.get("started_first"))
-    last = _local(run.get("started_last"))
-    if first is None or last is None:
-        return f"{lead}, start time not recorded"
-    if (last - first).total_seconds() < 60:
-        return f"{lead}, {_day(first)} at {_clock(first)}"
-    if first.date() == last.date():
-        return f"{lead}, {_day(first)}, {_clock(first)} to {_clock(last)}"
-    return f"{lead}, {_day(first)} {_clock(first)} to {_day(last)} {_clock(last)}"
-
-
-def _run_meta(run: dict) -> str:
-    """Secondary provenance line: models, golden size, commit."""
-    bits: list[str] = []
-    groups = [g for g in (run.get("model_groups") or []) if g]
-    if groups:
-        bits.append(", ".join(groups))
-    n_gold = run.get("n_gold")
-    if n_gold:
-        bits.append(f"{int(n_gold)} golden companies")
-    commit = run.get("git_commit")
-    if commit:
-        bits.append(f"commit {commit}")
-    return " &middot; ".join(html.escape(b) for b in bits)
-
-
 def _run_instance_card_html(metrics: dict) -> str:
     """Header card naming the run behind the page, synthetic or scored."""
     run = metrics.get("run_instance") or {}
@@ -1347,13 +1294,13 @@ def _run_instance_card_html(metrics: dict) -> str:
     recorded = [s for s in (run.get("started_first"), run.get("started_last")) if s]
     utc_span = " to ".join(dict.fromkeys(recorded))
     title = f' title="Run start recorded as {html.escape(utc_span)}"' if utc_span else ""
-    meta = _run_meta(run)
+    meta = " &middot; ".join(html.escape(b) for b in run_meta_bits(run))
     meta_html = f'\n    <span class="run-meta">{meta}</span>' if meta else ""
     return f"""
 <div class="notice scored" id="run-instance" data-mode="scored">
   <span class="tag">Run</span>
   <div{title}>
-    <span class="run-headline">{html.escape(_run_headline(run))}</span>{meta_html}
+    <span class="run-headline">{html.escape(format_run_headline(run))}</span>{meta_html}
   </div>
 </div>
 """
@@ -1517,6 +1464,32 @@ def resolve_metrics(args: argparse.Namespace) -> dict:
     return load_fixture(DEFAULT_FIXTURE)
 
 
+def write_dashboard(
+    metrics: dict, output: Path, *, save_instance: bool = False
+) -> Path | None:
+    """Write the suite page, archiving the build when it is worth keeping.
+
+    Real scored runs are archived every time; mock builds only on request, so
+    development rebuilds do not bury them. Returns the archived path, or None.
+    """
+    page = build_html(metrics)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(page, encoding="utf-8")
+    mode = "SYNTHETIC" if metrics.get("synthetic") else "scored"
+    print(f"[{mode}] {metrics['n_configs']} configs → {output}", file=sys.stderr)
+
+    if metrics.get("synthetic") and not save_instance:
+        return None
+    archived = archive_instance(page, metrics)
+    verb = "replaced" if archived.replaced else "archived"
+    print(
+        f"[instance {archived.number:02d}] {verb} → {archived.path}\n"
+        f"[index] {archived.index_path}",
+        file=sys.stderr,
+    )
+    return archived.path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1544,15 +1517,15 @@ def main() -> None:
         help="Run ids under evals/runs/ (loads each scored.json; required for real runs)",
     )
     parser.add_argument("-o", "--output", type=Path, default=OUTPUT_PATH)
+    parser.add_argument(
+        "--save-instance",
+        action="store_true",
+        help="Also archive this build under eval_instances/ (automatic for real runs)",
+    )
     args = parser.parse_args()
 
-    metrics = resolve_metrics(args)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(build_html(metrics), encoding="utf-8")
-    mode = "SYNTHETIC" if metrics.get("synthetic") else "scored"
-    print(
-        f"[{mode}] {metrics['n_configs']} configs → {args.output}",
-        file=sys.stderr,
+    write_dashboard(
+        resolve_metrics(args), args.output, save_instance=args.save_instance
     )
 
 
