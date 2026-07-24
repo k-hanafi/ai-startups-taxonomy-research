@@ -44,31 +44,31 @@ OUTPUT_PATH = (
     / "eval_dashboard.html"
 )
 
-# Muted categorical palette for model-group chart series.
+# Muted categorical palette for model-group chart series (lifted for dark bg).
 GROUP_COLORS = {
-    "nano": "#3a6ea5",
-    "mini": "#7d5a8a",
-    "luna": "#b07d3f",
+    "nano": "#5b8fc4",
+    "mini": "#9a78a8",
+    "luna": "#c9944f",
 }
 
 STYLE = """
 :root {
-  --bg: #ffffff;
-  --surface: #ffffff;
-  --surface-muted: #f7f8f9;
-  --border: #e3e5e8;
-  --border-strong: #c9cdd3;
-  --text: #17191c;
-  --text2: #55595f;
-  --muted: #8b9096;
-  --accent: #3a6ea5;
-  --accent-bg: #eef3f8;
-  --pass: #1a7f37;
-  --pass-bg: #f2f8f3;
-  --fail: #b42318;
-  --fail-bg: #fbf3f2;
-  --pending: #6d7178;
-  --pending-bg: #f4f5f6;
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --surface-muted: #161616;
+  --border: #2a2a2a;
+  --border-strong: #333333;
+  --text: #e8e8ea;
+  --text2: #a8abb0;
+  --muted: #7a7e85;
+  --accent: #5b8fc4;
+  --accent-bg: #152033;
+  --pass: #3fb950;
+  --pass-bg: #0f1f14;
+  --fail: #f85149;
+  --fail-bg: #2a1210;
+  --pending: #8b9096;
+  --pending-bg: #1a1a1a;
   --sans: "Inter", "Segoe UI", -apple-system, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
 }
@@ -582,8 +582,8 @@ const COLORS = __GROUP_COLORS__;
 const INFO_SVG = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="5.1" r="0.9" fill="currentColor"/><path d="M8 7.4v3.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
 
 const cfg = {displayModeBar: false, responsive: true};
-const axisFont = {family: 'Inter, Segoe UI, sans-serif', size: 11, color: '#8b9096'};
-const numFont = {family: 'IBM Plex Mono, ui-monospace, monospace', size: 10.5, color: '#8b9096'};
+const axisFont = {family: 'Inter, Segoe UI, sans-serif', size: 11, color: '#7a7e85'};
+const numFont = {family: 'IBM Plex Mono, ui-monospace, monospace', size: 10.5, color: '#7a7e85'};
 
 function layout(extra) {
   return Object.assign({
@@ -591,14 +591,14 @@ function layout(extra) {
     plot_bgcolor: 'rgba(0,0,0,0)',
     margin: {l: 54, r: 24, t: 16, b: 52},
     font: axisFont,
-    xaxis: {gridcolor: '#f0f1f2', zeroline: false, linecolor: '#e3e5e8', tickfont: numFont},
-    yaxis: {gridcolor: '#f0f1f2', zeroline: false, linecolor: '#e3e5e8', tickfont: numFont},
-    legend: {orientation: 'h', y: 1.14, x: 0, font: {size: 11, color: '#55595f'}},
+    xaxis: {gridcolor: '#222222', zeroline: false, linecolor: '#2a2a2a', tickfont: numFont},
+    yaxis: {gridcolor: '#222222', zeroline: false, linecolor: '#2a2a2a', tickfont: numFont},
+    legend: {orientation: 'h', y: 1.14, x: 0, font: {size: 11, color: '#a8abb0'}},
   }, extra || {});
 }
 
 function colorFor(c) {
-  return COLORS[c.model_group] || '#3a6ea5';
+  return COLORS[c.model_group] || '#5b8fc4';
 }
 
 function pct(x) {
@@ -901,16 +901,16 @@ function renderPareto() {
       y: [c.subclass_acc],
       text: [partial ? c.label + ' (partial)' : c.label],
       textposition: 'top center',
-      textfont: {size: 10, color: partial ? '#b42318' : '#55595f'},
+      textfont: {size: 10, color: partial ? '#f85149' : '#a8abb0'},
       marker: {
         size: 11,
         color: colorFor(c),
         symbol: partial ? 'circle-open' : 'circle',
-        line: {width: partial ? 2 : 1, color: partial ? '#b42318' : '#fff'},
+        line: {width: partial ? 2 : 1, color: partial ? '#f85149' : '#e8e8ea'},
       },
       error_y: c.subclass_ci == null ? undefined : {
         type: 'data', array: [c.subclass_ci], visible: true,
-        color: '#c9cdd3', thickness: 1, width: 3,
+        color: '#444444', thickness: 1, width: 3,
       },
       hovertemplate: c.label + '<br>subclass %{y:.1%}<br>cost %{x:$,.0f}' +
         hoverExtra + '<extra></extra>',
@@ -919,11 +919,11 @@ function renderPareto() {
   Plotly.newPlot('chart-pareto', traces, layout({
     xaxis: {
       title: {text: 'Projected production cost, USD (log scale)', font: axisFont},
-      type: 'log', gridcolor: '#f0f1f2', zeroline: false, tickfont: numFont,
+      type: 'log', gridcolor: '#222222', zeroline: false, tickfont: numFont,
     },
     yaxis: {
       title: {text: 'Subclass accuracy', font: axisFont},
-      tickformat: '.0%', range: yRange, gridcolor: '#f0f1f2', zeroline: false, tickfont: numFont,
+      tickformat: '.0%', range: yRange, gridcolor: '#222222', zeroline: false, tickfont: numFont,
     },
     showlegend: false,
     margin: {l: 56, r: 16, t: 24, b: 52},
@@ -941,19 +941,19 @@ function renderLatency() {
       type: 'bar', name: 'p50',
       x: runs.map(c => c.label),
       y: runs.map(c => c.latency_p50),
-      marker: {color: '#3a6ea5'},
+      marker: {color: '#5b8fc4'},
       hovertemplate: '%{x}<br>p50 %{y:.2f}s<extra></extra>',
     },
     {
       type: 'bar', name: 'p95',
       x: runs.map(c => c.label),
       y: runs.map(c => c.latency_p95),
-      marker: {color: '#c3d2e2'},
+      marker: {color: '#3d5568'},
       hovertemplate: '%{x}<br>p95 %{y:.2f}s<extra></extra>',
     },
   ], layout({
     barmode: 'group',
-    yaxis: {title: {text: 'Seconds', font: axisFont}, gridcolor: '#f0f1f2', tickfont: numFont},
+    yaxis: {title: {text: 'Seconds', font: axisFont}, gridcolor: '#222222', tickfont: numFont},
     xaxis: {tickangle: -30, gridcolor: 'rgba(0,0,0,0)', tickfont: numFont},
     margin: {l: 48, r: 12, t: 28, b: 80},
   }), cfg);
@@ -990,7 +990,7 @@ function renderReliability() {
     name: 'perfect calibration',
     x: [0, 1],
     y: [0, 1],
-    line: {dash: 'dash', color: '#c9cdd3', width: 1},
+    line: {dash: 'dash', color: '#444444', width: 1},
     hoverinfo: 'skip',
   }];
   for (const c of groups) {
@@ -1008,8 +1008,8 @@ function renderReliability() {
     });
   }
   Plotly.newPlot('chart-reliability', traces, layout({
-    xaxis: {title: {text: 'Mean confidence in bin', font: axisFont}, range: [0.35, 1.02], gridcolor: '#f0f1f2', tickfont: numFont},
-    yaxis: {title: {text: 'Observed accuracy', font: axisFont}, range: [0.35, 1.02], gridcolor: '#f0f1f2', tickfont: numFont},
+    xaxis: {title: {text: 'Mean confidence in bin', font: axisFont}, range: [0.35, 1.02], gridcolor: '#222222', tickfont: numFont},
+    yaxis: {title: {text: 'Observed accuracy', font: axisFont}, range: [0.35, 1.02], gridcolor: '#222222', tickfont: numFont},
     margin: {l: 54, r: 12, t: 28, b: 48},
     showlegend: true,
   }), cfg);
@@ -1028,7 +1028,7 @@ function renderEce() {
     marker: {color: runs.map(c => colorFor(c)), opacity: 0.9},
     hovertemplate: '%{x}<br>ECE %{y:.2f} pp<extra></extra>',
   }], layout({
-    yaxis: {title: {text: 'ECE, percentage points (lower is better)', font: axisFont}, gridcolor: '#f0f1f2', tickfont: numFont},
+    yaxis: {title: {text: 'ECE, percentage points (lower is better)', font: axisFont}, gridcolor: '#222222', tickfont: numFont},
     xaxis: {tickangle: -30, gridcolor: 'rgba(0,0,0,0)', tickfont: numFont},
     showlegend: false,
     margin: {l: 54, r: 12, t: 16, b: 80},
@@ -1062,8 +1062,8 @@ function renderSelective() {
     hovertemplate: c.model_group + '<br>coverage %{x:.0%}<br>accuracy %{y:.1%}<extra></extra>',
   }));
   Plotly.newPlot('chart-selective', traces, layout({
-    xaxis: {title: {text: 'Coverage (share of rows answered, most confident first)', font: axisFont}, tickformat: '.0%', gridcolor: '#f0f1f2', tickfont: numFont},
-    yaxis: {title: {text: 'Accuracy on answered rows', font: axisFont}, tickformat: '.0%', gridcolor: '#f0f1f2', tickfont: numFont},
+    xaxis: {title: {text: 'Coverage (share of rows answered, most confident first)', font: axisFont}, tickformat: '.0%', gridcolor: '#222222', tickfont: numFont},
+    yaxis: {title: {text: 'Accuracy on answered rows', font: axisFont}, tickformat: '.0%', gridcolor: '#222222', tickfont: numFont},
     margin: {l: 58, r: 12, t: 28, b: 52},
     showlegend: true,
   }), cfg);
