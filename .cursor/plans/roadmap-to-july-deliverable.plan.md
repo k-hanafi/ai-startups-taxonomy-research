@@ -8,26 +8,35 @@ STATUS block after every milestone, decision, or pivot.
 
 ## STATUS
 
-- **State:** Decisions D1-D4 resolved 2026-07-22 evening. Plan re-sequenced:
-  V1 fallback on the dead cohort runs FIRST, V2 becomes a standalone sync-API
-  classifier package, Batch API dropped for V2.
-- **Current branch:** `cursor/eval-dashboard-langsmith-ux-0263` (draft PR #29
-  being rebased by worker).
-- **Key facts:** paid dead-cohort extract DONE (15,714 of 19,044 with
-  evidence). V1 alive results already exist (production_classifications.csv,
-  44,387 rows), so the V1 fallback needs only the dead-cohort classify.
-- **WU-0 + WU-1p DONE (2026-07-22):** PR #29 rebased and MERGEABLE (draft).
-  Luna pricing ($1/$6 per 1M) was already in evals/config.py on main and the
-  D1 matrix already aligned, so Stage 8 is unblocked from main as-is. PR #30
-  open: AGENTS.md staleness fix + roadmap sync. Luna dry-run ~$1.54/cell
-  input-side.
+- **State (2026-07-23 eve):** WU-0/1p/4a/5a all DONE. Deliverable 3 fallback
+  is on main. Next: eval suite redesign plan, then the user-run Stage 8
+  sweep, then WU-2/WU-3.
+- **WU-4a DONE:** dead-cohort V1 classification complete after two recovery
+  fixes (download crash resume; batch 1 split for the 200 MiB Batch API
+  file cap). 15,714 verdicts; survivorship_corrected.csv written (44,386
+  rows; 15,682 dead verdicts overlaid, 32 IDs unmapped, parked). Headline:
+  dead AI-native rate 5.0% vs 14.1% alive-evidence; corrected rate 11.2%
+  vs 15.6% biased.
+- **WU-5a DONE (PR #31 MERGED):** alive-vs-dead dashboard on real data,
+  evidence-only universe (21,990 alive + 15,682 dead), 4-act survivorship
+  section, insights dashboard retired. Median-confidence card replaced with
+  mean 4.2/5 (median legitimately pins at 5; 52.8% of rows self-report max
+  confidence, itself a motivating stat for V2 logprob confidence).
+- **Eval dashboard:** mock instance passed visual inspection (GO for real
+  runs). PR #32 (cost-breakdown popover) CLOSED by decision, to be folded
+  into the redesign.
+- **NEW SCOPE, eval suite redesign:** 3 sections only: (1) Pipeline
+  robustness (logprob extraction + batch parity, will it survive
+  production), (2) Model benchmarks (accuracy/confidence quality/cost/
+  latency across the GPT family), (3) Confidence correctness correlation
+  (reliability bins, ECE, selective prediction; early signal ECE 0.077,
+  top-half confidence -> 100% accuracy). Everything else out of scope by
+  decision. Professional product voice (no design-inspiration references
+  in user-facing copy), de-slop the styling. Sequence: plan -> one-shot
+  implement -> debug, on a separate branch.
 - **In-flight workers:** none.
-- **User actions pending:** (1) WU-4a fallback commands (build input ->
-  dry-run -> classify_dead run -> merge) in iTerm; (2) WU-1 Stage 8 sweep,
-  9 cells, runnable from main now; (3) merge PRs #29 and #30 when ready.
-- **Next steps after fallback lands:** WU-5a V1 alive-vs-dead dashboard ->
-  user runs Stage 8 sweep -> WU-3 V2 sync migration -> WU-4b V2 runs ->
-  WU-5b final dashboard + WU-6 narrative.
+- **User actions pending:** Stage 8 sweep (9 cells, from main) whenever
+  ready; it is independent of the redesign.
 
 ---
 
