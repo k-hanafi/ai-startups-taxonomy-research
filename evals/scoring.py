@@ -238,6 +238,23 @@ def _token_stats(values: list[int]) -> dict[str, float]:
     }
 
 
+def _per_pass_totals(records: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """Pass A / Pass B token totals for classification records, else None.
+
+    Feeds the dashboard cost-breakdown popover: single-pass and legacy runs
+    lack the a_/b_ fields and render the per-pass section as not recorded.
+    """
+    if not records or not all("a_input_tokens" in r for r in records):
+        return None
+    out: dict[str, Any] = {}
+    for label, prefix in (("pass_a", "a_"), ("pass_b", "b_")):
+        out[label] = {
+            kind: sum(int(r.get(f"{prefix}{kind}_tokens") or 0) for r in records)
+            for kind in ("input", "cached", "output", "reasoning")
+        }
+    return out
+
+
 def cost_and_tokens(records: list[dict[str, Any]], model: str) -> dict[str, Any]:
     """Actual-usage cost + token distributions over completed records."""
     from evals.cost_extrapolate import _records_have_cached_field
@@ -274,6 +291,7 @@ def cost_and_tokens(records: list[dict[str, Any]], model: str) -> dict[str, Any]
         "total_output_tokens": total_out,
         "total_cached_tokens": total_cached,
         "cache_field_present": cache_present,
+        "per_pass": _per_pass_totals(records),
         "total_usd": total_usd,
         "mean_usd_per_row": mean_usd,
         "pricing_per_mtok": pricing,

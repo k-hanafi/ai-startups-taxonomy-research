@@ -132,6 +132,68 @@ def _projected_usd(scored: dict[str, Any]) -> Optional[float]:
     return None
 
 
+def _cost_breakdown(scored: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Popover payload: the recorded arithmetic behind the projected $.
+
+    Reads only what scored.json actually recorded (production_cost_estimate
+    ladder + the cost block's token totals / pricing / per-pass split).
+    Missing fields stay None and the UI renders them as "not recorded";
+    nothing is recomputed or invented here.
+    """
+    est = scored.get("production_cost_estimate") or {}
+    cost = scored.get("cost") or {}
+    if not est and not cost:
+        return None
+    assumptions = est.get("assumptions") or {}
+    steps = est.get("steps") or {}
+    s1 = steps.get("1_golden_sync") or {}
+    s2 = steps.get("2_cache") or {}
+    s3 = steps.get("3_batch") or {}
+    s4 = steps.get("4_scale") or {}
+
+    def _f(value: Any) -> Optional[float]:
+        return float(value) if value is not None else None
+
+    def _i(value: Any) -> Optional[int]:
+        return int(value) if value is not None else None
+
+    return {
+        "available": bool(est.get("available")),
+        "reason": est.get("reason"),
+        "model": assumptions.get("model") or cost.get("model") or scored.get("model"),
+        # Scoring-time prices from the cost block only. Falling back to the
+        # current config table could show prices the ladder was not computed
+        # with, so absent pricing renders as "not recorded" instead.
+        "pricing_per_mtok": cost.get("pricing_per_mtok"),
+        "n_golden": _i(assumptions.get("n_golden", s1.get("n_rows", cost.get("n_rows")))),
+        "n_prod": _i(assumptions.get("n_prod", s4.get("n_prod"))),
+        "n_prod_label": assumptions.get("n_prod_label") or s4.get("n_prod_label"),
+        "batch_discount": _f(assumptions.get("batch_discount", s3.get("batch_discount"))),
+        "cache_discount": _f(assumptions.get("cache_discount", s2.get("cache_discount"))),
+        "cache_source": assumptions.get("cache_source"),
+        "total_input_tokens": _i(
+            s1.get("total_input_tokens", cost.get("total_input_tokens"))
+        ),
+        "total_output_tokens": _i(
+            s1.get("total_output_tokens", cost.get("total_output_tokens"))
+        ),
+        "total_cached_tokens": _i(
+            s2.get("total_cached_tokens", cost.get("total_cached_tokens"))
+        ),
+        "per_pass": cost.get("per_pass"),
+        "golden_sync_usd": _f(s1.get("total_usd", est.get("golden_sync_usd"))),
+        "cache_hit_rate": _f(s2.get("cache_hit_rate")),
+        "golden_after_cache_usd": _f(s2.get("total_usd_after_cache")),
+        "golden_after_batch_usd": _f(s3.get("total_usd_after_batch")),
+        "scale_factor": _f(s4.get("scale_factor")),
+        "estimated_production_usd": _f(s4.get("estimated_production_usd")),
+        "estimated_usd_per_company": _f(s4.get("estimated_usd_per_company")),
+        "cache_step_reason": (
+            s2.get("reason") if s2 and not s2.get("available") else None
+        ),
+    }
+
+
 def _ci_half_width(ci: Optional[list[float]], accuracy: float) -> Optional[float]:
     if not ci or len(ci) < 2 or ci[0] is None or ci[1] is None:
         return None
@@ -310,6 +372,7 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
             subclass.get("macro_f1", screen.get("macro_f1", 0.0))
         ),
         "projected_usd": _projected_usd(scored),
+        "cost_breakdown": _cost_breakdown(scored),
         "mean_confidence": _mean_confidence(cal, screen),
         "share_above_90": _share_above_90(cal, screen),
         "ece": _ece(cal, screen),
@@ -409,6 +472,8 @@ def _aggregate_finalist_repeats(configs: list[dict[str, Any]]) -> list[dict[str,
             "rad_acc": sum(float(r["rad_acc"]) for r in rows) / len(rows),
             "macro_f1": sum(float(r["macro_f1"]) for r in rows) / len(rows),
             "projected_usd": (sum(costs) / len(costs)) if costs else None,
+            # Mean of repeats has no single measured ladder behind it.
+            "cost_breakdown": None,
             "mean_confidence": None,
             "share_above_90": None,
             "ece": (sum(eces) / len(eces)) if eces else None,
