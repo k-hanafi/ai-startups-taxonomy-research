@@ -162,8 +162,7 @@ def test_fixture_robustness_checks_all_pass():
     # Pass A is banked once per model: 3 models x 100 golden companies = 300
     # unique extractions, even though the mock carries 9 matrix cells.
     tok_stats = {s["label"]: s["value"] for s in checks[0]["stats"]}
-    assert tok_stats["Unique companies with confidence"] == "300"
-    assert tok_stats["Unique companies checked"] == "300"
+    assert tok_stats["Companies with confidence recovered"] == "300 of 300"
     assert tok_stats["Models checked"] == "3"
 
 
@@ -247,8 +246,7 @@ def test_robustness_tokenization_dedupes_banked_pass_a():
     tok = metrics["robustness"]["checks"][0]
     assert tok["status"] == "pass"
     stats = {s["label"]: s["value"] for s in tok["stats"]}
-    assert stats["Unique companies with confidence"] == "300"
-    assert stats["Unique companies checked"] == "300"
+    assert stats["Companies with confidence recovered"] == "300 of 300"
     assert stats["Models checked"] == "3"
     assert len(tok["per_model"]) == 3
     assert all(
@@ -271,8 +269,7 @@ def test_robustness_tokenization_dedupe_does_not_hide_gap():
     assert by_model["gpt-5.4-mini"]["detail"] == "97 of 100 golden-set companies"
     assert by_model["gpt-5.4-nano"]["status"] == "pass"
     stats = {s["label"]: s["value"] for s in tok["stats"]}
-    assert stats["Unique companies with confidence"] == "297"
-    assert stats["Unique companies checked"] == "300"
+    assert stats["Companies with confidence recovered"] == "297 of 300"
 
 
 def test_robustness_valid_mass_and_parity_fail_paths():

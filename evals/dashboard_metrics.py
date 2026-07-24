@@ -604,12 +604,10 @@ def _tokenization_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
         status = "fail" if any_gap else "pass"
         stats = [
             {
-                "label": "Unique companies with confidence",
-                "value": _fmt_count(total_n),
-            },
-            {
-                "label": "Unique companies checked",
-                "value": _fmt_count(total_eligible),
+                "label": "Companies with confidence recovered",
+                "value": (
+                    f"{_fmt_count(total_n)} of {_fmt_count(total_eligible)}"
+                ),
             },
             {"label": "Models checked", "value": _fmt_count(len(recorded))},
         ]
