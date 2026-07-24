@@ -30,7 +30,8 @@ cherry-picked as the base of this branch).
    with product name, tab navigation, exactly THREE tabs in this order:
    - **Pipeline robustness**: answers "do logprob extraction and Batch API
      parity behave as intended, will this classifier survive production?"
-     Content: tokenization pinned (decision-token extraction stable),
+     Content: tokenization pinned (Pass A confidence recovered on the
+     golden set, deduped by model since Pass A is banked once per model),
      probability mass accounted (valid_mass distribution/threshold),
      sync-batch parity verified (request-body identity, logprob shape).
      Render as a checks panel: each check gets a pass/fail/pending badge
@@ -80,14 +81,15 @@ compact numbers table.
 
 | Check id | Title | Real-data source | Pass condition |
 |----------|-------|------------------|----------------|
-| `tokenization_pinned` | Decision-token extraction stable | Per-run `calibration.n` vs `calibration.n_eligible` (recorded by scoring; extraction only yields a value when token-byte reconstruction and structural key location both succeed for a row) | Every run that carries calibration covers all eligible rows; PENDING when no run records calibration; FAIL when any run's coverage is incomplete |
+| `tokenization_pinned` | Pass A confidence recovered on the golden set | `calibration.n` vs `calibration.n_eligible`, deduped by model (first recorded calibration block per model, same convention as `_dedupe_by_model`). Pass A is banked once per model and reused across effort arms, so unique coverage on the locked matrix is 3 models x 100 golden companies = 300, never a per-cell sum of 900 | Every model's banked block covers all eligible rows; PENDING when no run records calibration; FAIL when any model's coverage is incomplete (a gap repeats in every copy of that model's banked block, so deduping cannot hide it) |
 | `probability_mass` | Probability mass accounted | Optional per-run `robustness.valid_mass` block (n, min, mean, p50, share_below_threshold, threshold). Not yet emitted by scoring, so real runs render PENDING until it is recorded | All recording runs show zero rows below the threshold; FAIL when any recording run has rows below it |
 | `batch_parity` | Sync-batch parity verified | Optional per-run `robustness.batch_parity` block (verdict, n_rows, n_checks, n_failed, model), mirroring the gate-Q4 parity report. Not yet embedded in scored.json, so real runs render PENDING | All recorded verdicts are PASS; FAIL on any recorded FAIL |
 
 Aggregation lives in `evals/dashboard_metrics.py::build_robustness` and is
 exposed as `metrics["robustness"]["checks"]` (list of dicts with `id`,
 `title`, `status` in {pass, fail, pending}, `meaning`, `stats` list of
-label/value pairs, `per_model` rows). The renderer never invents numbers:
+label/value pairs, `per_model` rows, optional `footnote` for a secondary
+one-line technical note). The renderer never invents numbers:
 missing blocks surface as "pending" with a note naming the artifact that
 will populate them.
 

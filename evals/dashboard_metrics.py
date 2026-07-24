@@ -502,10 +502,16 @@ def _aggregate_finalist_repeats(configs: list[dict[str, Any]]) -> list[dict[str,
 # "fail", or "pending" (nothing recorded yet), never invented at render time.
 
 TOKENIZATION_MEANING = (
-    "The 0/1 verdict rides on a single token whose position varies per "
-    "response. Extraction locates it structurally and verifies the token "
-    "bytes reconstruct the output text exactly, so any tokenization drift "
-    "fails loudly instead of silently mis-reading a different token."
+    "For each model, the yes-or-no AI-native gate (Pass A) runs once on the "
+    "same 100 labeled golden-set companies, and that one result is reused "
+    "across every Pass B effort setting. This check confirms a confidence "
+    "score was recovered for every one of those companies, so the confidence "
+    "charts are built on the full golden set rather than a silent subset."
+)
+TOKENIZATION_FOOTNOTE = (
+    "Technical note: a confidence value is only recorded after the extractor "
+    "verifies the exact decision token in the raw response, so any drift "
+    "fails loudly instead of silently reading the wrong token."
 )
 VALID_MASS_MEANING = (
     "Before renormalizing to a probability, the raw probability mass on the "
@@ -546,37 +552,48 @@ def _dedupe_by_model(
 
 
 def _tokenization_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
-    """Coverage of confidence extraction, from recorded calibration blocks.
+    """Unique Pass A confidence coverage, deduped by model.
 
     scoring.calibration_report records n (rows with confidence) vs n_eligible
-    (rows that could carry one). Extraction only yields a value for a row
-    after byte reconstruction and structural token location both succeed, so
-    full coverage certifies the extractor held on every row.
+    (rows that could carry one). Pass A is banked once per model and reused
+    across the Pass B effort arms, so the same calibration block repeats in
+    every matrix cell for that model. Counting follows _dedupe_by_model's
+    convention: the first recorded calibration block per model counts once,
+    never summed across efforts (banked blocks are byte-identical across
+    efforts, so first-recorded equals any other pick). A real per-model gap
+    (n < n_eligible) is present in every copy of that model's banked block,
+    so deduping cannot hide it.
     """
-    per_model: list[dict[str, Any]] = []
-    seen_models: set[str] = set()
-    total_n = total_eligible = 0
-    any_recorded = False
-    any_gap = False
+    recorded: dict[str, dict[str, Any]] = {}
     for scored in runs:
         cal = scored.get("calibration") or {}
-        n, n_eligible = cal.get("n"), cal.get("n_eligible")
-        if n is None or n_eligible is None:
+        if cal.get("n") is None or cal.get("n_eligible") is None:
             continue
-        any_recorded = True
-        model = str(scored.get("model") or "unknown")
-        total_n += int(n)
-        total_eligible += int(n_eligible)
-        gap = int(n) < int(n_eligible)
+        model = str(
+            scored.get("model")
+            or _parse_model_from_run_id(str(scored.get("run_id") or ""))
+            or "unknown"
+        )
+        recorded.setdefault(model, cal)
+
+    per_model: list[dict[str, Any]] = []
+    total_n = total_eligible = 0
+    any_gap = False
+    for model, cal in recorded.items():
+        n, n_eligible = int(cal["n"]), int(cal["n_eligible"])
+        total_n += n
+        total_eligible += n_eligible
+        gap = n < n_eligible
         any_gap = any_gap or gap
-        if model not in seen_models:
-            seen_models.add(model)
-            per_model.append({
-                "model": model,
-                "status": "fail" if gap else "pass",
-                "detail": f"{_fmt_count(n)} of {_fmt_count(n_eligible)} eligible rows",
-            })
-    if not any_recorded:
+        per_model.append({
+            "model": model,
+            "status": "fail" if gap else "pass",
+            "detail": (
+                f"{_fmt_count(n)} of {_fmt_count(n_eligible)} "
+                "golden-set companies"
+            ),
+        })
+    if not recorded:
         status = "pending"
         stats = []
         note = (
@@ -586,19 +603,23 @@ def _tokenization_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
     else:
         status = "fail" if any_gap else "pass"
         stats = [
-            {"label": "Rows extracted", "value": _fmt_count(total_n)},
-            {"label": "Eligible rows", "value": _fmt_count(total_eligible)},
-            {"label": "Runs recorded", "value": _fmt_count(len([
-                s for s in runs
-                if (s.get("calibration") or {}).get("n") is not None
-            ]))},
+            {
+                "label": "Unique companies with confidence",
+                "value": _fmt_count(total_n),
+            },
+            {
+                "label": "Unique companies checked",
+                "value": _fmt_count(total_eligible),
+            },
+            {"label": "Models checked", "value": _fmt_count(len(recorded))},
         ]
         note = None
     return {
         "id": "tokenization_pinned",
-        "title": "Decision-token extraction stable",
+        "title": "Pass A confidence recovered on the golden set",
         "status": status,
         "meaning": TOKENIZATION_MEANING,
+        "footnote": TOKENIZATION_FOOTNOTE,
         "stats": stats,
         "per_model": per_model,
         "pending_note": note,

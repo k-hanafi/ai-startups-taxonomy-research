@@ -159,6 +159,12 @@ def test_fixture_robustness_checks_all_pass():
         assert check["meaning"], check["id"]
         assert len(check["per_model"]) == 3, check["id"]
         assert check["pending_note"] is None, check["id"]
+    # Pass A is banked once per model: 3 models x 100 golden companies = 300
+    # unique extractions, even though the mock carries 9 matrix cells.
+    tok_stats = {s["label"]: s["value"] for s in checks[0]["stats"]}
+    assert tok_stats["Unique companies with confidence"] == "300"
+    assert tok_stats["Unique companies checked"] == "300"
+    assert tok_stats["Models checked"] == "3"
 
 
 def _axes_stub(run_id: str = "2026-08-01_gpt-5.4-nano_low_r1", **over):
@@ -190,15 +196,19 @@ def test_robustness_pending_when_nothing_recorded():
         assert check["per_model"] == [], check["id"]
 
 
-def test_robustness_tokenization_from_calibration_coverage():
-    """Full calibration coverage certifies extraction; a gap fails the check."""
-    full = _axes_stub(calibration={
+def _calibration_block(n: int = 100, n_eligible: int = 100) -> dict:
+    return {
         "axis": "ai_native",
-        "n": 100,
-        "n_eligible": 100,
+        "n": n,
+        "n_eligible": n_eligible,
         "reliability": {"bins": [], "ece": 0.05},
         "selective_prediction": [],
-    })
+    }
+
+
+def test_robustness_tokenization_from_calibration_coverage():
+    """Full calibration coverage certifies extraction; a gap fails the check."""
+    full = _axes_stub(calibration=_calibration_block())
     metrics = build_metrics([full], synthetic=False, source="test")
     tok = metrics["robustness"]["checks"][0]
     assert tok["id"] == "tokenization_pinned"
@@ -206,19 +216,63 @@ def test_robustness_tokenization_from_calibration_coverage():
     assert tok["per_model"] == [{
         "model": "gpt-5.4-nano",
         "status": "pass",
-        "detail": "100 of 100 eligible rows",
+        "detail": "100 of 100 golden-set companies",
     }]
 
-    partial = _axes_stub(calibration={
-        "axis": "ai_native",
-        "n": 97,
-        "n_eligible": 100,
-        "reliability": {"bins": [], "ece": 0.05},
-        "selective_prediction": [],
-    })
+    partial = _axes_stub(calibration=_calibration_block(n=97))
     metrics = build_metrics([partial], synthetic=False, source="test")
     tok = metrics["robustness"]["checks"][0]
     assert tok["status"] == "fail"
+
+
+def _banked_matrix_runs(gap_model: str | None = None) -> list[dict]:
+    """9 matrix cells (3 models x 3 efforts) reusing one banked Pass A per
+    model. gap_model, if set, gets n=97 in every copy of its banked block."""
+    runs = []
+    for model in ("gpt-5.4-nano", "gpt-5.4-mini", "gpt-5.6-luna"):
+        n = 97 if model == gap_model else 100
+        for effort in ("low", "medium", "high"):
+            runs.append(_axes_stub(
+                run_id=f"2026-08-01_{model}_{effort}_r1",
+                model=model,
+                effort_b=effort,
+                calibration=_calibration_block(n=n),
+            ))
+    return runs
+
+
+def test_robustness_tokenization_dedupes_banked_pass_a():
+    """9 cells sharing 3 banked Pass A blocks count 300 unique rows, not 900."""
+    metrics = build_metrics(_banked_matrix_runs(), synthetic=False, source="test")
+    tok = metrics["robustness"]["checks"][0]
+    assert tok["status"] == "pass"
+    stats = {s["label"]: s["value"] for s in tok["stats"]}
+    assert stats["Unique companies with confidence"] == "300"
+    assert stats["Unique companies checked"] == "300"
+    assert stats["Models checked"] == "3"
+    assert len(tok["per_model"]) == 3
+    assert all(
+        r["detail"] == "100 of 100 golden-set companies"
+        for r in tok["per_model"]
+    )
+
+
+def test_robustness_tokenization_dedupe_does_not_hide_gap():
+    """A model whose banked Pass A misses rows still fails after deduping."""
+    metrics = build_metrics(
+        _banked_matrix_runs(gap_model="gpt-5.4-mini"),
+        synthetic=False,
+        source="test",
+    )
+    tok = metrics["robustness"]["checks"][0]
+    assert tok["status"] == "fail"
+    by_model = {r["model"]: r for r in tok["per_model"]}
+    assert by_model["gpt-5.4-mini"]["status"] == "fail"
+    assert by_model["gpt-5.4-mini"]["detail"] == "97 of 100 golden-set companies"
+    assert by_model["gpt-5.4-nano"]["status"] == "pass"
+    stats = {s["label"]: s["value"] for s in tok["stats"]}
+    assert stats["Unique companies with confidence"] == "297"
+    assert stats["Unique companies checked"] == "300"
 
 
 def test_robustness_valid_mass_and_parity_fail_paths():

@@ -263,6 +263,12 @@ code {
   padding: 10px 14px;
   max-width: 720px;
 }
+.check-footnote {
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 720px;
+  margin-top: 12px;
+}
 table.mini {
   border-collapse: collapse;
   font-size: 12.5px;
@@ -1211,6 +1217,13 @@ def _robustness_panel_html(metrics: dict) -> str:
                 + html.escape(str(check["pending_note"]))
                 + "</p>"
             )
+        footnote_html = ""
+        if check.get("footnote"):
+            footnote_html = (
+                '<p class="check-footnote">'
+                + html.escape(str(check["footnote"]))
+                + "</p>"
+            )
         parts.append(f"""
 <div class="check" id="check-{html.escape(str(check.get('id') or ''))}">
   <div class="check-head">
@@ -1222,6 +1235,7 @@ def _robustness_panel_html(metrics: dict) -> str:
     {stats_html}
     {rows_html}
     {note_html}
+    {footnote_html}
   </div>
 </div>
 """)
@@ -1283,8 +1297,8 @@ def build_html(metrics: dict) -> str:
   <section class="panel active" id="panel-robustness">
     <div class="tab-lead">
       <h2>Will this pipeline survive production?</h2>
-      <p>Structural checks on the confidence pipeline: the decision-token
-      extraction that turns logprobs into per-row confidence, the probability
+      <p>Structural checks on the confidence pipeline: whether a confidence
+      score was recovered for every golden-set company, the probability
       mass behind each confidence value, and the transfer from the sync API
       used in evaluation to the Batch API used at scale.</p>
     </div>
