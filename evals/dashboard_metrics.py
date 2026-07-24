@@ -377,6 +377,7 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
         "share_above_90": _share_above_90(cal, screen),
         "ece": _ece(cal, screen),
         "reliability_bins": rel.get("bins") if rel else screen.get("reliability_bins"),
+        "selective_curve": (cal or {}).get("selective_prediction"),
         "selective_acc_50": (
             _selective_at_coverage(cal, 0.5)
             if cal
@@ -478,6 +479,7 @@ def _aggregate_finalist_repeats(configs: list[dict[str, Any]]) -> list[dict[str,
             "share_above_90": None,
             "ece": (sum(eces) / len(eces)) if eces else None,
             "reliability_bins": None,
+            "selective_curve": None,
             "selective_acc_50": None,
             "vs_baseline": None,
             "latency_p50": None,
@@ -491,6 +493,235 @@ def _aggregate_finalist_repeats(configs: list[dict[str, Any]]) -> list[dict[str,
     return extras
 
 
+# ---------------------------------------------------------------------------
+# Pipeline-robustness checks (tab 1)
+# ---------------------------------------------------------------------------
+#
+# Three production-readiness checks aggregated over the loaded runs. Each
+# check reads only what the runs actually recorded: statuses are "pass",
+# "fail", or "pending" (nothing recorded yet), never invented at render time.
+
+TOKENIZATION_MEANING = (
+    "The 0/1 verdict rides on a single token whose position varies per "
+    "response. Extraction locates it structurally and verifies the token "
+    "bytes reconstruct the output text exactly, so any tokenization drift "
+    "fails loudly instead of silently mis-reading a different token."
+)
+VALID_MASS_MEANING = (
+    "Before renormalizing to a probability, the raw probability mass on the "
+    "two legal answers (0 and 1) is recorded per row. Mass near 1.0 means "
+    "the model put essentially all its probability on legal answers, so the "
+    "renormalized confidence is trustworthy."
+)
+BATCH_PARITY_MEANING = (
+    "The same request bodies were submitted through both the sync and Batch "
+    "APIs. Identical parameters were echoed back and the same logprob "
+    "payload shape returned, so confidence measured sync transfers to "
+    "Batch-based production runs."
+)
+
+
+def _fmt_count(value: Any) -> str:
+    return f"{int(value):,}"
+
+
+def _dedupe_by_model(
+    runs: list[dict[str, Any]], block: str
+) -> dict[str, dict[str, Any]]:
+    """model -> recorded robustness sub-block (first per model).
+
+    Robustness evidence is a Pass A / model property (Pass A is banked once
+    per model), so identical blocks repeated across effort arms count once.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for scored in runs:
+        payload = (scored.get("robustness") or {}).get(block)
+        if not payload:
+            continue
+        model = str(
+            scored.get("model") or _parse_model_from_run_id(str(scored.get("run_id") or ""))
+        )
+        out.setdefault(model or "unknown", payload)
+    return out
+
+
+def _tokenization_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Coverage of confidence extraction, from recorded calibration blocks.
+
+    scoring.calibration_report records n (rows with confidence) vs n_eligible
+    (rows that could carry one). Extraction only yields a value for a row
+    after byte reconstruction and structural token location both succeed, so
+    full coverage certifies the extractor held on every row.
+    """
+    per_model: list[dict[str, Any]] = []
+    seen_models: set[str] = set()
+    total_n = total_eligible = 0
+    any_recorded = False
+    any_gap = False
+    for scored in runs:
+        cal = scored.get("calibration") or {}
+        n, n_eligible = cal.get("n"), cal.get("n_eligible")
+        if n is None or n_eligible is None:
+            continue
+        any_recorded = True
+        model = str(scored.get("model") or "unknown")
+        total_n += int(n)
+        total_eligible += int(n_eligible)
+        gap = int(n) < int(n_eligible)
+        any_gap = any_gap or gap
+        if model not in seen_models:
+            seen_models.add(model)
+            per_model.append({
+                "model": model,
+                "status": "fail" if gap else "pass",
+                "detail": f"{_fmt_count(n)} of {_fmt_count(n_eligible)} eligible rows",
+            })
+    if not any_recorded:
+        status = "pending"
+        stats = []
+        note = (
+            "Extraction coverage is recorded when runs are scored with "
+            "--confidence-from-raw (calibration.n vs n_eligible)."
+        )
+    else:
+        status = "fail" if any_gap else "pass"
+        stats = [
+            {"label": "Rows extracted", "value": _fmt_count(total_n)},
+            {"label": "Eligible rows", "value": _fmt_count(total_eligible)},
+            {"label": "Runs recorded", "value": _fmt_count(len([
+                s for s in runs
+                if (s.get("calibration") or {}).get("n") is not None
+            ]))},
+        ]
+        note = None
+    return {
+        "id": "tokenization_pinned",
+        "title": "Decision-token extraction stable",
+        "status": status,
+        "meaning": TOKENIZATION_MEANING,
+        "stats": stats,
+        "per_model": per_model,
+        "pending_note": note,
+    }
+
+
+def _valid_mass_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    recorded = _dedupe_by_model(runs, "valid_mass")
+    per_model: list[dict[str, Any]] = []
+    below_total = 0
+    min_mass: Optional[float] = None
+    threshold: Optional[float] = None
+    for model, block in recorded.items():
+        n_below = block.get("n_below_threshold")
+        block_min = block.get("min")
+        threshold = block.get("threshold", threshold)
+        fail = n_below is not None and int(n_below) > 0
+        below_total += int(n_below or 0)
+        if block_min is not None:
+            min_mass = block_min if min_mass is None else min(min_mass, block_min)
+        detail = f"min mass {block_min}" if block_min is not None else "recorded"
+        if n_below is not None:
+            detail += f", {int(n_below)} row(s) below threshold"
+        per_model.append({
+            "model": model,
+            "status": "fail" if fail else "pass",
+            "detail": detail,
+        })
+    if not recorded:
+        return {
+            "id": "probability_mass",
+            "title": "Probability mass accounted",
+            "status": "pending",
+            "meaning": VALID_MASS_MEANING,
+            "stats": [],
+            "per_model": [],
+            "pending_note": (
+                "Per-row valid_mass lives in each run's raw/ logprob "
+                "responses (machine-local). It surfaces here once scoring "
+                "records a robustness.valid_mass summary."
+            ),
+        }
+    stats = []
+    if min_mass is not None:
+        stats.append({"label": "Minimum valid mass", "value": f"{min_mass}"})
+    if threshold is not None:
+        stats.append({"label": "Threshold", "value": f"{threshold}"})
+    stats.append({"label": "Rows below threshold", "value": _fmt_count(below_total)})
+    return {
+        "id": "probability_mass",
+        "title": "Probability mass accounted",
+        "status": "fail" if below_total > 0 else "pass",
+        "meaning": VALID_MASS_MEANING,
+        "stats": stats,
+        "per_model": per_model,
+        "pending_note": None,
+    }
+
+
+def _batch_parity_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    recorded = _dedupe_by_model(runs, "batch_parity")
+    per_model: list[dict[str, Any]] = []
+    any_fail = False
+    total_checks = total_failed = 0
+    n_rows: Optional[int] = None
+    for model, block in recorded.items():
+        verdict = str(block.get("verdict") or "").upper()
+        fail = verdict != "PASS"
+        any_fail = any_fail or fail
+        total_checks += int(block.get("n_checks") or 0)
+        total_failed += int(block.get("n_failed") or 0)
+        if block.get("n_rows") is not None:
+            n_rows = int(block["n_rows"])
+        per_model.append({
+            "model": model,
+            "status": "fail" if fail else "pass",
+            "detail": (
+                f"verdict {verdict or 'unknown'}, "
+                f"{int(block.get('n_failed') or 0)} of "
+                f"{int(block.get('n_checks') or 0)} checks failed"
+            ),
+        })
+    if not recorded:
+        return {
+            "id": "batch_parity",
+            "title": "Sync-batch parity verified",
+            "status": "pending",
+            "meaning": BATCH_PARITY_MEANING,
+            "stats": [],
+            "per_model": [],
+            "pending_note": (
+                "Parity verdicts come from the batch-parity smoke "
+                "(python -m evals batch-parity). They surface here once a "
+                "robustness.batch_parity summary is recorded with the run."
+            ),
+        }
+    stats = [
+        {"label": "Models verified", "value": _fmt_count(len(recorded))},
+        {"label": "Checks failed", "value": f"{total_failed:,} of {total_checks:,}"},
+    ]
+    if n_rows is not None:
+        stats.append({"label": "Rows per smoke", "value": f"{n_rows} x 2 APIs"})
+    return {
+        "id": "batch_parity",
+        "title": "Sync-batch parity verified",
+        "status": "fail" if any_fail else "pass",
+        "meaning": BATCH_PARITY_MEANING,
+        "stats": stats,
+        "per_model": per_model,
+        "pending_note": None,
+    }
+
+
+def build_robustness(scored_runs: list[dict[str, Any]]) -> dict[str, Any]:
+    """The pipeline-robustness checks panel payload (tab 1)."""
+    checks = [
+        _tokenization_check(scored_runs),
+        _valid_mass_check(scored_runs),
+        _batch_parity_check(scored_runs),
+    ]
+    return {"checks": checks}
+
+
 def build_metrics(
     scored_runs: Iterable[dict[str, Any]],
     *,
@@ -498,6 +729,7 @@ def build_metrics(
     source: str = "",
 ) -> dict[str, Any]:
     """Build the chart-ready metrics dict (configs + filter keys)."""
+    scored_runs = list(scored_runs)
     configs = [config_row_from_scored(s) for s in scored_runs]
     _disambiguate_repeat_labels(configs)
     configs.extend(_aggregate_finalist_repeats(configs))
@@ -506,6 +738,7 @@ def build_metrics(
         "synthetic": synthetic,
         "source": source,
         "n_configs": len(configs),
+        "robustness": build_robustness(scored_runs),
         "configs": configs,
         "config_ids": [c["id"] for c in configs],
         "model_groups": _model_groups(configs),

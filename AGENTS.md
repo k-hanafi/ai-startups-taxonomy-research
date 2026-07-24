@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-23 · Active branch: `dashboards/v1-alive-dead` (V1 alive-vs-dead dashboard on evidence-based dead verdicts; Bugbot fixes for RAD/preview honesty)
+Last updated: 2026-07-23 · Active branch: `eval/suite-redesign` (Classifier Eval Suite: three-tab eval dashboard redesign with robustness checks + confidence correlation)
 
 ---
 
@@ -52,6 +52,7 @@ Authoritative plans (read when resuming a strand; committed under **`.cursor/pla
 - `.cursor/plans/logprob_confidence_classifier_*.plan.md` — logprob-based confidence methodology (active).
 - `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; classification committed; #22 dashboard + #24/#25 science on `main`; provisional `draft_*` gold accepted for paid sweep; next = paid 9-cell matrix with Pass A auto-banked once per model).
 - `.cursor/plans/v1_alive_dead_dashboard.plan.md` — V1 alive-vs-dead dashboard PRD (implemented; evidence-only universe, 4-act survivorship section, coverage checklist for the retired insights dashboard).
+- `.cursor/plans/eval_suite_redesign.plan.md` — Classifier Eval Suite redesign contract + per-tab spec (implemented on `eval/suite-redesign`).
 
 Cursor writes new plans to `~/.cursor/plans/` by default; copy or sync them into **`.cursor/plans/`** in this repo so they are version-controlled. Legacy copies may still exist in **`plans/`** at repo root. Repo agent skills (committed): **`portfolio-git-messages`**, **`git-commit-batch-plan`**, **`code-structure`**, **`clean-my-repo`** under **`.cursor/skills/`**. **`.cursor/rules/`** stays local.
 
@@ -176,8 +177,8 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 ### `evals/` — golden-set eval harness
 | Path | Purpose |
 |------|---------|
-| `dashboard_metrics.py` | Eval dashboard metrics: scored.json/fixture → chart metrics (ECE, selective@50, vs_baseline, Pass B isolating fields, finalist mean±range aggregates, per-config `cost_breakdown` for the Total Cost popover). No OpenAI import. |
-| `tests/fixtures/dashboard/dashboard_mock_runs.json` | Synthetic locked matrix; Pass A metrics identical across efforts within each model (bank-once design) |
+| `dashboard_metrics.py` | Eval dashboard metrics: scored.json/fixture → chart metrics (ECE, reliability bins, selective curves, vs_baseline, Pass B isolating fields, finalist mean±range aggregates, per-config `cost_breakdown` for the cost popover) + `build_robustness` (tokenization / valid_mass / batch-parity checks with pass/fail/pending statuses, nothing fabricated). No OpenAI import. |
+| `tests/fixtures/dashboard/dashboard_mock_runs.json` | Synthetic locked matrix; Pass A metrics identical across efforts within each model (bank-once design); calibration blocks derive from one set of 100 synthetic rows per model (nano seeds the ECE ~0.077 early signal); per-run robustness blocks |
 | `config.py` | Locked matrix `EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`; `PASS_A_TOP_LOGPROBS=2` (binary); legacy `TOP_LOGPROBS` for old single-pass only |
 | `classification.py` | Pass A/B classification runner; Pass A auto-banks under `evals/runs/pass_a_banks/<model>/` (reuse by default; `--rerun-pass-a` / `--pass-a-from` escapes) |
 | `logprob_extract.py` | Pass A confidence; requires both `{0,1}` candidates or marks unavailable |
@@ -191,7 +192,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `data visualization/02_Analysis_Code/*.py` | Scripts that build those dashboards |
 | `data visualization/02_Analysis_Code/survivorship_analysis.py` | Survivor-vs-dead compute on the evidence-only universe: distributions, BH-tested subclass deltas, funding/thin-history/snapshot-age cuts, coverage funnel, 3 logistic models (pure metrics dict; PREVIEW from production if `survivorship_corrected.csv` absent) |
 | `data visualization/02_Analysis_Code/build_v1_alive_dead_dashboard.py` | Flagship V1 alive-vs-dead dashboard: 5 corrected base sections + 4-act survivorship story (bias / who dies / why / robustness); writes `v1_alive_dead_cohort.html`; loud PREVIEW banner pre-merge (replaces the retired `build_survivorship_insights_dashboard.py`) |
-| `data visualization/02_Analysis_Code/build_eval_dashboard.py` | Eval viewer: summary line + experiments table (Total Cost info icon opens a recomputable cost-ladder popover), Pareto / ECE+selective / reliability / vs_baseline / latency, search + model-group chips. Defaults to mock fixture; `--runs`/`--scored` for real runs. Writes `eval_dashboard.html`. |
+| `data visualization/02_Analysis_Code/build_eval_dashboard.py` | Classifier Eval Suite (flat enterprise SPA, three tabs): Pipeline robustness (checks panel), Model benchmarks (leaderboard + cost-ladder popover + Pareto + latency, chips + search), Confidence correctness correlation (reliability diagram, ECE, selective curves). Defaults to mock fixture; `--runs`/`--scored` for real runs. Writes `eval_dashboard.html`. |
 | `tests/` | pytest for the live pipeline (schema, formatter, tokens, enrichment, tavily runner) |
 | `wayback_machine/tests/` | pytest for wayback (golden cleaner, cohort, state, config, budget, probe) |
 | `keys/` | API key env files, e.g. `keys/openai.env` (`OPENAI_API_KEY`). Git-ignored + cursor-ignored. **Never commit.** |
@@ -284,7 +285,7 @@ python -m evals score <run_id> --allow-partial-confidence      # incomplete raw 
 | Survivorship extract→classify→merge | `wayback_machine/extract_dead.py` + `scripts/{build_targets_dead,run_extract_dead,build_classifier_input_dead,classify_dead,merge_survivorship}.py` |
 | Dashboards | `data visualization/02_Analysis_Code/` |
 | Alive-vs-dead dashboard / survivorship stats | `survivorship_analysis.py` (compute) + `build_v1_alive_dead_dashboard.py` (render); rebuild after `merge_survivorship.py` to leave PREVIEW mode |
-| Eval dashboard / config filter | `evals/dashboard_metrics.py` + `build_eval_dashboard.py` (ECE/selective/vs_baseline; mock fixture until paid matrix runs; `--runs` for real data) |
+| Eval dashboard (Classifier Eval Suite) | `evals/dashboard_metrics.py` (metrics + robustness checks) + `build_eval_dashboard.py` (three tabs: robustness / benchmarks / confidence; mock fixture until paid matrix runs; `--runs` for real data) |
 | Eval matrix / scoring | `evals/config.py` (`EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`); `run-classification` (auto Pass A bank); `matrix`; `score --confidence-from-raw [--baseline]` |
 
 ## Maintaining this file

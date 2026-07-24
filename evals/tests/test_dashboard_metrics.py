@@ -69,10 +69,12 @@ def test_fixture_rows_carry_chart_fields():
     assert row["projected_usd"] == pytest.approx(412.3517, abs=1e-3)
     assert row["latency_p50"] == 4.6
     assert row["share_above_90"] == 0.61
-    assert row["ece"] == 0.038
+    assert row["ece"] == pytest.approx(0.046185)
     assert row["n_scored"] == 100
     assert row["n_expected"] == 100
     assert row["is_partial"] is False
+    assert len(row["reliability_bins"]) == 10
+    assert len(row["selective_curve"]) == 10
 
 
 def test_fixture_pass_a_metrics_identical_within_model():
@@ -94,6 +96,153 @@ def test_fixture_pass_a_metrics_identical_within_model():
         # Pass B axes may still differ across efforts.
         subclass = {r["subclass_acc"] for r in rows}
         assert len(subclass) >= 2, model
+
+
+def test_fixture_calibration_recomputes_from_bins():
+    """Every derived confidence number must recompute from the same rows.
+
+    The fixture generates bins, curve, mean confidence, share above 0.9 and
+    ECE from one set of 100 synthetic per-row pairs per model, so each value
+    must be re-derivable from the others.
+    """
+    metrics = load_fixture(MOCK)
+    for c in metrics["configs"]:
+        bins = c["reliability_bins"]
+        curve = c["selective_curve"]
+        assert bins and curve, c["id"]
+        total = sum(b["count"] for b in bins)
+        assert total == 100, c["id"]
+        ece = sum(
+            b["count"] / total * abs(b["accuracy"] - b["mean_confidence"])
+            for b in bins
+            if b["count"]
+        )
+        assert ece == pytest.approx(c["ece"], abs=1e-5), c["id"]
+        mean_conf = (
+            sum(b["count"] * b["mean_confidence"] for b in bins if b["count"])
+            / total
+        )
+        assert mean_conf == pytest.approx(c["mean_confidence"], abs=1e-5), c["id"]
+        share = sum(b["count"] for b in bins if b["range"][0] >= 0.9) / total
+        assert share == pytest.approx(c["share_above_90"]), c["id"]
+        # Selective curve: full coverage equals the binary-axis accuracy
+        # (calibration measures the ai_native decision), and the 50% point
+        # matches the screen's selective_acc_50.
+        full = next(p for p in curve if p["coverage"] == 1.0)
+        assert full["accuracy"] == pytest.approx(c["ai_native_acc"]), c["id"]
+        half = next(p for p in curve if p["coverage"] == 0.5)
+        assert half["accuracy"] == pytest.approx(c["selective_acc_50"]), c["id"]
+
+
+def test_fixture_nano_seeds_documented_early_signal():
+    """nano anchors the measured early signal: ECE near 0.077 and a fully
+    correct top-confidence half (selective accuracy 1.0 at 50% coverage)."""
+    metrics = load_fixture(MOCK)
+    nano = next(
+        c for c in metrics["configs"] if c["id"] == "mock_gpt-5.4-nano_low_r1"
+    )
+    assert abs(nano["ece"] - 0.077) < 0.005
+    assert nano["selective_acc_50"] == 1.0
+
+
+def test_fixture_robustness_checks_all_pass():
+    metrics = load_fixture(MOCK)
+    checks = metrics["robustness"]["checks"]
+    assert [c["id"] for c in checks] == [
+        "tokenization_pinned",
+        "probability_mass",
+        "batch_parity",
+    ]
+    for check in checks:
+        assert check["status"] == "pass", check["id"]
+        assert check["stats"], check["id"]
+        assert check["meaning"], check["id"]
+        assert len(check["per_model"]) == 3, check["id"]
+        assert check["pending_note"] is None, check["id"]
+
+
+def _axes_stub(run_id: str = "2026-08-01_gpt-5.4-nano_low_r1", **over):
+    stub = {
+        "run_id": run_id,
+        "model": "gpt-5.4-nano",
+        "effort_b": "low",
+        "kind": "classification",
+        "n_scored": 100,
+        "n_expected": 100,
+        "axes": {
+            "subclass": {"accuracy": 0.7, "accuracy_ci95": [0.6, 0.8], "macro_f1": 0.65},
+            "ai_native": {"accuracy": 0.9, "accuracy_ci95": [0.8, 1.0], "macro_f1": 0.9},
+            "rad": {"accuracy": 0.8, "accuracy_ci95": [0.7, 0.9], "macro_f1": 0.75},
+        },
+    }
+    stub.update(over)
+    return stub
+
+
+def test_robustness_pending_when_nothing_recorded():
+    """Real runs without calibration or robustness blocks fabricate nothing."""
+    metrics = build_metrics([_axes_stub()], synthetic=False, source="test")
+    checks = metrics["robustness"]["checks"]
+    assert {c["status"] for c in checks} == {"pending"}
+    for check in checks:
+        assert check["pending_note"], check["id"]
+        assert check["stats"] == [], check["id"]
+        assert check["per_model"] == [], check["id"]
+
+
+def test_robustness_tokenization_from_calibration_coverage():
+    """Full calibration coverage certifies extraction; a gap fails the check."""
+    full = _axes_stub(calibration={
+        "axis": "ai_native",
+        "n": 100,
+        "n_eligible": 100,
+        "reliability": {"bins": [], "ece": 0.05},
+        "selective_prediction": [],
+    })
+    metrics = build_metrics([full], synthetic=False, source="test")
+    tok = metrics["robustness"]["checks"][0]
+    assert tok["id"] == "tokenization_pinned"
+    assert tok["status"] == "pass"
+    assert tok["per_model"] == [{
+        "model": "gpt-5.4-nano",
+        "status": "pass",
+        "detail": "100 of 100 eligible rows",
+    }]
+
+    partial = _axes_stub(calibration={
+        "axis": "ai_native",
+        "n": 97,
+        "n_eligible": 100,
+        "reliability": {"bins": [], "ece": 0.05},
+        "selective_prediction": [],
+    })
+    metrics = build_metrics([partial], synthetic=False, source="test")
+    tok = metrics["robustness"]["checks"][0]
+    assert tok["status"] == "fail"
+
+
+def test_robustness_valid_mass_and_parity_fail_paths():
+    stub = _axes_stub(robustness={
+        "valid_mass": {
+            "n": 100,
+            "min": 0.91,
+            "p50": 0.998,
+            "mean": 0.995,
+            "threshold": 0.98,
+            "n_below_threshold": 3,
+        },
+        "batch_parity": {
+            "verdict": "FAIL",
+            "n_rows": 10,
+            "n_checks": 190,
+            "n_failed": 2,
+        },
+    })
+    metrics = build_metrics([stub], synthetic=False, source="test")
+    by_id = {c["id"]: c for c in metrics["robustness"]["checks"]}
+    assert by_id["probability_mass"]["status"] == "fail"
+    assert by_id["batch_parity"]["status"] == "fail"
+    assert by_id["tokenization_pinned"]["status"] == "pending"
 
 
 def test_fixture_cost_breakdowns_recompute_to_displayed_total():
@@ -549,6 +698,65 @@ def test_committed_html_includes_cost_breakdown_popover():
     assert "cost-info" in html
     assert "cost-popover" in html
     assert '"cost_breakdown"' in html
+
+
+def test_build_html_is_three_tab_suite():
+    """Generator must ship the Classifier Eval Suite: exactly three tabs,
+    product voice, no design-inspiration references, no retired views."""
+    _, mod = _load_eval_dashboard_builder()
+    page = mod.build_html(load_fixture(MOCK))
+    assert "Classifier Eval Suite" in page
+    assert page.count('data-tab="') == 3
+    assert 'data-tab="robustness"' in page
+    assert 'data-tab="benchmarks"' in page
+    assert 'data-tab="confidence"' in page
+    # Retired views are gone by decision.
+    assert "Confusion" not in page
+    assert "chart-summary" not in page
+    assert "baseline-table" not in page
+    # No design-inspiration or meta references leak into the product.
+    assert "langsmith" not in page.lower()
+    # Robustness panel renders server-side with badges.
+    assert 'id="check-tokenization_pinned"' in page
+    assert 'id="check-probability_mass"' in page
+    assert 'id="check-batch_parity"' in page
+    assert '<span class="badge pass">pass</span>' in page
+    # Confidence tab charts.
+    assert "chart-reliability" in page
+    assert "chart-ece" in page
+    assert "chart-selective" in page
+    # Synthetic notice is present but flat (no shouting banner class).
+    assert "synthetic-notice" in page
+    assert "internally consistent placeholders" in page
+
+
+def test_build_html_no_langsmith_in_builder_source():
+    """The builder itself must not reference the retired design inspiration."""
+    from evals.paths import PROJECT_ROOT
+
+    src = (
+        PROJECT_ROOT
+        / "data visualization"
+        / "02_Analysis_Code"
+        / "build_eval_dashboard.py"
+    ).read_text(encoding="utf-8")
+    assert "langsmith" not in src.lower()
+
+
+def test_committed_html_is_the_suite():
+    """Checked-in eval_dashboard.html must be the regenerated three-tab suite."""
+    from evals.paths import PROJECT_ROOT
+
+    page = (
+        PROJECT_ROOT
+        / "data visualization"
+        / "01_Presentation_Materials"
+        / "eval_dashboard.html"
+    ).read_text(encoding="utf-8")
+    assert "Classifier Eval Suite" in page
+    assert page.count('data-tab="') == 3
+    assert "langsmith" not in page.lower()
+    assert 'id="check-batch_parity"' in page
 
 
 def test_resolve_metrics_defaults_to_fixture_not_discovered_runs():
