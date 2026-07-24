@@ -162,6 +162,15 @@ def test_index_marks_synthetic_builds(tmp_path):
     assert "start time not recorded" not in page
 
 
+def test_rebuilding_the_same_synthetic_preview_replaces(tmp_path):
+    """--save-instance on the mock must not pile up identical previews."""
+    first = _archive(tmp_path, _metrics(None, synthetic=True))
+    again = _archive(tmp_path, _metrics(None, synthetic=True), minute=40)
+    assert first.number == again.number == 1
+    assert again.replaced is True
+    assert len(load_registry(tmp_path)) == 1
+
+
 def test_index_without_instances_says_so():
     page = render_index([])
     assert "No instances archived yet" in page

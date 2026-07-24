@@ -2,9 +2,9 @@
   "instances": [
     {
       "n": 1,
-      "archived_utc": "2026-07-24T20:19:53.677353+00:00",
+      "archived_utc": "2026-07-24T20:32:13.913744+00:00",
       "file": "eval_instance_01.html",
-      "identity": null,
+      "identity": "9df0c1850107",
       "synthetic": true,
       "n_configs": 9,
       "source": "evals/tests/fixtures/dashboard/dashboard_mock_runs.json",
@@ -25,7 +25,8 @@
         ],
         "n_gold": null,
         "git_commit": null
-      }
+      },
+      "rebuilt_utc": "2026-07-24T20:36:30.820608+00:00"
     }
   ]
 }

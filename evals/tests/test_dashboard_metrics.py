@@ -785,6 +785,29 @@ def test_build_html_is_three_tab_suite():
     assert "internally consistent placeholders" in page
 
 
+def test_finalize_html_is_self_contained_for_email():
+    """Written pages must open offline: Plotly inlined, no CDN fonts or scripts.
+
+    build_html keeps a placeholder so unit tests stay fast. finalize_html
+    (used by write_dashboard) swaps in the vendored library. Plotly's min
+    bundle mentions cdn.plot.ly as a default topojson URL for maps we do
+    not use. What must not appear is a remote script or font load.
+    """
+    _, mod = _load_eval_dashboard_builder()
+    draft = mod.build_html(load_fixture(MOCK))
+    assert mod.PLOTLY_PLACEHOLDER in draft
+    assert "plotly.js v2.35.2" not in draft
+
+    page = mod.finalize_html(draft)
+    assert mod.PLOTLY_PLACEHOLDER not in page
+    assert 'src="https://cdn.plot.ly' not in page
+    assert "fonts.googleapis.com" not in page
+    assert "fonts.gstatic.com" not in page
+    assert "plotly.js v2.35.2" in page
+    assert "Plotly.newPlot" in page
+    assert mod.PLOTLY_VENDOR.is_file()
+
+
 def test_build_html_no_langsmith_in_builder_source():
     """The builder itself must not reference the retired design inspiration."""
     from evals.paths import PROJECT_ROOT
@@ -812,6 +835,8 @@ def test_committed_html_is_the_suite():
     assert page.count('data-tab="') == 3
     assert "langsmith" not in page.lower()
     assert 'id="check-batch_parity"' in page
+    assert 'src="https://cdn.plot.ly' not in page
+    assert "plotly.js v2.35.2" in page
 
 
 def test_resolve_metrics_defaults_to_fixture_not_discovered_runs():

@@ -13,6 +13,9 @@ Defaults to the synthetic locked-matrix fixture; pass --runs / --scored for
 real scored.json files. Robustness checks render "pending" for anything a
 run has not recorded; nothing is fabricated at render time.
 
+Writes a single self-contained HTML file (Plotly inlined, no CDN). Open in any
+browser offline, or email as one attachment.
+
 Writes:
     data visualization/01_Presentation_Materials/eval_dashboard.html
 """
@@ -24,6 +27,7 @@ import datetime
 import html
 import json
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
@@ -44,6 +48,9 @@ from evals.instances import (  # noqa: E402
 from evals.paths import EVAL_DASHBOARD_HTML  # noqa: E402
 
 OUTPUT_PATH = EVAL_DASHBOARD_HTML
+PLOTLY_VENDOR = _HERE / "vendor" / "plotly-2.35.2.min.js"
+# build_html stays small for tests; write_dashboard swaps this for the real library.
+PLOTLY_PLACEHOLDER = "/*__PLOTLY_INLINE__*/"
 
 # Muted categorical palette for model-group chart series (lifted for dark bg).
 GROUP_COLORS = {
@@ -70,8 +77,8 @@ STYLE = """
   --fail-bg: #2a1210;
   --pending: #8b9096;
   --pending-bg: #1a1a1a;
-  --sans: "Inter", "Segoe UI", -apple-system, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sans: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -596,8 +603,8 @@ const COLORS = __GROUP_COLORS__;
 const INFO_SVG = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="5.1" r="0.9" fill="currentColor"/><path d="M8 7.4v3.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
 
 const cfg = {displayModeBar: false, responsive: true};
-const axisFont = {family: 'Inter, Segoe UI, sans-serif', size: 11, color: '#7a7e85'};
-const numFont = {family: 'IBM Plex Mono, ui-monospace, monospace', size: 10.5, color: '#7a7e85'};
+const axisFont = {family: 'Segoe UI, -apple-system, sans-serif', size: 11, color: '#7a7e85'};
+const numFont = {family: 'ui-monospace, SF Mono, Menlo, Consolas, monospace', size: 10.5, color: '#7a7e85'};
 
 function layout(extra) {
   return Object.assign({
@@ -613,7 +620,7 @@ function layout(extra) {
     hoverlabel: {
       bgcolor: '#1c1f26',
       bordercolor: '#3a3f4b',
-      font: {family: 'Inter, Segoe UI, sans-serif', size: 12, color: '#e8e8ea'},
+      font: {family: 'Segoe UI, -apple-system, sans-serif', size: 12, color: '#e8e8ea'},
     },
   }, extra || {});
 }
@@ -1278,6 +1285,18 @@ def _robustness_panel_html(metrics: dict) -> str:
     return "".join(parts)
 
 
+@lru_cache(maxsize=1)
+def _plotly_inline_js() -> str:
+    """Vendored Plotly, escaped so a literal </script> cannot break the page."""
+    if not PLOTLY_VENDOR.is_file():
+        raise FileNotFoundError(
+            f"Missing vendored Plotly at {PLOTLY_VENDOR}. "
+            "Restore data visualization/02_Analysis_Code/vendor/plotly-2.35.2.min.js"
+        )
+    # A raw </script> inside the library would close the HTML script tag early.
+    return PLOTLY_VENDOR.read_text(encoding="utf-8").replace("</", "<\\/")
+
+
 def _run_instance_card_html(metrics: dict) -> str:
     """Header card naming the run behind the page, synthetic or scored."""
     run = metrics.get("run_instance") or {}
@@ -1324,10 +1343,9 @@ def build_html(metrics: dict) -> str:
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Classifier Eval Suite</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script>
+{PLOTLY_PLACEHOLDER}
+</script>
 <style>
 {STYLE}
 </style>
@@ -1464,6 +1482,13 @@ def resolve_metrics(args: argparse.Namespace) -> dict:
     return load_fixture(DEFAULT_FIXTURE)
 
 
+def finalize_html(page: str) -> str:
+    """Inline vendored Plotly so the file opens offline and can be emailed alone."""
+    if PLOTLY_PLACEHOLDER not in page:
+        raise ValueError("HTML is missing the Plotly placeholder; cannot finalize")
+    return page.replace(PLOTLY_PLACEHOLDER, _plotly_inline_js(), 1)
+
+
 def write_dashboard(
     metrics: dict, output: Path, *, save_instance: bool = False
 ) -> Path | None:
@@ -1471,8 +1496,9 @@ def write_dashboard(
 
     Real scored runs are archived every time; mock builds only on request, so
     development rebuilds do not bury them. Returns the archived path, or None.
+    The written HTML is self-contained (Plotly inlined, no CDN).
     """
-    page = build_html(metrics)
+    page = finalize_html(build_html(metrics))
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(page, encoding="utf-8")
     mode = "SYNTHETIC" if metrics.get("synthetic") else "scored"

@@ -138,7 +138,22 @@ def next_instance_number(directory: Path, entries: list[dict[str, Any]]) -> int:
 
 
 def _identity(metrics: dict[str, Any]) -> str | None:
-    """Stable fingerprint of the runs behind a page, None when unidentifiable."""
+    """Stable fingerprint of the runs behind a page, None when unidentifiable.
+
+    Synthetic/mock builds key on their source path so ``--save-instance`` can
+    replace the preview instead of minting a new number every rebuild. Real
+    runs without a recorded start time stay unidentifiable (fresh number)
+    rather than risk overwriting a different sweep.
+    """
+    if metrics.get("synthetic") or (metrics.get("run_instance") or {}).get("synthetic"):
+        source = str(metrics.get("source") or "fixture")
+        parts = [
+            "synthetic",
+            source,
+            "|".join(sorted(str(c) for c in (metrics.get("config_ids") or []))),
+        ]
+        return hashlib.sha1("\x1f".join(parts).encode("utf-8")).hexdigest()[:12]
+
     run = metrics.get("run_instance") or {}
     first, last = run.get("started_first"), run.get("started_last")
     if not first or not last:
@@ -225,8 +240,8 @@ INDEX_STYLE = """
   --text2: #a8abb0;
   --muted: #7a7e85;
   --accent: #5b8fc4;
-  --sans: "Inter", "Segoe UI", -apple-system, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sans: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
