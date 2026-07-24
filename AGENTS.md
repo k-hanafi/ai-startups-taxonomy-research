@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-22 · Active branch: `eval/luna-config` (luna pricing re-verified + survivorship status corrected; next = paid 9-cell matrix)
+Last updated: 2026-07-23 · Active branch: `dashboards/v1-alive-dead` (V1 alive-vs-dead dashboard on evidence-based dead verdicts; Bugbot fixes for RAD/preview honesty)
 
 ---
 
@@ -51,6 +51,7 @@ Authoritative plans (read when resuming a strand; committed under **`.cursor/pla
 - `.cursor/plans/survivorship_tavily_pipeline_*.plan.md` — post-probe Tavily extract + classify pipeline.
 - `.cursor/plans/logprob_confidence_classifier_*.plan.md` — logprob-based confidence methodology (active).
 - `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; classification committed; #22 dashboard + #24/#25 science on `main`; provisional `draft_*` gold accepted for paid sweep; next = paid 9-cell matrix with Pass A auto-banked once per model).
+- `.cursor/plans/v1_alive_dead_dashboard.plan.md` — V1 alive-vs-dead dashboard PRD (implemented; evidence-only universe, 4-act survivorship section, coverage checklist for the retired insights dashboard).
 
 Cursor writes new plans to `~/.cursor/plans/` by default; copy or sync them into **`.cursor/plans/`** in this repo so they are version-controlled. Legacy copies may still exist in **`plans/`** at repo root. Repo agent skills (committed): **`portfolio-git-messages`**, **`git-commit-batch-plan`**, **`code-structure`**, **`clean-my-repo`** under **`.cursor/skills/`**. **`.cursor/rules/`** stays local.
 
@@ -60,8 +61,8 @@ Python ≥3.11 · `openai` (Responses + Batch API) · `pandas` · `pydantic` (st
 output) · `tiktoken` (pre-flight cost) · `tenacity` (retries) · `rich` (terminal
 UI) · `python-dotenv`. Tavily HTTP API for web crawl/extract (stdlib `urllib`).
 Internet Archive CDX API for snapshot discovery. Tests: `pytest`. The
-survivorship-insights dashboard adds `statsmodels` (logistic regression),
-installed via the `analysis` extra.
+alive-vs-dead dashboard adds `statsmodels` and `scipy` (logistic regression,
+proportion tests), installed via the `analysis` extra.
 
 ## Architecture & data flow
 
@@ -84,7 +85,7 @@ classifier_input.csv (empty-evidence rows) ──build_not_found_cohort.py──
  └──build_classifier_input_dead.py──▶ classifier_input_dead.csv
  └──classify_dead.py run (classify.py under CLASSIFY_NS=wayback_dead)──▶ outputs/wayback_dead/wayback_dead_classifications.csv
  └──merge_survivorship.py──▶ outputs/wayback_dead/survivorship_corrected.csv
- └──build_survivorship_insights_dashboard.py (survivor-vs-dead + logistic regression)──▶ data visualization/01_Presentation_Materials/survivorship_insights.html
+ └──build_v1_alive_dead_dashboard.py (evidence-only alive-vs-dead, 4-act survivorship story)──▶ data visualization/01_Presentation_Materials/v1_alive_dead_cohort.html
 ```
 
 `classify.py` itself is a state machine: `prepare → submit → download` (or `run`
@@ -188,8 +189,8 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 |------|---------|
 | `data visualization/01_Presentation_Materials/*.html` | Generated dashboards |
 | `data visualization/02_Analysis_Code/*.py` | Scripts that build those dashboards |
-| `data visualization/02_Analysis_Code/survivorship_analysis.py` | Survivorship findings compute: survivor-vs-dead cohorts + 2 logistic models (pure metrics dict; PREVIEW from production if `survivorship_corrected.csv` absent) |
-| `data visualization/02_Analysis_Code/build_survivorship_insights_dashboard.py` | Renders `survivorship_insights.html` from that compute module (reuses house STYLE) |
+| `data visualization/02_Analysis_Code/survivorship_analysis.py` | Survivor-vs-dead compute on the evidence-only universe: distributions, BH-tested subclass deltas, funding/thin-history/snapshot-age cuts, coverage funnel, 3 logistic models (pure metrics dict; PREVIEW from production if `survivorship_corrected.csv` absent) |
+| `data visualization/02_Analysis_Code/build_v1_alive_dead_dashboard.py` | Flagship V1 alive-vs-dead dashboard: 5 corrected base sections + 4-act survivorship story (bias / who dies / why / robustness); writes `v1_alive_dead_cohort.html`; loud PREVIEW banner pre-merge (replaces the retired `build_survivorship_insights_dashboard.py`) |
 | `data visualization/02_Analysis_Code/build_eval_dashboard.py` | Eval viewer (LangSmith-inspired light UX): white spacious canvas, summary line + experiments table, Pareto / ECE+selective / reliability / vs_baseline / latency, search + model-group chips. Defaults to mock fixture; `--runs`/`--scored` for real runs. Writes `eval_dashboard.html`. |
 | `tests/` | pytest for the live pipeline (schema, formatter, tokens, enrichment, tavily runner) |
 | `wayback_machine/tests/` | pytest for wayback (golden cleaner, cohort, state, config, budget, probe) |
@@ -282,6 +283,7 @@ python -m evals score <run_id> --allow-partial-confidence      # incomplete raw 
 | Survivorship death probe | `wayback_machine/scripts/probe_death_coverage.py` + `wayback_machine/cdx.py` |
 | Survivorship extract→classify→merge | `wayback_machine/extract_dead.py` + `scripts/{build_targets_dead,run_extract_dead,build_classifier_input_dead,classify_dead,merge_survivorship}.py` |
 | Dashboards | `data visualization/02_Analysis_Code/` |
+| Alive-vs-dead dashboard / survivorship stats | `survivorship_analysis.py` (compute) + `build_v1_alive_dead_dashboard.py` (render); rebuild after `merge_survivorship.py` to leave PREVIEW mode |
 | Eval dashboard / config filter | `evals/dashboard_metrics.py` + `build_eval_dashboard.py` (ECE/selective/vs_baseline; mock fixture until paid matrix runs; `--runs` for real data) |
 | Eval matrix / scoring | `evals/config.py` (`EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`); `run-classification` (auto Pass A bank); `matrix`; `score --confidence-from-raw [--baseline]` |
 

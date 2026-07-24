@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
-"""Compute the survivorship-insights metrics dict consumed by the dashboard.
+"""Compute the survivor-vs-dead metrics dict consumed by the alive/dead dashboard.
 
 Pure compute, mirrors the summarize -> build split used by
 summarize_death_coverage.py + build_survivorship_dashboard.py: this module owns
-the data work and returns one JSON-able dict; the builder only renders it.
+the data work and returns one JSON-able dict; the builder
+(build_v1_alive_dead_dashboard.py) only renders it.
+
+Evidence-only universe (locked design decision): the alive cohort is companies
+Tavily successfully scraped (non-empty live website_evidence) and the dead
+cohort is companies with recovered archive evidence (evidence_source ==
+"wayback_dead"). Metadata-only classifications appear nowhere except the
+coverage funnel counts.
 
 It assembles a single analysis frame from the merged survivor-vs-dead dataset
 (survivorship_corrected.csv), joins the static metadata it needs (funding,
 category, founded date, liveness) plus death timing, defines the survivor / dead
-cohorts, and computes the descriptive sections and two logistic-regression
+cohorts, and computes the descriptive sections and the logistic-regression
 models. If survivorship_corrected.csv is absent it builds a structurally
 identical PREVIEW frame from production_classifications.csv tagged by the frozen
-dead work list, so the dashboard renders before the classify-dead run lands.
+dead work list (metadata-only stand-in dead cohort), so the dashboard renders
+before the classify-dead run lands.
 
 Run directly to print cohort sizes + the metrics JSON (optionally --out FILE).
 """
@@ -20,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,6 +78,13 @@ GPT4_LAUNCH = "2023-03-14"
 TEMPORAL_START = pd.Timestamp("2022-01-01")
 TOP_CATEGORY_GROUPS = 8
 
+# Snapshot-age robustness cut: days between the snapshot we classified and the
+# company's death anchor (last Wayback capture).
+SNAPSHOT_AGE_BUCKETS = [("0-30d", 0, 30), ("31-90d", 31, 90),
+                        ("91-365d", 91, 365), ("365d+", 366, np.inf)]
+Z_95 = 1.96
+BH_ALPHA = 0.05
+
 
 @dataclass
 class Paths:
@@ -78,6 +94,7 @@ class Paths:
     master: Path = PROJECT_ROOT / "data" / "master_csv.csv"
     classifier_input: Path = PROJECT_ROOT / "outputs" / "tavilycrawl" / "processed" / "classifier_input.csv"
     targets_dead: Path = PROJECT_ROOT / "wayback_machine" / "data" / "scrape_targets_dead.csv"
+    not_found: Path = PROJECT_ROOT / "wayback_machine" / "data" / "not_found_cohort.csv"
 
 
 def _read(path: Path) -> pd.DataFrame:
@@ -105,8 +122,13 @@ def load_frame(paths: Paths) -> tuple[pd.DataFrame, dict]:
         base["evidence_source"] = np.where(base["CompanyID"].isin(dead_ids), "dead_metadata", "live")
     else:
         base = _read(paths.corrected)
-        if "evidence_source" not in base:
-            base["evidence_source"] = np.where(base["CompanyID"].isin(dead_ids), "dead_metadata", "live")
+        # Corrected CSV should carry evidence_source from merge_survivorship. If an
+        # older export omitted it, target-list members are recovered archive dead
+        # (wayback_dead), not metadata stand-ins.
+        if "evidence_source" not in base.columns:
+            base["evidence_source"] = np.where(
+                base["CompanyID"].isin(dead_ids), "wayback_dead", "live"
+            )
 
     # Static metadata join (funding, category, founded, liveness).
     meta_cols = ["org_uuid", "founded_date", "employee_count", "total_funding_usd",
@@ -131,13 +153,14 @@ def load_frame(paths: Paths) -> tuple[pd.DataFrame, dict]:
         if c not in df.columns:
             df[c] = ""
 
-    df = _derive(df)
+    df = _derive(df, preview)
     meta = {
         "preview": preview,
         "gpt4_launch": GPT4_LAUNCH,
         "n_total": int(len(df)),
+        "n_universe": int((df["is_survivor"] | df["is_dead"]).sum()),
         "n_survivor": int(df["is_survivor"].sum()),
-        "n_dead_full": int(df["is_dead_full"].sum()),
+        "n_dead": int(df["is_dead"].sum()),
         "n_dead_recovered": int(df["is_dead_recovered"].sum()),
         "n_dead_strict": int(df["is_dead_strict"].sum()),
         "n_excluded": int(df["is_excluded"].sum()),
@@ -154,7 +177,7 @@ def _funding_bucket(v: float) -> str:
     return "unknown"
 
 
-def _derive(df: pd.DataFrame) -> pd.DataFrame:
+def _derive(df: pd.DataFrame, preview: bool) -> pd.DataFrame:
     df["ai_native_int"] = pd.to_numeric(df["ai_native"], errors="coerce").fillna(0).astype(int)
     df["funding_usd"] = pd.to_numeric(df["total_funding_usd"], errors="coerce")
     df["log_funding"] = np.log10(df["funding_usd"].fillna(0).clip(lower=0) + 1.0)
@@ -172,7 +195,11 @@ def _derive(df: pd.DataFrame) -> pd.DataFrame:
     df["is_dead_full"] = df["evidence_source"].isin(["wayback_dead", "dead_metadata"])
     df["is_survivor"] = df["evidence_source"].eq("live") & df["has_live_evidence"]
     df["is_excluded"] = df["evidence_source"].eq("live") & ~df["has_live_evidence"]
-    df["is_dead_strict"] = df["is_dead_full"] & website_dead & ~thin
+    # Evidence-only universe: the dead cohort is the recovered-evidence set.
+    # PREVIEW (pre-merge) has zero wayback_dead rows, so the full work list
+    # stands in behind the banner until the corrected CSV lands.
+    df["is_dead"] = df["is_dead_full"] if preview else df["is_dead_recovered"]
+    df["is_dead_strict"] = df["is_dead"] & website_dead & ~thin
     return df
 
 
@@ -190,11 +217,24 @@ def _dist(f: pd.DataFrame, mask: pd.Series, col: str, order: list[str]) -> dict:
     }
 
 
+def _wilson(k: int, n: int) -> dict:
+    """Wilson 95% score interval for a proportion, in percent."""
+    if n == 0:
+        return {"lo": 0.0, "hi": 0.0}
+    p = k / n
+    z2 = Z_95 * Z_95
+    denom = 1 + z2 / n
+    center = (p + z2 / (2 * n)) / denom
+    half = Z_95 * math.sqrt(p * (1 - p) / n + z2 / (4 * n * n)) / denom
+    return {"lo": round((center - half) * 100, 2), "hi": round((center + half) * 100, 2)}
+
+
 def _ai_rate(f: pd.DataFrame, mask: pd.Series) -> dict:
     sub = f[mask]
     n = int(len(sub))
     ai = int((sub["ai_native_int"] == 1).sum())
-    return {"n": n, "ai_native": ai, "rate": round(ai / n * 100, 1) if n else 0.0}
+    return {"n": n, "ai_native": ai, "rate": round(ai / n * 100, 1) if n else 0.0,
+            "ci": _wilson(ai, n)}
 
 
 def _mortality_by(f: pd.DataFrame, col: str, order: list[str]) -> list[dict]:
@@ -202,7 +242,7 @@ def _mortality_by(f: pd.DataFrame, col: str, order: list[str]) -> list[dict]:
     out = []
     for level in order:
         sel = f[col] == level
-        dead = int((sel & f["is_dead_full"]).sum())
+        dead = int((sel & f["is_dead"]).sum())
         surv = int((sel & f["is_survivor"]).sum())
         tot = dead + surv
         if tot:
@@ -212,9 +252,10 @@ def _mortality_by(f: pd.DataFrame, col: str, order: list[str]) -> list[dict]:
 
 
 def _correction(f: pd.DataFrame) -> dict:
-    """Survivor-only (biased) vs survivor+dead (corrected) global distributions."""
+    """Biased (evidence-based alive only) vs corrected (alive + evidence-based
+    dead) global distributions, both on the evidence-only universe."""
     biased = f["is_survivor"]
-    corrected = f["is_survivor"] | f["is_dead_full"]
+    corrected = f["is_survivor"] | f["is_dead"]
     return {
         "biased": {
             "ai_native": _ai_rate(f, biased),
@@ -231,7 +272,7 @@ def _correction(f: pd.DataFrame) -> dict:
 
 def _ai_vs_survival(f: pd.DataFrame) -> dict:
     surv = _dist(f, f["is_survivor"], "subclass", SUBCLASS_ORDER)
-    dead = _dist(f, f["is_dead_full"], "subclass", SUBCLASS_ORDER)
+    dead = _dist(f, f["is_dead"], "subclass", SUBCLASS_ORDER)
     lift = []
     for s in SUBCLASS_ORDER:
         sv, dv = surv["share"][s], dead["share"][s]
@@ -240,7 +281,7 @@ def _ai_vs_survival(f: pd.DataFrame) -> dict:
     return {
         "ai_rate": {
             "survivor": _ai_rate(f, f["is_survivor"]),
-            "dead_full": _ai_rate(f, f["is_dead_full"]),
+            "dead": _ai_rate(f, f["is_dead"]),
             "dead_strict": _ai_rate(f, f["is_dead_strict"]),
         },
         "subclass_survivor": surv,
@@ -249,23 +290,141 @@ def _ai_vs_survival(f: pd.DataFrame) -> dict:
     }
 
 
+def _subclass_tests(f: pd.DataFrame) -> dict:
+    """Per-subclass two-proportion z-tests (survivor vs dead share) with a
+    Benjamini-Hochberg correction, plus one omnibus chi-square on the 10x2
+    contingency table."""
+    try:
+        from scipy.stats import chi2_contingency
+        from statsmodels.stats.proportion import proportions_ztest
+    except Exception as exc:
+        return {"available": False, "error": f"scipy/statsmodels unavailable: {exc}"}
+
+    surv, dead = f[f["is_survivor"]], f[f["is_dead"]]
+    n1, n2 = len(surv), len(dead)
+    if not n1 or not n2:
+        return {"available": False, "error": "empty cohort"}
+
+    rows = []
+    for s in SUBCLASS_ORDER:
+        k1 = int((surv["subclass"] == s).sum())
+        k2 = int((dead["subclass"] == s).sum())
+        if k1 + k2 == 0:
+            continue
+        _, p = proportions_ztest([k1, k2], [n1, n2])
+        rows.append({"subclass": s, "survivor_share": round(k1 / n1 * 100, 2),
+                     "dead_share": round(k2 / n2 * 100, 2),
+                     "delta_pp": round(k2 / n2 * 100 - k1 / n1 * 100, 2),
+                     "pvalue": float(p), "k1": k1, "k2": k2})
+
+    # Benjamini-Hochberg at BH_ALPHA across the family of subclass tests.
+    m = len(rows)
+    for rank, row in enumerate(sorted(rows, key=lambda r: r["pvalue"]), start=1):
+        row["bh_threshold"] = rank / m * BH_ALPHA
+    cutoff_ranks = [r for r in rows if r["pvalue"] <= r["bh_threshold"]]
+    max_p = max((r["pvalue"] for r in cutoff_ranks), default=-1.0)
+    for row in rows:
+        row["significant"] = row["pvalue"] <= max_p
+        del row["bh_threshold"]
+
+    table = [[r["k1"] for r in rows], [r["k2"] for r in rows]]
+    chi2, chi_p, dof, _ = chi2_contingency(table)
+    return {"available": True, "alpha": BH_ALPHA, "method": "BH",
+            "n_survivor": n1, "n_dead": n2, "tests": rows,
+            "chi2": {"stat": round(float(chi2), 2), "pvalue": float(chi_p),
+                     "dof": int(dof)}}
+
+
+def _funding_by_survival(f: pd.DataFrame) -> dict:
+    """Funding-bucket shares per cohort plus per-bucket mortality."""
+    surv, dead = f[f["is_survivor"]], f[f["is_dead"]]
+    n1, n2 = len(surv), len(dead)
+    shares = []
+    for fb in FUNDING_BUCKET_ORDER:
+        k1 = int((surv["funding_bucket"] == fb).sum())
+        k2 = int((dead["funding_bucket"] == fb).sum())
+        shares.append({"bucket": fb,
+                       "survivor_share": round(k1 / n1 * 100, 1) if n1 else 0.0,
+                       "dead_share": round(k2 / n2 * 100, 1) if n2 else 0.0,
+                       "survivor": k1, "dead": k2})
+    return {"shares": shares,
+            "mortality": _mortality_by(f, "funding_bucket", FUNDING_BUCKET_ORDER)}
+
+
+def _sensitivity(f: pd.DataFrame) -> dict:
+    """Act 4 robustness: does the dead-cohort AI-native rate hinge on thin
+    archives or stale snapshots?"""
+    dead = f[f["is_dead"]]
+    thin_mask = dead["thin_history"].astype(str).str.lower().isin(["true", "1"])
+    by_thin = [
+        {"label": "thin archive", **_ai_rate(dead, thin_mask)},
+        {"label": "regular archive", **_ai_rate(dead, ~thin_mask)},
+    ]
+    age = pd.to_numeric(dead["days_before_death"], errors="coerce")
+    by_age = []
+    for label, lo, hi in SNAPSHOT_AGE_BUCKETS:
+        m = (age >= lo) & (age <= hi)
+        if int(m.sum()):
+            by_age.append({"label": label, **_ai_rate(dead, m.fillna(False))})
+    return {"by_thin_history": by_thin, "by_snapshot_age": by_age}
+
+
+def _funnel(f: pd.DataFrame, paths: Paths, preview: bool = False) -> dict:
+    """Coverage funnel: not-found cohort -> archive targets -> classified with
+    recovered evidence. The residuals are what survivorship correction still
+    cannot see.
+
+    In PREVIEW mode the final stage uses the metadata stand-in dead count (same
+    `is_dead` definition the rest of the dashboard uses) so the funnel does not
+    collapse to zero while hero metrics show thousands of dead firms.
+    """
+    n_not_found = None
+    if paths.not_found.exists():
+        n_not_found = int(len(_read(paths.not_found)))
+    n_targets = None
+    if paths.targets_dead.exists():
+        n_targets = int(len(_read(paths.targets_dead)))
+    if preview:
+        n_classified = int(f["is_dead"].sum())
+        classified_label = "Preview dead (metadata stand-in)"
+    else:
+        n_classified = int(f["is_dead_recovered"].sum())
+        classified_label = "Classified on recovered evidence"
+    stages = []
+    if n_not_found is not None:
+        stages.append({"label": "Not found by Tavily", "n": n_not_found})
+    if n_targets is not None:
+        stages.append({"label": "Usable pre-death snapshot", "n": n_targets})
+    stages.append({"label": classified_label, "n": n_classified})
+    out = {"stages": stages}
+    if n_not_found is not None and n_targets is not None:
+        out["no_archive"] = n_not_found - n_targets
+        out["extract_shortfall"] = n_targets - n_classified
+    return out
+
+
 def _rad_survival(f: pd.DataFrame) -> dict:
+    # RAD-H/M/L mortality is an AI-native story (chart + insight say so); keep
+    # non-AI rows out so a stray RAD label cannot dilute the rates.
+    ai = f[f["ai_native_int"] == 1]
     return {
-        "by_rad": _mortality_by(f, "rad_score", AI_RAD_ORDER),
+        "by_rad": _mortality_by(ai, "rad_score", AI_RAD_ORDER),
         "by_subclass": _mortality_by(f, "subclass", SUBCLASS_ORDER),
         "by_subclass_group": _mortality_by(f, "subclass_group", SUBCLASS_GROUP_ORDER),
+        "by_era": _mortality_by(f, "founding_era", ["PRE-GENAI", "GENAI-ERA"]),
     }
 
 
 def _dependency_trap(f: pd.DataFrame) -> dict:
-    """Mortality grid: funding bucket (rows) x RAD level (cols)."""
+    """Mortality grid among AI-native firms: funding bucket (rows) x RAD (cols)."""
+    ai = f[f["ai_native_int"] == 1]
     cells = []
     for fb in FUNDING_BUCKET_ORDER:
         row = []
         for rad in AI_RAD_ORDER:
-            sel = (f["funding_bucket"] == fb) & (f["rad_score"] == rad)
-            dead = int((sel & f["is_dead_full"]).sum())
-            surv = int((sel & f["is_survivor"]).sum())
+            sel = (ai["funding_bucket"] == fb) & (ai["rad_score"] == rad)
+            dead = int((sel & ai["is_dead"]).sum())
+            surv = int((sel & ai["is_survivor"]).sum())
             tot = dead + surv
             row.append({"dead": dead, "survivor": surv, "n": tot,
                         "mortality": round(dead / tot * 100, 1) if tot else None})
@@ -278,7 +437,7 @@ def _vertical(f: pd.DataFrame, top_n: int = TOP_CATEGORY_GROUPS) -> list[dict]:
     ai = f[f["ai_native_int"] == 1]
     rows = []
     for grp, sub in ai.groupby("category_group"):
-        dead = int(sub["is_dead_full"].sum())
+        dead = int(sub["is_dead"].sum())
         surv = int(sub["is_survivor"].sum())
         tot = dead + surv
         if tot >= 1 and grp not in ("", "Unknown"):
@@ -289,7 +448,7 @@ def _vertical(f: pd.DataFrame, top_n: int = TOP_CATEGORY_GROUPS) -> list[dict]:
 
 
 def _temporal(f: pd.DataFrame) -> dict:
-    dead = f[f["is_dead_full"]].copy()
+    dead = f[f["is_dead"]].copy()
     ts = pd.to_datetime(dead["death_ts"], format="%Y%m%d%H%M%S", errors="coerce")
     dead = dead.assign(_death=ts)
     dead = dead[dead["_death"] >= TEMPORAL_START]
@@ -315,7 +474,7 @@ def _confidence(f: pd.DataFrame) -> dict:
                 "median": float(v.median()) if len(v) else None, "dist": dist}
     return {
         "survivor": stats(f["is_survivor"]),
-        "dead_full": stats(f["is_dead_full"]),
+        "dead": stats(f["is_dead"]),
         "dead_recovered": stats(f["is_dead_recovered"]),
     }
 
@@ -327,6 +486,9 @@ def _flips(f: pd.DataFrame, paths: Paths, preview: bool) -> dict:
         return {"available": False, "reason": "preview" if preview else "no production csv"}
     before = _read(paths.production).set_index("CompanyID")
     dead = f[f["is_dead_recovered"]]
+    # Skip IDs absent from production: reindex NaNs cast to "nan" and look like
+    # flips even though there is no before-label to compare.
+    dead = dead[dead["CompanyID"].isin(before.index)]
     n = int(len(dead))
     out = {"available": True, "n": n}
     for col in ("ai_native", "subclass", "rad_score"):
@@ -339,21 +501,40 @@ def _flips(f: pd.DataFrame, paths: Paths, preview: bool) -> dict:
     return out
 
 
+def _regression_cis_stable(terms: list[dict], max_log_width: float = 5.0) -> bool:
+    """True when every odds-ratio CI is finite, positive, and not explosively wide.
+
+    max_log_width=5 means hi/lo may span at most e^5 ≈ 148x on the OR scale.
+    Wider intervals usually mean separation or a sparse cell, not a usable estimate.
+    """
+    if not terms:
+        return False
+    for t in terms:
+        lo, hi = t["ci_low"], t["ci_high"]
+        if not (math.isfinite(lo) and math.isfinite(hi) and lo > 0 and hi > 0):
+            return False
+        if math.log(hi / lo) > max_log_width:
+            return False
+    return True
+
+
 def _regression(f: pd.DataFrame) -> dict:
-    """Two logistic models. died=1 for the dead cohort, 0 for survivors.
+    """Logistic models. died=1 for the dead cohort, 0 for survivors.
 
     Model 1 (full outcome frame): does AI-nativeness predict death, net of
     funding, founding era, and vertical. Model 2 (AI-native only): does RAD
     dependency predict death among AI firms (the RAD-validation test).
+    Model 3 (AI-native only): Model 2 plus a funding x RAD interaction; the
+    builder renders it only if it converged with stable CIs.
     """
     try:
         import statsmodels.formula.api as smf
     except Exception as exc:  # statsmodels missing
         unavailable = {"available": False, "error": f"statsmodels unavailable: {exc}"}
-        return {"model1": unavailable, "model2": unavailable}
+        return {"model1": unavailable, "model2": unavailable, "model3": unavailable}
 
-    base = f[f["is_dead_full"] | f["is_survivor"]].copy()
-    base["died"] = base["is_dead_full"].astype(int)
+    base = f[f["is_dead"] | f["is_survivor"]].copy()
+    base["died"] = base["is_dead"].astype(int)
     base = base[base["founding_era"] != "unknown"]
     top_cats = base["category_group"].value_counts().head(TOP_CATEGORY_GROUPS).index
     base["cat_grp"] = base["category_group"].where(base["category_group"].isin(top_cats), "Other")
@@ -388,7 +569,15 @@ def _regression(f: pd.DataFrame) -> dict:
         ai,
         "died ~ C(rad_score, Treatment('RAD-L')) + C(subclass_group) + log_funding + C(founding_era)",
     )
-    return {"model1": model1, "model2": model2}
+    # Attempt-then-fall-back: funding x RAD interaction. Ship only when the fit
+    # converges with stable CIs; otherwise the descriptive heatmap stands alone.
+    model3 = fit(
+        ai,
+        "died ~ C(rad_score, Treatment('RAD-L')) * log_funding + C(founding_era)",
+    )
+    if model3.get("available") and not _regression_cis_stable(model3["terms"]):
+        model3 = {"available": False, "error": "unstable confidence intervals"}
+    return {"model1": model1, "model2": model2, "model3": model3}
 
 
 def compute_metrics(df: pd.DataFrame, meta: dict, paths: Paths) -> dict:
@@ -396,11 +585,15 @@ def compute_metrics(df: pd.DataFrame, meta: dict, paths: Paths) -> dict:
         "meta": meta,
         "correction": _correction(df),
         "ai_vs_survival": _ai_vs_survival(df),
+        "subclass_tests": _subclass_tests(df),
         "rad_survival": _rad_survival(df),
         "dependency_trap": _dependency_trap(df),
+        "funding_survival": _funding_by_survival(df),
         "vertical": _vertical(df),
         "temporal": _temporal(df),
         "confidence": _confidence(df),
+        "sensitivity": _sensitivity(df),
+        "funnel": _funnel(df, paths, meta["preview"]),
         "flips": _flips(df, paths, meta["preview"]),
         "regression": _regression(df),
     }
@@ -432,9 +625,10 @@ def main() -> None:
     metrics = analyze(p)
     m = metrics["meta"]
     mode = "PREVIEW (metadata-only dead verdicts)" if m["preview"] else "evidence-based"
-    print(f"[{mode}] total={m['n_total']:,}  survivor={m['n_survivor']:,}  "
-          f"dead_full={m['n_dead_full']:,}  dead_strict={m['n_dead_strict']:,}  "
-          f"excluded={m['n_excluded']:,}", file=sys.stderr)
+    print(f"[{mode}] total={m['n_total']:,}  universe={m['n_universe']:,}  "
+          f"survivor={m['n_survivor']:,}  dead={m['n_dead']:,}  "
+          f"dead_strict={m['n_dead_strict']:,}  excluded={m['n_excluded']:,}",
+          file=sys.stderr)
     blob = json.dumps(metrics, indent=2, ensure_ascii=False, default=str)
     if args.out:
         args.out.write_text(blob + "\n", encoding="utf-8")
