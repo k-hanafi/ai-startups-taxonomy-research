@@ -1,6 +1,6 @@
 {
   "synthetic": true,
-  "note": "SYNTHETIC locked-matrix mock for the eval dashboard skeleton. Numbers are design placeholders, not measured eval results. Pass A metrics (ai_native accuracy, ECE, mean_confidence, share≥0.9) are identical across Pass B efforts within each model, matching the bank-once Pass A design. Replace by loading real evals/runs/*/scored.json after the paid sweep.",
+  "note": "SYNTHETIC locked-matrix mock for the eval dashboard skeleton. Numbers are design placeholders, not measured eval results. Pass A metrics (ai_native accuracy, ECE, mean_confidence, share≥0.9) are identical across Pass B efforts within each model, matching the bank-once Pass A design. Each run's cost block + production_cost_estimate ladder were generated with evals.cost_extrapolate.extrapolate_production_cost on synthetic token totals (identical input/cache volume everywhere; Pass A totals identical within a model), so the popover arithmetic recomputes exactly to the displayed projected $. Replace by loading real evals/runs/*/scored.json after the paid sweep.",
   "scored_runs": [
     {
       "run_id": "mock_gpt-5.4-nano_low_r1",
@@ -10,25 +10,132 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.93, "accuracy_ci95": [0.88, 0.98], "macro_f1": 0.92},
-        "subclass": {"accuracy": 0.68, "accuracy_ci95": [0.588, 0.772], "macro_f1": 0.62},
-        "rad": {"accuracy": 0.76, "accuracy_ci95": [0.68, 0.84], "macro_f1": 0.74}
+        "ai_native": {
+          "accuracy": 0.93,
+          "accuracy_ci95": [
+            0.88,
+            0.98
+          ],
+          "macro_f1": 0.92
+        },
+        "subclass": {
+          "accuracy": 0.68,
+          "accuracy_ci95": [
+            0.588,
+            0.772
+          ],
+          "macro_f1": 0.62
+        },
+        "rad": {
+          "accuracy": 0.76,
+          "accuracy_ci95": [
+            0.68,
+            0.84
+          ],
+          "macro_f1": 0.74
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 93, "accuracy": 0.72},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.71},
-        "boundary_disagreement": {"n": 100, "rate": 0.08}
+        "subclass_family_conditional": {
+          "n": 93,
+          "accuracy": 0.72
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.71
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.08
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 95}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.4-nano",
+          "architecture": "classification",
+          "batch_discount": 0.5,
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 246000,
+            "total_usd": 0.5575,
+            "mean_usd_per_row": 0.005575,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 0.4625,
+            "mean_usd_per_row": 0.004625000000000001,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_batch": {
+            "label": "batch_adjustment",
+            "available": true,
+            "batch_discount": 0.5,
+            "total_usd_after_batch": 0.23125,
+            "mean_usd_per_row": 0.0023125000000000003,
+            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
+          },
+          "4_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 94.98825000000001,
+            "estimated_usd_per_company": 0.0023125000000000003,
+            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 0.5575,
+          "golden_after_cache_usd": 0.4625,
+          "golden_after_batch_usd": 0.23125,
+          "estimated_production_usd": 94.98825000000001,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 2.4, "p95": 5.9, "mean": 2.8, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 2.4,
+          "p95": 5.9,
+          "mean": 2.8,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.071, "bins": []},
+        "reliability": {
+          "ece": 0.071,
+          "bins": []
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 0.98},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.93}
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 0.98
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.93
+          }
         ]
       },
       "screen": {
@@ -37,6 +144,34 @@
         "mean_confidence": 0.83,
         "share_above_90": 0.46,
         "selective_acc_50": 0.98
+      },
+      "cost": {
+        "model": "gpt-5.4-nano",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 246000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 245200,
+            "reasoning": 185200
+          }
+        },
+        "total_usd": 0.5575,
+        "mean_usd_per_row": 0.005575,
+        "pricing_per_mtok": {
+          "input": 0.2,
+          "output": 1.25
+        }
       }
     },
     {
@@ -47,25 +182,132 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.93, "accuracy_ci95": [0.88, 0.98], "macro_f1": 0.92},
-        "subclass": {"accuracy": 0.74, "accuracy_ci95": [0.655, 0.825], "macro_f1": 0.69},
-        "rad": {"accuracy": 0.81, "accuracy_ci95": [0.74, 0.88], "macro_f1": 0.78}
+        "ai_native": {
+          "accuracy": 0.93,
+          "accuracy_ci95": [
+            0.88,
+            0.98
+          ],
+          "macro_f1": 0.92
+        },
+        "subclass": {
+          "accuracy": 0.74,
+          "accuracy_ci95": [
+            0.655,
+            0.825
+          ],
+          "macro_f1": 0.69
+        },
+        "rad": {
+          "accuracy": 0.81,
+          "accuracy_ci95": [
+            0.74,
+            0.88
+          ],
+          "macro_f1": 0.78
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 93, "accuracy": 0.78},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.77},
-        "boundary_disagreement": {"n": 100, "rate": 0.06}
+        "subclass_family_conditional": {
+          "n": 93,
+          "accuracy": 0.78
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.77
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.06
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 118}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.4-nano",
+          "architecture": "classification",
+          "batch_discount": 0.5,
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 336000,
+            "total_usd": 0.67,
+            "mean_usd_per_row": 0.0067,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 0.5750000000000001,
+            "mean_usd_per_row": 0.005750000000000001,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_batch": {
+            "label": "batch_adjustment",
+            "available": true,
+            "batch_discount": 0.5,
+            "total_usd_after_batch": 0.28750000000000003,
+            "mean_usd_per_row": 0.0028750000000000004,
+            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
+          },
+          "4_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 118.0935,
+            "estimated_usd_per_company": 0.002875,
+            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 0.67,
+          "golden_after_cache_usd": 0.5750000000000001,
+          "golden_after_batch_usd": 0.28750000000000003,
+          "estimated_production_usd": 118.0935,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 3.1, "p95": 7.8, "mean": 3.6, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 3.1,
+          "p95": 7.8,
+          "mean": 3.6,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.071, "bins": []},
+        "reliability": {
+          "ece": 0.071,
+          "bins": []
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 0.98},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.93}
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 0.98
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.93
+          }
         ]
       },
       "screen": {
@@ -74,6 +316,34 @@
         "mean_confidence": 0.83,
         "share_above_90": 0.46,
         "selective_acc_50": 0.98
+      },
+      "cost": {
+        "model": "gpt-5.4-nano",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 336000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 335200,
+            "reasoning": 275200
+          }
+        },
+        "total_usd": 0.67,
+        "mean_usd_per_row": 0.0067,
+        "pricing_per_mtok": {
+          "input": 0.2,
+          "output": 1.25
+        }
       }
     },
     {
@@ -84,25 +354,132 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.93, "accuracy_ci95": [0.88, 0.98], "macro_f1": 0.92},
-        "subclass": {"accuracy": 0.76, "accuracy_ci95": [0.678, 0.842], "macro_f1": 0.71},
-        "rad": {"accuracy": 0.82, "accuracy_ci95": [0.75, 0.89], "macro_f1": 0.79}
+        "ai_native": {
+          "accuracy": 0.93,
+          "accuracy_ci95": [
+            0.88,
+            0.98
+          ],
+          "macro_f1": 0.92
+        },
+        "subclass": {
+          "accuracy": 0.76,
+          "accuracy_ci95": [
+            0.678,
+            0.842
+          ],
+          "macro_f1": 0.71
+        },
+        "rad": {
+          "accuracy": 0.82,
+          "accuracy_ci95": [
+            0.75,
+            0.89
+          ],
+          "macro_f1": 0.79
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 93, "accuracy": 0.80},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.79},
-        "boundary_disagreement": {"n": 100, "rate": 0.05}
+        "subclass_family_conditional": {
+          "n": 93,
+          "accuracy": 0.8
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.79
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.05
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 175}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.4-nano",
+          "architecture": "classification",
+          "batch_discount": 0.5,
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 558000,
+            "total_usd": 0.9475,
+            "mean_usd_per_row": 0.009475,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 0.8525,
+            "mean_usd_per_row": 0.008525,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_batch": {
+            "label": "batch_adjustment",
+            "available": true,
+            "batch_discount": 0.5,
+            "total_usd_after_batch": 0.42625,
+            "mean_usd_per_row": 0.0042625,
+            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
+          },
+          "4_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 175.08645,
+            "estimated_usd_per_company": 0.004262500000000001,
+            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 0.9475,
+          "golden_after_cache_usd": 0.8525,
+          "golden_after_batch_usd": 0.42625,
+          "estimated_production_usd": 175.08645,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 4.0, "p95": 9.6, "mean": 4.7, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 4.0,
+          "p95": 9.6,
+          "mean": 4.7,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.071, "bins": []},
+        "reliability": {
+          "ece": 0.071,
+          "bins": []
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 0.98},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.93}
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 0.98
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.93
+          }
         ]
       },
       "screen": {
@@ -111,6 +488,34 @@
         "mean_confidence": 0.83,
         "share_above_90": 0.46,
         "selective_acc_50": 0.98
+      },
+      "cost": {
+        "model": "gpt-5.4-nano",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 558000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 557200,
+            "reasoning": 497200
+          }
+        },
+        "total_usd": 0.9475,
+        "mean_usd_per_row": 0.009475,
+        "pricing_per_mtok": {
+          "input": 0.2,
+          "output": 1.25
+        }
       }
     },
     {
@@ -121,25 +526,132 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.96, "accuracy_ci95": [0.92, 1.0], "macro_f1": 0.95},
-        "subclass": {"accuracy": 0.78, "accuracy_ci95": [0.70, 0.86], "macro_f1": 0.74},
-        "rad": {"accuracy": 0.83, "accuracy_ci95": [0.76, 0.90], "macro_f1": 0.80}
+        "ai_native": {
+          "accuracy": 0.96,
+          "accuracy_ci95": [
+            0.92,
+            1.0
+          ],
+          "macro_f1": 0.95
+        },
+        "subclass": {
+          "accuracy": 0.78,
+          "accuracy_ci95": [
+            0.7,
+            0.86
+          ],
+          "macro_f1": 0.74
+        },
+        "rad": {
+          "accuracy": 0.83,
+          "accuracy_ci95": [
+            0.76,
+            0.9
+          ],
+          "macro_f1": 0.8
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 96, "accuracy": 0.81},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.79},
-        "boundary_disagreement": {"n": 100, "rate": 0.07}
+        "subclass_family_conditional": {
+          "n": 96,
+          "accuracy": 0.81
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.79
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.07
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 290}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.4-mini",
+          "architecture": "classification",
+          "batch_discount": 0.5,
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 184000,
+            "total_usd": 1.7654999999999998,
+            "mean_usd_per_row": 0.017654999999999997,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 1.40925,
+            "mean_usd_per_row": 0.014092499999999999,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_batch": {
+            "label": "batch_adjustment",
+            "available": true,
+            "batch_discount": 0.5,
+            "total_usd_after_batch": 0.704625,
+            "mean_usd_per_row": 0.0070462499999999996,
+            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
+          },
+          "4_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 289.431765,
+            "estimated_usd_per_company": 0.0070462499999999996,
+            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 1.7654999999999998,
+          "golden_after_cache_usd": 1.40925,
+          "golden_after_batch_usd": 0.704625,
+          "estimated_production_usd": 289.431765,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 3.8, "p95": 9.1, "mean": 4.4, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 3.8,
+          "p95": 9.1,
+          "mean": 4.4,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.038, "bins": []},
+        "reliability": {
+          "ece": 0.038,
+          "bins": []
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 0.99},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.96}
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 0.99
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.96
+          }
         ]
       },
       "screen": {
@@ -148,6 +660,34 @@
         "mean_confidence": 0.88,
         "share_above_90": 0.61,
         "selective_acc_50": 0.99
+      },
+      "cost": {
+        "model": "gpt-5.4-mini",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 184000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 183200,
+            "reasoning": 123200
+          }
+        },
+        "total_usd": 1.7655,
+        "mean_usd_per_row": 0.017655,
+        "pricing_per_mtok": {
+          "input": 0.75,
+          "output": 4.5
+        }
       }
     },
     {
@@ -158,25 +698,132 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.96, "accuracy_ci95": [0.92, 1.0], "macro_f1": 0.95},
-        "subclass": {"accuracy": 0.82, "accuracy_ci95": [0.745, 0.895], "macro_f1": 0.78},
-        "rad": {"accuracy": 0.85, "accuracy_ci95": [0.78, 0.92], "macro_f1": 0.82}
+        "ai_native": {
+          "accuracy": 0.96,
+          "accuracy_ci95": [
+            0.92,
+            1.0
+          ],
+          "macro_f1": 0.95
+        },
+        "subclass": {
+          "accuracy": 0.82,
+          "accuracy_ci95": [
+            0.745,
+            0.895
+          ],
+          "macro_f1": 0.78
+        },
+        "rad": {
+          "accuracy": 0.85,
+          "accuracy_ci95": [
+            0.78,
+            0.92
+          ],
+          "macro_f1": 0.82
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 96, "accuracy": 0.85},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.83},
-        "boundary_disagreement": {"n": 100, "rate": 0.05}
+        "subclass_family_conditional": {
+          "n": 96,
+          "accuracy": 0.85
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.83
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.05
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 412}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.4-mini",
+          "architecture": "classification",
+          "batch_discount": 0.5,
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 317000,
+            "total_usd": 2.364,
+            "mean_usd_per_row": 0.023639999999999998,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 2.00775,
+            "mean_usd_per_row": 0.0200775,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_batch": {
+            "label": "batch_adjustment",
+            "available": true,
+            "batch_discount": 0.5,
+            "total_usd_after_batch": 1.003875,
+            "mean_usd_per_row": 0.01003875,
+            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
+          },
+          "4_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 412.351695,
+            "estimated_usd_per_company": 0.01003875,
+            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 2.364,
+          "golden_after_cache_usd": 2.00775,
+          "golden_after_batch_usd": 1.003875,
+          "estimated_production_usd": 412.351695,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 4.6, "p95": 11.2, "mean": 5.5, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 4.6,
+          "p95": 11.2,
+          "mean": 5.5,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.038, "bins": []},
+        "reliability": {
+          "ece": 0.038,
+          "bins": []
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 0.99},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.96}
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 0.99
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.96
+          }
         ]
       },
       "screen": {
@@ -185,6 +832,34 @@
         "mean_confidence": 0.88,
         "share_above_90": 0.61,
         "selective_acc_50": 0.99
+      },
+      "cost": {
+        "model": "gpt-5.4-mini",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 317000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 316200,
+            "reasoning": 256200
+          }
+        },
+        "total_usd": 2.364,
+        "mean_usd_per_row": 0.02364,
+        "pricing_per_mtok": {
+          "input": 0.75,
+          "output": 4.5
+        }
       }
     },
     {
@@ -195,25 +870,132 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.96, "accuracy_ci95": [0.92, 1.0], "macro_f1": 0.95},
-        "subclass": {"accuracy": 0.84, "accuracy_ci95": [0.768, 0.912], "macro_f1": 0.80},
-        "rad": {"accuracy": 0.86, "accuracy_ci95": [0.79, 0.93], "macro_f1": 0.83}
+        "ai_native": {
+          "accuracy": 0.96,
+          "accuracy_ci95": [
+            0.92,
+            1.0
+          ],
+          "macro_f1": 0.95
+        },
+        "subclass": {
+          "accuracy": 0.84,
+          "accuracy_ci95": [
+            0.768,
+            0.912
+          ],
+          "macro_f1": 0.8
+        },
+        "rad": {
+          "accuracy": 0.86,
+          "accuracy_ci95": [
+            0.79,
+            0.93
+          ],
+          "macro_f1": 0.83
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 96, "accuracy": 0.87},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.85},
-        "boundary_disagreement": {"n": 100, "rate": 0.04}
+        "subclass_family_conditional": {
+          "n": 96,
+          "accuracy": 0.87
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.85
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.04
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 580}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.4-mini",
+          "architecture": "classification",
+          "batch_discount": 0.5,
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 498000,
+            "total_usd": 3.1785,
+            "mean_usd_per_row": 0.031785,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 2.82225,
+            "mean_usd_per_row": 0.028222499999999998,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_batch": {
+            "label": "batch_adjustment",
+            "available": true,
+            "batch_discount": 0.5,
+            "total_usd_after_batch": 1.411125,
+            "mean_usd_per_row": 0.014111249999999999,
+            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
+          },
+          "4_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 579.633705,
+            "estimated_usd_per_company": 0.014111249999999999,
+            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 3.1785,
+          "golden_after_cache_usd": 2.82225,
+          "golden_after_batch_usd": 1.411125,
+          "estimated_production_usd": 579.633705,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 5.8, "p95": 13.4, "mean": 6.9, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 5.8,
+          "p95": 13.4,
+          "mean": 6.9,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.038, "bins": []},
+        "reliability": {
+          "ece": 0.038,
+          "bins": []
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 0.99},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.96}
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 0.99
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.96
+          }
         ]
       },
       "screen": {
@@ -222,6 +1004,34 @@
         "mean_confidence": 0.88,
         "share_above_90": 0.61,
         "selective_acc_50": 0.99
+      },
+      "cost": {
+        "model": "gpt-5.4-mini",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 498000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 497200,
+            "reasoning": 437200
+          }
+        },
+        "total_usd": 3.1785,
+        "mean_usd_per_row": 0.031785,
+        "pricing_per_mtok": {
+          "input": 0.75,
+          "output": 4.5
+        }
       }
     },
     {
@@ -232,33 +1042,168 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.97, "accuracy_ci95": [0.94, 1.0], "macro_f1": 0.96},
-        "subclass": {"accuracy": 0.81, "accuracy_ci95": [0.734, 0.886], "macro_f1": 0.77},
-        "rad": {"accuracy": 0.84, "accuracy_ci95": [0.77, 0.91], "macro_f1": 0.81}
+        "ai_native": {
+          "accuracy": 0.97,
+          "accuracy_ci95": [
+            0.94,
+            1.0
+          ],
+          "macro_f1": 0.96
+        },
+        "subclass": {
+          "accuracy": 0.81,
+          "accuracy_ci95": [
+            0.734,
+            0.886
+          ],
+          "macro_f1": 0.77
+        },
+        "rad": {
+          "accuracy": 0.84,
+          "accuracy_ci95": [
+            0.77,
+            0.91
+          ],
+          "macro_f1": 0.81
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 97, "accuracy": 0.83},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.81},
-        "boundary_disagreement": {"n": 100, "rate": 0.06}
+        "subclass_family_conditional": {
+          "n": 97,
+          "accuracy": 0.83
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.81
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.06
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 980}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.6-luna",
+          "architecture": "classification",
+          "batch_discount": 0.5,
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 666000,
+            "total_usd": 5.246,
+            "mean_usd_per_row": 0.05246000000000001,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 4.771000000000001,
+            "mean_usd_per_row": 0.04771000000000001,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_batch": {
+            "label": "batch_adjustment",
+            "available": true,
+            "batch_discount": 0.5,
+            "total_usd_after_batch": 2.3855000000000004,
+            "mean_usd_per_row": 0.023855000000000005,
+            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
+          },
+          "4_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 979.8679800000001,
+            "estimated_usd_per_company": 0.023855,
+            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 5.246,
+          "golden_after_cache_usd": 4.771000000000001,
+          "golden_after_batch_usd": 2.3855000000000004,
+          "estimated_production_usd": 979.8679800000001,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 6.2, "p95": 14.8, "mean": 7.4, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 6.2,
+          "p95": 14.8,
+          "mean": 7.4,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.041, "bins": []},
+        "reliability": {
+          "ece": 0.041,
+          "bins": []
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 1.0},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.97}
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.97
+          }
         ]
       },
       "screen": {
         "id": "luna-low",
         "label": "luna / low",
-        "mean_confidence": 0.90,
-        "share_above_90": 0.70,
+        "mean_confidence": 0.9,
+        "share_above_90": 0.7,
         "selective_acc_50": 1.0
+      },
+      "cost": {
+        "model": "gpt-5.6-luna",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 666000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 665200,
+            "reasoning": 605200
+          }
+        },
+        "total_usd": 5.246,
+        "mean_usd_per_row": 0.05246,
+        "pricing_per_mtok": {
+          "input": 1.0,
+          "output": 6.0
+        }
       }
     },
     {
@@ -269,33 +1214,168 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.97, "accuracy_ci95": [0.94, 1.0], "macro_f1": 0.96},
-        "subclass": {"accuracy": 0.85, "accuracy_ci95": [0.78, 0.92], "macro_f1": 0.81},
-        "rad": {"accuracy": 0.87, "accuracy_ci95": [0.81, 0.93], "macro_f1": 0.84}
+        "ai_native": {
+          "accuracy": 0.97,
+          "accuracy_ci95": [
+            0.94,
+            1.0
+          ],
+          "macro_f1": 0.96
+        },
+        "subclass": {
+          "accuracy": 0.85,
+          "accuracy_ci95": [
+            0.78,
+            0.92
+          ],
+          "macro_f1": 0.81
+        },
+        "rad": {
+          "accuracy": 0.87,
+          "accuracy_ci95": [
+            0.81,
+            0.93
+          ],
+          "macro_f1": 0.84
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 97, "accuracy": 0.87},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.85},
-        "boundary_disagreement": {"n": 100, "rate": 0.04}
+        "subclass_family_conditional": {
+          "n": 97,
+          "accuracy": 0.87
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.85
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.04
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 1450}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.6-luna",
+          "architecture": "classification",
+          "batch_discount": 0.5,
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 1047000,
+            "total_usd": 7.532,
+            "mean_usd_per_row": 0.07532,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 7.057,
+            "mean_usd_per_row": 0.07057000000000001,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_batch": {
+            "label": "batch_adjustment",
+            "available": true,
+            "batch_discount": 0.5,
+            "total_usd_after_batch": 3.5285,
+            "mean_usd_per_row": 0.035285000000000004,
+            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
+          },
+          "4_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 1449.3666600000001,
+            "estimated_usd_per_company": 0.035285000000000004,
+            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 7.532,
+          "golden_after_cache_usd": 7.057,
+          "golden_after_batch_usd": 3.5285,
+          "estimated_production_usd": 1449.3666600000001,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 7.9, "p95": 18.2, "mean": 9.5, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 7.9,
+          "p95": 18.2,
+          "mean": 9.5,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.041, "bins": []},
+        "reliability": {
+          "ece": 0.041,
+          "bins": []
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 1.0},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.97}
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.97
+          }
         ]
       },
       "screen": {
         "id": "luna-med",
         "label": "luna / medium",
-        "mean_confidence": 0.90,
-        "share_above_90": 0.70,
+        "mean_confidence": 0.9,
+        "share_above_90": 0.7,
         "selective_acc_50": 1.0
+      },
+      "cost": {
+        "model": "gpt-5.6-luna",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 1047000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 1046200,
+            "reasoning": 986200
+          }
+        },
+        "total_usd": 7.532,
+        "mean_usd_per_row": 0.07532,
+        "pricing_per_mtok": {
+          "input": 1.0,
+          "output": 6.0
+        }
       }
     },
     {
@@ -306,33 +1386,168 @@
       "n_scored": 100,
       "n_expected": 100,
       "axes": {
-        "ai_native": {"accuracy": 0.97, "accuracy_ci95": [0.94, 1.0], "macro_f1": 0.96},
-        "subclass": {"accuracy": 0.86, "accuracy_ci95": [0.792, 0.928], "macro_f1": 0.82},
-        "rad": {"accuracy": 0.88, "accuracy_ci95": [0.82, 0.94], "macro_f1": 0.85}
+        "ai_native": {
+          "accuracy": 0.97,
+          "accuracy_ci95": [
+            0.94,
+            1.0
+          ],
+          "macro_f1": 0.96
+        },
+        "subclass": {
+          "accuracy": 0.86,
+          "accuracy_ci95": [
+            0.792,
+            0.928
+          ],
+          "macro_f1": 0.82
+        },
+        "rad": {
+          "accuracy": 0.88,
+          "accuracy_ci95": [
+            0.82,
+            0.94
+          ],
+          "macro_f1": 0.85
+        }
       },
       "pass_b_metrics": {
-        "subclass_family_conditional": {"n": 97, "accuracy": 0.88},
-        "rad_ai_native_only": {"n": 48, "accuracy": 0.86},
-        "boundary_disagreement": {"n": 100, "rate": 0.03}
+        "subclass_family_conditional": {
+          "n": 97,
+          "accuracy": 0.88
+        },
+        "rad_ai_native_only": {
+          "n": 48,
+          "accuracy": 0.86
+        },
+        "boundary_disagreement": {
+          "n": 100,
+          "rate": 0.03
+        }
       },
       "production_cost_estimate": {
         "available": true,
-        "steps": {"4_scale": {"available": true, "estimated_production_usd": 2100}}
+        "assumptions": {
+          "n_prod": 41076,
+          "n_prod_label": "alive_plus_dead",
+          "n_golden": 100,
+          "model": "gpt-5.6-luna",
+          "architecture": "classification",
+          "batch_discount": 0.5,
+          "cache_discount": 0.5,
+          "cache_source": "measured_from_run",
+          "reasoning_billed_inside_output": true,
+          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "do_not_use_historical_production_cache_rate": true
+        },
+        "steps": {
+          "1_golden_sync": {
+            "label": "golden_set_actual_sync_list",
+            "n_rows": 100,
+            "total_input_tokens": 1250000,
+            "total_output_tokens": 1575000,
+            "total_usd": 10.7,
+            "mean_usd_per_row": 0.107,
+            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+          },
+          "2_cache": {
+            "label": "cache_adjustment",
+            "available": true,
+            "total_cached_tokens": 950000,
+            "cache_hit_rate": 0.76,
+            "cache_discount": 0.5,
+            "total_usd_after_cache": 10.225,
+            "mean_usd_per_row": 0.10225,
+            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+          },
+          "3_batch": {
+            "label": "batch_adjustment",
+            "available": true,
+            "batch_discount": 0.5,
+            "total_usd_after_batch": 5.1125,
+            "mean_usd_per_row": 0.051125,
+            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
+          },
+          "4_scale": {
+            "label": "scale_to_production_n",
+            "available": true,
+            "n_prod": 41076,
+            "n_prod_label": "alive_plus_dead",
+            "scale_factor": 410.76,
+            "estimated_production_usd": 2100.0105,
+            "estimated_usd_per_company": 0.051125,
+            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+          }
+        },
+        "summary": {
+          "golden_sync_usd": 10.7,
+          "golden_after_cache_usd": 10.225,
+          "golden_after_batch_usd": 5.1125,
+          "estimated_production_usd": 2100.0105,
+          "cache_hit_rate": 0.76,
+          "n_prod": 41076
+        }
       },
-      "latency": {"latency_s": {"p50": 9.8, "p95": 22.5, "mean": 11.8, "n": 100}},
+      "latency": {
+        "latency_s": {
+          "p50": 9.8,
+          "p95": 22.5,
+          "mean": 11.8,
+          "n": 100
+        }
+      },
       "calibration": {
-        "reliability": {"ece": 0.041, "bins": []},
+        "reliability": {
+          "ece": 0.041,
+          "bins": []
+        },
         "selective_prediction": [
-          {"coverage": 0.5, "n": 50, "accuracy": 1.0},
-          {"coverage": 1.0, "n": 100, "accuracy": 0.97}
+          {
+            "coverage": 0.5,
+            "n": 50,
+            "accuracy": 1.0
+          },
+          {
+            "coverage": 1.0,
+            "n": 100,
+            "accuracy": 0.97
+          }
         ]
       },
       "screen": {
         "id": "luna-high",
         "label": "luna / high",
-        "mean_confidence": 0.90,
-        "share_above_90": 0.70,
+        "mean_confidence": 0.9,
+        "share_above_90": 0.7,
         "selective_acc_50": 1.0
+      },
+      "cost": {
+        "model": "gpt-5.6-luna",
+        "n_rows": 100,
+        "total_input_tokens": 1250000,
+        "total_output_tokens": 1575000,
+        "total_cached_tokens": 950000,
+        "cache_field_present": true,
+        "per_pass": {
+          "pass_a": {
+            "input": 400000,
+            "cached": 320000,
+            "output": 800,
+            "reasoning": 0
+          },
+          "pass_b": {
+            "input": 850000,
+            "cached": 630000,
+            "output": 1574200,
+            "reasoning": 1514200
+          }
+        },
+        "total_usd": 10.7,
+        "mean_usd_per_row": 0.107,
+        "pricing_per_mtok": {
+          "input": 1.0,
+          "output": 6.0
+        }
       }
     }
   ]

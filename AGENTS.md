@@ -175,7 +175,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 ### `evals/` — golden-set eval harness
 | Path | Purpose |
 |------|---------|
-| `dashboard_metrics.py` | Eval dashboard metrics: scored.json/fixture → chart metrics (ECE, selective@50, vs_baseline, Pass B isolating fields, finalist mean±range aggregates). No OpenAI import. |
+| `dashboard_metrics.py` | Eval dashboard metrics: scored.json/fixture → chart metrics (ECE, selective@50, vs_baseline, Pass B isolating fields, finalist mean±range aggregates, per-config `cost_breakdown` for the Total Cost popover). No OpenAI import. |
 | `tests/fixtures/dashboard/dashboard_mock_runs.json` | Synthetic locked matrix; Pass A metrics identical across efforts within each model (bank-once design) |
 | `config.py` | Locked matrix `EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`; `PASS_A_TOP_LOGPROBS=2` (binary); legacy `TOP_LOGPROBS` for old single-pass only |
 | `classification.py` | Pass A/B classification runner; Pass A auto-banks under `evals/runs/pass_a_banks/<model>/` (reuse by default; `--rerun-pass-a` / `--pass-a-from` escapes) |
@@ -190,7 +190,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `data visualization/02_Analysis_Code/*.py` | Scripts that build those dashboards |
 | `data visualization/02_Analysis_Code/survivorship_analysis.py` | Survivorship findings compute: survivor-vs-dead cohorts + 2 logistic models (pure metrics dict; PREVIEW from production if `survivorship_corrected.csv` absent) |
 | `data visualization/02_Analysis_Code/build_survivorship_insights_dashboard.py` | Renders `survivorship_insights.html` from that compute module (reuses house STYLE) |
-| `data visualization/02_Analysis_Code/build_eval_dashboard.py` | Eval viewer (LangSmith-inspired light UX): white spacious canvas, summary line + experiments table, Pareto / ECE+selective / reliability / vs_baseline / latency, search + model-group chips. Defaults to mock fixture; `--runs`/`--scored` for real runs. Writes `eval_dashboard.html`. |
+| `data visualization/02_Analysis_Code/build_eval_dashboard.py` | Eval viewer (LangSmith-inspired light UX): white spacious canvas, summary line + experiments table (Total Cost info icon opens a recomputable cost-ladder popover), Pareto / ECE+selective / reliability / vs_baseline / latency, search + model-group chips. Defaults to mock fixture; `--runs`/`--scored` for real runs. Writes `eval_dashboard.html`. |
 | `tests/` | pytest for the live pipeline (schema, formatter, tokens, enrichment, tavily runner) |
 | `wayback_machine/tests/` | pytest for wayback (golden cleaner, cohort, state, config, budget, probe) |
 | `keys/` | API key env files, e.g. `keys/openai.env` (`OPENAI_API_KEY`). Git-ignored + cursor-ignored. **Never commit.** |

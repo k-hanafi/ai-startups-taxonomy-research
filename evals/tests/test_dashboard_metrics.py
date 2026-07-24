@@ -64,7 +64,9 @@ def test_fixture_rows_carry_chart_fields():
     assert row["model_group"] == "mini"
     assert row["kind"] == "classification"
     assert 0.8 < row["subclass_acc"] < 0.9
-    assert row["projected_usd"] == 412
+    # Fixture ladders are generated with the real extrapolation formula, so
+    # the projected $ is the exact step-4 output (displays as $412).
+    assert row["projected_usd"] == pytest.approx(412.3517, abs=1e-3)
     assert row["latency_p50"] == 4.6
     assert row["share_above_90"] == 0.61
     assert row["ece"] == 0.038
@@ -92,6 +94,155 @@ def test_fixture_pass_a_metrics_identical_within_model():
         # Pass B axes may still differ across efforts.
         subclass = {r["subclass_acc"] for r in rows}
         assert len(subclass) >= 2, model
+
+
+def test_fixture_cost_breakdowns_recompute_to_displayed_total():
+    """Every fixture row's popover arithmetic must recompute by hand."""
+    metrics = load_fixture(MOCK)
+    for c in metrics["configs"]:
+        b = c["cost_breakdown"]
+        assert b is not None, c["id"]
+        assert b["available"] is True, c["id"]
+        p = b["pricing_per_mtok"]
+        assert p is not None, c["id"]
+
+        # Step 1: sync list on measured tokens.
+        sync = (
+            b["total_input_tokens"] / 1e6 * p["input"]
+            + b["total_output_tokens"] / 1e6 * p["output"]
+        )
+        assert sync == pytest.approx(b["golden_sync_usd"]), c["id"]
+
+        # Step 2: cache discount on the cached input portion.
+        uncached = b["total_input_tokens"] - b["total_cached_tokens"]
+        after_cache = (
+            uncached / 1e6 * p["input"]
+            + b["total_cached_tokens"] / 1e6 * p["input"] * b["cache_discount"]
+            + b["total_output_tokens"] / 1e6 * p["output"]
+        )
+        assert after_cache == pytest.approx(b["golden_after_cache_usd"]), c["id"]
+        assert b["cache_hit_rate"] == pytest.approx(
+            b["total_cached_tokens"] / b["total_input_tokens"]
+        ), c["id"]
+
+        # Step 3: batch discount, step 4: scale to production N.
+        after_batch = after_cache * b["batch_discount"]
+        assert after_batch == pytest.approx(b["golden_after_batch_usd"]), c["id"]
+        projected = after_batch * (b["n_prod"] / b["n_golden"])
+        assert projected == pytest.approx(b["estimated_production_usd"]), c["id"]
+        assert projected == pytest.approx(c["projected_usd"]), c["id"]
+
+        # Per-pass split sums to the run totals.
+        pp = b["per_pass"]
+        assert pp is not None, c["id"]
+        for kind, total_key in (
+            ("input", "total_input_tokens"),
+            ("cached", "total_cached_tokens"),
+            ("output", "total_output_tokens"),
+        ):
+            assert (
+                pp["pass_a"][kind] + pp["pass_b"][kind] == b[total_key]
+            ), (c["id"], kind)
+
+
+def test_fixture_pass_a_cost_tokens_identical_within_model():
+    """Bank-once Pass A: its token totals do not vary with Pass B effort."""
+    metrics = load_fixture(MOCK)
+    by_model: dict[str, list] = {}
+    for c in metrics["configs"]:
+        by_model.setdefault(c["model"], []).append(c)
+    for model, rows in by_model.items():
+        pass_a = {json.dumps(r["cost_breakdown"]["per_pass"]["pass_a"], sort_keys=True) for r in rows}
+        assert len(pass_a) == 1, model
+
+
+def test_cost_breakdown_none_without_recorded_cost_data():
+    """No cost / production_cost_estimate blocks → no popover payload."""
+    stub = {
+        "run_id": "2026-07-10_gpt-5.4-nano_low_r1",
+        "model": "gpt-5.4-nano",
+        "effort_b": "low",
+        "n_scored": 10,
+        "axes": {
+            "subclass": {"accuracy": 0.7, "accuracy_ci95": [0.6, 0.8], "macro_f1": 0.65},
+            "ai_native": {"accuracy": 0.9, "accuracy_ci95": [0.8, 1.0], "macro_f1": 0.9},
+            "rad": {"accuracy": 0.8, "accuracy_ci95": [0.7, 0.9], "macro_f1": 0.75},
+        },
+    }
+    assert config_row_from_scored(stub)["cost_breakdown"] is None
+
+
+def test_cost_breakdown_marks_unavailable_ladder_without_fabricating():
+    """Legacy runs (no cached_tokens) keep step 1 and null the blocked steps."""
+    stub = {
+        "run_id": "2026-07-06_gpt-5.4-nano_none_r1",
+        "model": "gpt-5.4-nano",
+        "effort": "none",
+        "kind": "single_pass",
+        "n_scored": 100,
+        "axes": {
+            "subclass": {"accuracy": 0.41, "accuracy_ci95": [0.3, 0.5], "macro_f1": 0.3},
+            "ai_native": {"accuracy": 0.8, "accuracy_ci95": [0.7, 0.9], "macro_f1": 0.8},
+            "rad": {"accuracy": 0.5, "accuracy_ci95": [0.4, 0.6], "macro_f1": 0.4},
+        },
+        "cost": {
+            "model": "gpt-5.4-nano",
+            "n_rows": 100,
+            "total_input_tokens": 1_000_000,
+            "total_output_tokens": 100_000,
+            "total_cached_tokens": None,
+            "cache_field_present": False,
+            "total_usd": 0.325,
+            "mean_usd_per_row": 0.00325,
+            "pricing_per_mtok": {"input": 0.20, "output": 1.25},
+        },
+        "production_cost_estimate": {
+            "available": False,
+            "reason": "cached_tokens_unavailable",
+            "assumptions": {
+                "n_prod": 41_076,
+                "n_prod_label": "alive_plus_dead",
+                "n_golden": 100,
+                "model": "gpt-5.4-nano",
+                "batch_discount": 0.5,
+                "cache_discount": 0.5,
+                "cache_source": "unavailable_legacy_run_missing_cached_tokens",
+            },
+            "steps": {
+                "1_golden_sync": {
+                    "n_rows": 100,
+                    "total_input_tokens": 1_000_000,
+                    "total_output_tokens": 100_000,
+                    "total_usd": 0.325,
+                },
+                "2_cache": {
+                    "available": False,
+                    "reason": "predictions records lack cached_tokens; re-run to measure.",
+                    "total_cached_tokens": None,
+                    "cache_hit_rate": None,
+                    "total_usd_after_cache": None,
+                },
+                "3_batch": {"available": False, "total_usd_after_batch": None},
+                "4_scale": {"available": False, "estimated_production_usd": None},
+            },
+            "golden_sync_usd": 0.325,
+        },
+    }
+    row = config_row_from_scored(stub)
+    b = row["cost_breakdown"]
+    assert b is not None
+    assert b["available"] is False
+    assert b["reason"] == "cached_tokens_unavailable"
+    assert b["golden_sync_usd"] == pytest.approx(0.325)
+    # Blocked steps stay None (rendered as "not recorded", never invented).
+    assert b["total_cached_tokens"] is None
+    assert b["cache_hit_rate"] is None
+    assert b["golden_after_cache_usd"] is None
+    assert b["golden_after_batch_usd"] is None
+    assert b["estimated_production_usd"] is None
+    assert b["per_pass"] is None
+    assert "cached_tokens" in b["cache_step_reason"]
+    assert row["projected_usd"] is None
 
 
 def test_config_row_prefers_scored_metadata_over_run_id_parse():
@@ -195,6 +346,8 @@ def test_duplicate_model_effort_keeps_distinct_filter_ids():
     assert agg["n_repeats"] == 3
     assert agg["subclass_acc"] == pytest.approx(0.85)
     assert agg["subclass_acc_range"] == [0.85, 0.85]
+    # Mean-of-repeats rows have no single measured ladder → no popover.
+    assert agg["cost_breakdown"] is None
     # Group pill lists repeats + aggregate.
     assert len(metrics["model_groups"]["mini"]["ids"]) == 4
 
@@ -367,6 +520,35 @@ def test_build_html_surfaces_partial_and_unknown_effort():
     assert "sampleCaption" in html
     assert "effort unknown" in html
     assert "partial screen" in html
+
+
+def test_build_html_includes_cost_breakdown_popover():
+    """Generator must ship the cost-info icon + popover machinery."""
+    _, mod = _load_eval_dashboard_builder()
+    html = mod.build_html(load_fixture(MOCK))
+    assert "cost-info" in html
+    assert "cost-popover" in html
+    assert "costBreakdownHtml" in html
+    assert "data-cost-info" in html
+    assert "not recorded" in html
+    # Breakdown payloads ride along in the embedded metrics JSON.
+    assert '"cost_breakdown"' in html
+    assert '"golden_after_batch_usd"' in html
+
+
+def test_committed_html_includes_cost_breakdown_popover():
+    """Checked-in eval_dashboard.html must carry the popover machinery."""
+    from evals.paths import PROJECT_ROOT
+
+    html = (
+        PROJECT_ROOT
+        / "data visualization"
+        / "01_Presentation_Materials"
+        / "eval_dashboard.html"
+    ).read_text(encoding="utf-8")
+    assert "cost-info" in html
+    assert "cost-popover" in html
+    assert '"cost_breakdown"' in html
 
 
 def test_resolve_metrics_defaults_to_fixture_not_discovered_runs():

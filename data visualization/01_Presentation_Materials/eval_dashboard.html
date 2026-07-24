@@ -341,6 +341,78 @@ table.ls td.mono { font-family: var(--mono); font-size: 12px; color: var(--text2
   color: var(--rose-text);
 }
 
+/* Cost-breakdown popover (info icon beside each Total Cost value) */
+.cost-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cost-info {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--muted);
+  line-height: 0;
+}
+.cost-info:hover, .cost-info.open { color: var(--accent); }
+.cost-info svg { width: 13px; height: 13px; }
+.cost-popover {
+  position: absolute;
+  z-index: 40;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.10);
+  padding: 14px 16px 12px;
+  font-size: 12px;
+  color: var(--text2);
+  text-align: left;
+}
+.cost-popover h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.cost-popover .pop-sub { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+.cost-popover .pop-section {
+  margin: 8px 0 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cost-popover table { width: 100%; border-collapse: collapse; }
+.cost-popover td {
+  padding: 3px 0;
+  vertical-align: top;
+  border: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+}
+.cost-popover td.val {
+  color: var(--text);
+  text-align: right;
+  white-space: nowrap;
+  padding-left: 10px;
+}
+.cost-popover tr.total td { font-weight: 600; color: var(--text); }
+.cost-popover .pop-note {
+  margin-top: 8px;
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.cost-popover .nr { color: var(--muted); font-style: italic; }
+
 .partial-badge {
   display: inline-flex;
   align-items: center;
@@ -489,7 +561,7 @@ footer {
   </section>
 
   <footer>
-    Generated 2026-07-22 · regenerate with
+    Generated 2026-07-23 · regenerate with
     <code>python "data visualization/02_Analysis_Code/build_eval_dashboard.py"</code>
     or <code>python -m evals dashboard</code> (mock fixture by default).
     Config filter is required for multi-run charts.
@@ -497,9 +569,10 @@ footer {
 </div>
 <script>
 
-const M = {"synthetic": true, "source": "evals/tests/fixtures/dashboard/dashboard_mock_runs.json", "n_configs": 9, "configs": [{"id": "mock_gpt-5.4-nano_low_r1", "label": "nano / low", "run_id": "mock_gpt-5.4-nano_low_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "low", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.68, "subclass_ci": 0.09200000000000003, "subclass_family_conditional_acc": 0.72, "rad_ai_native_only_acc": 0.71, "boundary_disagreement_rate": 0.08, "ai_native_acc": 0.93, "rad_acc": 0.76, "macro_f1": 0.62, "projected_usd": 95.0, "mean_confidence": 0.83, "share_above_90": 0.46, "ece": 0.071, "reliability_bins": [], "selective_acc_50": 0.98, "vs_baseline": null, "latency_p50": 2.4, "latency_p95": 5.9, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-nano_medium_r1", "label": "nano / medium", "run_id": "mock_gpt-5.4-nano_medium_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "medium", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.74, "subclass_ci": 0.08499999999999996, "subclass_family_conditional_acc": 0.78, "rad_ai_native_only_acc": 0.77, "boundary_disagreement_rate": 0.06, "ai_native_acc": 0.93, "rad_acc": 0.81, "macro_f1": 0.69, "projected_usd": 118.0, "mean_confidence": 0.83, "share_above_90": 0.46, "ece": 0.071, "reliability_bins": [], "selective_acc_50": 0.98, "vs_baseline": null, "latency_p50": 3.1, "latency_p95": 7.8, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-nano_high_r1", "label": "nano / high", "run_id": "mock_gpt-5.4-nano_high_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "high", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.76, "subclass_ci": 0.08199999999999996, "subclass_family_conditional_acc": 0.8, "rad_ai_native_only_acc": 0.79, "boundary_disagreement_rate": 0.05, "ai_native_acc": 0.93, "rad_acc": 0.82, "macro_f1": 0.71, "projected_usd": 175.0, "mean_confidence": 0.83, "share_above_90": 0.46, "ece": 0.071, "reliability_bins": [], "selective_acc_50": 0.98, "vs_baseline": null, "latency_p50": 4.0, "latency_p95": 9.6, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-mini_low_r1", "label": "mini / low", "run_id": "mock_gpt-5.4-mini_low_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "low", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.78, "subclass_ci": 0.08000000000000002, "subclass_family_conditional_acc": 0.81, "rad_ai_native_only_acc": 0.79, "boundary_disagreement_rate": 0.07, "ai_native_acc": 0.96, "rad_acc": 0.83, "macro_f1": 0.74, "projected_usd": 290.0, "mean_confidence": 0.88, "share_above_90": 0.61, "ece": 0.038, "reliability_bins": [], "selective_acc_50": 0.99, "vs_baseline": null, "latency_p50": 3.8, "latency_p95": 9.1, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-mini_medium_r1", "label": "mini / medium", "run_id": "mock_gpt-5.4-mini_medium_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "medium", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.82, "subclass_ci": 0.07500000000000001, "subclass_family_conditional_acc": 0.85, "rad_ai_native_only_acc": 0.83, "boundary_disagreement_rate": 0.05, "ai_native_acc": 0.96, "rad_acc": 0.85, "macro_f1": 0.78, "projected_usd": 412.0, "mean_confidence": 0.88, "share_above_90": 0.61, "ece": 0.038, "reliability_bins": [], "selective_acc_50": 0.99, "vs_baseline": null, "latency_p50": 4.6, "latency_p95": 11.2, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-mini_high_r1", "label": "mini / high", "run_id": "mock_gpt-5.4-mini_high_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "high", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.84, "subclass_ci": 0.07200000000000001, "subclass_family_conditional_acc": 0.87, "rad_ai_native_only_acc": 0.85, "boundary_disagreement_rate": 0.04, "ai_native_acc": 0.96, "rad_acc": 0.86, "macro_f1": 0.8, "projected_usd": 580.0, "mean_confidence": 0.88, "share_above_90": 0.61, "ece": 0.038, "reliability_bins": [], "selective_acc_50": 0.99, "vs_baseline": null, "latency_p50": 5.8, "latency_p95": 13.4, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.6-luna_low_r1", "label": "luna / low", "run_id": "mock_gpt-5.6-luna_low_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "low", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.81, "subclass_ci": 0.07600000000000001, "subclass_family_conditional_acc": 0.83, "rad_ai_native_only_acc": 0.81, "boundary_disagreement_rate": 0.06, "ai_native_acc": 0.97, "rad_acc": 0.84, "macro_f1": 0.77, "projected_usd": 980.0, "mean_confidence": 0.9, "share_above_90": 0.7, "ece": 0.041, "reliability_bins": [], "selective_acc_50": 1.0, "vs_baseline": null, "latency_p50": 6.2, "latency_p95": 14.8, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.6-luna_medium_r1", "label": "luna / medium", "run_id": "mock_gpt-5.6-luna_medium_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "medium", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.85, "subclass_ci": 0.07, "subclass_family_conditional_acc": 0.87, "rad_ai_native_only_acc": 0.85, "boundary_disagreement_rate": 0.04, "ai_native_acc": 0.97, "rad_acc": 0.87, "macro_f1": 0.81, "projected_usd": 1450.0, "mean_confidence": 0.9, "share_above_90": 0.7, "ece": 0.041, "reliability_bins": [], "selective_acc_50": 1.0, "vs_baseline": null, "latency_p50": 7.9, "latency_p95": 18.2, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.6-luna_high_r1", "label": "luna / high", "run_id": "mock_gpt-5.6-luna_high_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "high", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.86, "subclass_ci": 0.068, "subclass_family_conditional_acc": 0.88, "rad_ai_native_only_acc": 0.86, "boundary_disagreement_rate": 0.03, "ai_native_acc": 0.97, "rad_acc": 0.88, "macro_f1": 0.82, "projected_usd": 2100.0, "mean_confidence": 0.9, "share_above_90": 0.7, "ece": 0.041, "reliability_bins": [], "selective_acc_50": 1.0, "vs_baseline": null, "latency_p50": 9.8, "latency_p95": 22.5, "repeat": 1, "is_aggregate": false}], "config_ids": ["mock_gpt-5.4-nano_low_r1", "mock_gpt-5.4-nano_medium_r1", "mock_gpt-5.4-nano_high_r1", "mock_gpt-5.4-mini_low_r1", "mock_gpt-5.4-mini_medium_r1", "mock_gpt-5.4-mini_high_r1", "mock_gpt-5.6-luna_low_r1", "mock_gpt-5.6-luna_medium_r1", "mock_gpt-5.6-luna_high_r1"], "model_groups": {"nano": {"label": "nano", "ids": ["mock_gpt-5.4-nano_low_r1", "mock_gpt-5.4-nano_medium_r1", "mock_gpt-5.4-nano_high_r1"]}, "mini": {"label": "mini", "ids": ["mock_gpt-5.4-mini_low_r1", "mock_gpt-5.4-mini_medium_r1", "mock_gpt-5.4-mini_high_r1"]}, "luna": {"label": "luna", "ids": ["mock_gpt-5.6-luna_low_r1", "mock_gpt-5.6-luna_medium_r1", "mock_gpt-5.6-luna_high_r1"]}}, "model_group_order": ["nano", "mini", "luna"]};
+const M = {"synthetic": true, "source": "evals/tests/fixtures/dashboard/dashboard_mock_runs.json", "n_configs": 9, "configs": [{"id": "mock_gpt-5.4-nano_low_r1", "label": "nano / low", "run_id": "mock_gpt-5.4-nano_low_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "low", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.68, "subclass_ci": 0.09200000000000003, "subclass_family_conditional_acc": 0.72, "rad_ai_native_only_acc": 0.71, "boundary_disagreement_rate": 0.08, "ai_native_acc": 0.93, "rad_acc": 0.76, "macro_f1": 0.62, "projected_usd": 94.98825000000001, "cost_breakdown": {"available": true, "reason": null, "model": "gpt-5.4-nano", "pricing_per_mtok": {"input": 0.2, "output": 1.25}, "n_golden": 100, "n_prod": 41076, "n_prod_label": "alive_plus_dead", "batch_discount": 0.5, "cache_discount": 0.5, "cache_source": "measured_from_run", "total_input_tokens": 1250000, "total_output_tokens": 246000, "total_cached_tokens": 950000, "per_pass": {"pass_a": {"input": 400000, "cached": 320000, "output": 800, "reasoning": 0}, "pass_b": {"input": 850000, "cached": 630000, "output": 245200, "reasoning": 185200}}, "golden_sync_usd": 0.5575, "cache_hit_rate": 0.76, "golden_after_cache_usd": 0.4625, "golden_after_batch_usd": 0.23125, "scale_factor": 410.76, "estimated_production_usd": 94.98825000000001, "estimated_usd_per_company": 0.0023125000000000003, "cache_step_reason": null}, "mean_confidence": 0.83, "share_above_90": 0.46, "ece": 0.071, "reliability_bins": [], "selective_acc_50": 0.98, "vs_baseline": null, "latency_p50": 2.4, "latency_p95": 5.9, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-nano_medium_r1", "label": "nano / medium", "run_id": "mock_gpt-5.4-nano_medium_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "medium", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.74, "subclass_ci": 0.08499999999999996, "subclass_family_conditional_acc": 0.78, "rad_ai_native_only_acc": 0.77, "boundary_disagreement_rate": 0.06, "ai_native_acc": 0.93, "rad_acc": 0.81, "macro_f1": 0.69, "projected_usd": 118.0935, "cost_breakdown": {"available": true, "reason": null, "model": "gpt-5.4-nano", "pricing_per_mtok": {"input": 0.2, "output": 1.25}, "n_golden": 100, "n_prod": 41076, "n_prod_label": "alive_plus_dead", "batch_discount": 0.5, "cache_discount": 0.5, "cache_source": "measured_from_run", "total_input_tokens": 1250000, "total_output_tokens": 336000, "total_cached_tokens": 950000, "per_pass": {"pass_a": {"input": 400000, "cached": 320000, "output": 800, "reasoning": 0}, "pass_b": {"input": 850000, "cached": 630000, "output": 335200, "reasoning": 275200}}, "golden_sync_usd": 0.67, "cache_hit_rate": 0.76, "golden_after_cache_usd": 0.5750000000000001, "golden_after_batch_usd": 0.28750000000000003, "scale_factor": 410.76, "estimated_production_usd": 118.0935, "estimated_usd_per_company": 0.002875, "cache_step_reason": null}, "mean_confidence": 0.83, "share_above_90": 0.46, "ece": 0.071, "reliability_bins": [], "selective_acc_50": 0.98, "vs_baseline": null, "latency_p50": 3.1, "latency_p95": 7.8, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-nano_high_r1", "label": "nano / high", "run_id": "mock_gpt-5.4-nano_high_r1", "model": "gpt-5.4-nano", "model_group": "nano", "effort_b": "high", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.76, "subclass_ci": 0.08199999999999996, "subclass_family_conditional_acc": 0.8, "rad_ai_native_only_acc": 0.79, "boundary_disagreement_rate": 0.05, "ai_native_acc": 0.93, "rad_acc": 0.82, "macro_f1": 0.71, "projected_usd": 175.08645, "cost_breakdown": {"available": true, "reason": null, "model": "gpt-5.4-nano", "pricing_per_mtok": {"input": 0.2, "output": 1.25}, "n_golden": 100, "n_prod": 41076, "n_prod_label": "alive_plus_dead", "batch_discount": 0.5, "cache_discount": 0.5, "cache_source": "measured_from_run", "total_input_tokens": 1250000, "total_output_tokens": 558000, "total_cached_tokens": 950000, "per_pass": {"pass_a": {"input": 400000, "cached": 320000, "output": 800, "reasoning": 0}, "pass_b": {"input": 850000, "cached": 630000, "output": 557200, "reasoning": 497200}}, "golden_sync_usd": 0.9475, "cache_hit_rate": 0.76, "golden_after_cache_usd": 0.8525, "golden_after_batch_usd": 0.42625, "scale_factor": 410.76, "estimated_production_usd": 175.08645, "estimated_usd_per_company": 0.004262500000000001, "cache_step_reason": null}, "mean_confidence": 0.83, "share_above_90": 0.46, "ece": 0.071, "reliability_bins": [], "selective_acc_50": 0.98, "vs_baseline": null, "latency_p50": 4.0, "latency_p95": 9.6, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-mini_low_r1", "label": "mini / low", "run_id": "mock_gpt-5.4-mini_low_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "low", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.78, "subclass_ci": 0.08000000000000002, "subclass_family_conditional_acc": 0.81, "rad_ai_native_only_acc": 0.79, "boundary_disagreement_rate": 0.07, "ai_native_acc": 0.96, "rad_acc": 0.83, "macro_f1": 0.74, "projected_usd": 289.431765, "cost_breakdown": {"available": true, "reason": null, "model": "gpt-5.4-mini", "pricing_per_mtok": {"input": 0.75, "output": 4.5}, "n_golden": 100, "n_prod": 41076, "n_prod_label": "alive_plus_dead", "batch_discount": 0.5, "cache_discount": 0.5, "cache_source": "measured_from_run", "total_input_tokens": 1250000, "total_output_tokens": 184000, "total_cached_tokens": 950000, "per_pass": {"pass_a": {"input": 400000, "cached": 320000, "output": 800, "reasoning": 0}, "pass_b": {"input": 850000, "cached": 630000, "output": 183200, "reasoning": 123200}}, "golden_sync_usd": 1.7654999999999998, "cache_hit_rate": 0.76, "golden_after_cache_usd": 1.40925, "golden_after_batch_usd": 0.704625, "scale_factor": 410.76, "estimated_production_usd": 289.431765, "estimated_usd_per_company": 0.0070462499999999996, "cache_step_reason": null}, "mean_confidence": 0.88, "share_above_90": 0.61, "ece": 0.038, "reliability_bins": [], "selective_acc_50": 0.99, "vs_baseline": null, "latency_p50": 3.8, "latency_p95": 9.1, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-mini_medium_r1", "label": "mini / medium", "run_id": "mock_gpt-5.4-mini_medium_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "medium", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.82, "subclass_ci": 0.07500000000000001, "subclass_family_conditional_acc": 0.85, "rad_ai_native_only_acc": 0.83, "boundary_disagreement_rate": 0.05, "ai_native_acc": 0.96, "rad_acc": 0.85, "macro_f1": 0.78, "projected_usd": 412.351695, "cost_breakdown": {"available": true, "reason": null, "model": "gpt-5.4-mini", "pricing_per_mtok": {"input": 0.75, "output": 4.5}, "n_golden": 100, "n_prod": 41076, "n_prod_label": "alive_plus_dead", "batch_discount": 0.5, "cache_discount": 0.5, "cache_source": "measured_from_run", "total_input_tokens": 1250000, "total_output_tokens": 317000, "total_cached_tokens": 950000, "per_pass": {"pass_a": {"input": 400000, "cached": 320000, "output": 800, "reasoning": 0}, "pass_b": {"input": 850000, "cached": 630000, "output": 316200, "reasoning": 256200}}, "golden_sync_usd": 2.364, "cache_hit_rate": 0.76, "golden_after_cache_usd": 2.00775, "golden_after_batch_usd": 1.003875, "scale_factor": 410.76, "estimated_production_usd": 412.351695, "estimated_usd_per_company": 0.01003875, "cache_step_reason": null}, "mean_confidence": 0.88, "share_above_90": 0.61, "ece": 0.038, "reliability_bins": [], "selective_acc_50": 0.99, "vs_baseline": null, "latency_p50": 4.6, "latency_p95": 11.2, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.4-mini_high_r1", "label": "mini / high", "run_id": "mock_gpt-5.4-mini_high_r1", "model": "gpt-5.4-mini", "model_group": "mini", "effort_b": "high", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.84, "subclass_ci": 0.07200000000000001, "subclass_family_conditional_acc": 0.87, "rad_ai_native_only_acc": 0.85, "boundary_disagreement_rate": 0.04, "ai_native_acc": 0.96, "rad_acc": 0.86, "macro_f1": 0.8, "projected_usd": 579.633705, "cost_breakdown": {"available": true, "reason": null, "model": "gpt-5.4-mini", "pricing_per_mtok": {"input": 0.75, "output": 4.5}, "n_golden": 100, "n_prod": 41076, "n_prod_label": "alive_plus_dead", "batch_discount": 0.5, "cache_discount": 0.5, "cache_source": "measured_from_run", "total_input_tokens": 1250000, "total_output_tokens": 498000, "total_cached_tokens": 950000, "per_pass": {"pass_a": {"input": 400000, "cached": 320000, "output": 800, "reasoning": 0}, "pass_b": {"input": 850000, "cached": 630000, "output": 497200, "reasoning": 437200}}, "golden_sync_usd": 3.1785, "cache_hit_rate": 0.76, "golden_after_cache_usd": 2.82225, "golden_after_batch_usd": 1.411125, "scale_factor": 410.76, "estimated_production_usd": 579.633705, "estimated_usd_per_company": 0.014111249999999999, "cache_step_reason": null}, "mean_confidence": 0.88, "share_above_90": 0.61, "ece": 0.038, "reliability_bins": [], "selective_acc_50": 0.99, "vs_baseline": null, "latency_p50": 5.8, "latency_p95": 13.4, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.6-luna_low_r1", "label": "luna / low", "run_id": "mock_gpt-5.6-luna_low_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "low", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.81, "subclass_ci": 0.07600000000000001, "subclass_family_conditional_acc": 0.83, "rad_ai_native_only_acc": 0.81, "boundary_disagreement_rate": 0.06, "ai_native_acc": 0.97, "rad_acc": 0.84, "macro_f1": 0.77, "projected_usd": 979.8679800000001, "cost_breakdown": {"available": true, "reason": null, "model": "gpt-5.6-luna", "pricing_per_mtok": {"input": 1.0, "output": 6.0}, "n_golden": 100, "n_prod": 41076, "n_prod_label": "alive_plus_dead", "batch_discount": 0.5, "cache_discount": 0.5, "cache_source": "measured_from_run", "total_input_tokens": 1250000, "total_output_tokens": 666000, "total_cached_tokens": 950000, "per_pass": {"pass_a": {"input": 400000, "cached": 320000, "output": 800, "reasoning": 0}, "pass_b": {"input": 850000, "cached": 630000, "output": 665200, "reasoning": 605200}}, "golden_sync_usd": 5.246, "cache_hit_rate": 0.76, "golden_after_cache_usd": 4.771000000000001, "golden_after_batch_usd": 2.3855000000000004, "scale_factor": 410.76, "estimated_production_usd": 979.8679800000001, "estimated_usd_per_company": 0.023855, "cache_step_reason": null}, "mean_confidence": 0.9, "share_above_90": 0.7, "ece": 0.041, "reliability_bins": [], "selective_acc_50": 1.0, "vs_baseline": null, "latency_p50": 6.2, "latency_p95": 14.8, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.6-luna_medium_r1", "label": "luna / medium", "run_id": "mock_gpt-5.6-luna_medium_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "medium", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.85, "subclass_ci": 0.07, "subclass_family_conditional_acc": 0.87, "rad_ai_native_only_acc": 0.85, "boundary_disagreement_rate": 0.04, "ai_native_acc": 0.97, "rad_acc": 0.87, "macro_f1": 0.81, "projected_usd": 1449.3666600000001, "cost_breakdown": {"available": true, "reason": null, "model": "gpt-5.6-luna", "pricing_per_mtok": {"input": 1.0, "output": 6.0}, "n_golden": 100, "n_prod": 41076, "n_prod_label": "alive_plus_dead", "batch_discount": 0.5, "cache_discount": 0.5, "cache_source": "measured_from_run", "total_input_tokens": 1250000, "total_output_tokens": 1047000, "total_cached_tokens": 950000, "per_pass": {"pass_a": {"input": 400000, "cached": 320000, "output": 800, "reasoning": 0}, "pass_b": {"input": 850000, "cached": 630000, "output": 1046200, "reasoning": 986200}}, "golden_sync_usd": 7.532, "cache_hit_rate": 0.76, "golden_after_cache_usd": 7.057, "golden_after_batch_usd": 3.5285, "scale_factor": 410.76, "estimated_production_usd": 1449.3666600000001, "estimated_usd_per_company": 0.035285000000000004, "cache_step_reason": null}, "mean_confidence": 0.9, "share_above_90": 0.7, "ece": 0.041, "reliability_bins": [], "selective_acc_50": 1.0, "vs_baseline": null, "latency_p50": 7.9, "latency_p95": 18.2, "repeat": 1, "is_aggregate": false}, {"id": "mock_gpt-5.6-luna_high_r1", "label": "luna / high", "run_id": "mock_gpt-5.6-luna_high_r1", "model": "gpt-5.6-luna", "model_group": "luna", "effort_b": "high", "kind": "classification", "n_scored": 100, "n_expected": 100, "is_partial": false, "subclass_acc": 0.86, "subclass_ci": 0.068, "subclass_family_conditional_acc": 0.88, "rad_ai_native_only_acc": 0.86, "boundary_disagreement_rate": 0.03, "ai_native_acc": 0.97, "rad_acc": 0.88, "macro_f1": 0.82, "projected_usd": 2100.0105, "cost_breakdown": {"available": true, "reason": null, "model": "gpt-5.6-luna", "pricing_per_mtok": {"input": 1.0, "output": 6.0}, "n_golden": 100, "n_prod": 41076, "n_prod_label": "alive_plus_dead", "batch_discount": 0.5, "cache_discount": 0.5, "cache_source": "measured_from_run", "total_input_tokens": 1250000, "total_output_tokens": 1575000, "total_cached_tokens": 950000, "per_pass": {"pass_a": {"input": 400000, "cached": 320000, "output": 800, "reasoning": 0}, "pass_b": {"input": 850000, "cached": 630000, "output": 1574200, "reasoning": 1514200}}, "golden_sync_usd": 10.7, "cache_hit_rate": 0.76, "golden_after_cache_usd": 10.225, "golden_after_batch_usd": 5.1125, "scale_factor": 410.76, "estimated_production_usd": 2100.0105, "estimated_usd_per_company": 0.051125, "cache_step_reason": null}, "mean_confidence": 0.9, "share_above_90": 0.7, "ece": 0.041, "reliability_bins": [], "selective_acc_50": 1.0, "vs_baseline": null, "latency_p50": 9.8, "latency_p95": 22.5, "repeat": 1, "is_aggregate": false}], "config_ids": ["mock_gpt-5.4-nano_low_r1", "mock_gpt-5.4-nano_medium_r1", "mock_gpt-5.4-nano_high_r1", "mock_gpt-5.4-mini_low_r1", "mock_gpt-5.4-mini_medium_r1", "mock_gpt-5.4-mini_high_r1", "mock_gpt-5.6-luna_low_r1", "mock_gpt-5.6-luna_medium_r1", "mock_gpt-5.6-luna_high_r1"], "model_groups": {"nano": {"label": "nano", "ids": ["mock_gpt-5.4-nano_low_r1", "mock_gpt-5.4-nano_medium_r1", "mock_gpt-5.4-nano_high_r1"]}, "mini": {"label": "mini", "ids": ["mock_gpt-5.4-mini_low_r1", "mock_gpt-5.4-mini_medium_r1", "mock_gpt-5.4-mini_high_r1"]}, "luna": {"label": "luna", "ids": ["mock_gpt-5.6-luna_low_r1", "mock_gpt-5.6-luna_medium_r1", "mock_gpt-5.6-luna_high_r1"]}}, "model_group_order": ["nano", "mini", "luna"]};
 const COLORS = {"nano": "#3b82f6", "mini": "#14b8a6", "luna": "#f59e0b"};
 const CLOCK_SVG = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.2l2 1.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const INFO_SVG = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="5.1" r="0.9" fill="currentColor"/><path d="M8 7.4v3.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
 
 const cfg = {displayModeBar: false, responsive: true};
 const axisFont = {family: 'Plus Jakarta Sans, Segoe UI, sans-serif', size: 11, color: '#94a3b8'};
@@ -533,6 +606,128 @@ function money(x) {
 function sec(x) {
   if (x === null || x === undefined) return 'n/a';
   return Number(x).toFixed(2) + 's';
+}
+
+// --- Cost breakdown popover ------------------------------------------------
+// Renders only recorded fields; anything missing shows "not recorded".
+const NOT_RECORDED = '<span class="nr">not recorded</span>';
+
+function tok(x) {
+  if (x === null || x === undefined) return NOT_RECORDED;
+  return Number(x).toLocaleString();
+}
+
+function usd(x, digits) {
+  if (x === null || x === undefined) return NOT_RECORDED;
+  return '$' + Number(x).toLocaleString(undefined, {
+    minimumFractionDigits: digits, maximumFractionDigits: digits,
+  });
+}
+
+function rate(x) {
+  if (x === null || x === undefined) return NOT_RECORDED;
+  return (100 * x).toFixed(1) + '%';
+}
+
+function passRow(label, p) {
+  return '<tr><td>' + label + ' in ' + tok(p.input) + ' (cached ' + tok(p.cached) + ')</td>' +
+    '<td class="val">out ' + tok(p.output) + ' (reason ' + tok(p.reasoning) + ')</td></tr>';
+}
+
+function costBreakdownHtml(c) {
+  const b = c.cost_breakdown;
+  const p = b.pricing_per_mtok || null;
+  const priceLine = p
+    ? 'input $' + p.input + ' / output $' + p.output + ' per 1M tokens'
+    : 'per-1M prices not recorded';
+  let html = '<h4>' + c.label + ' &middot; cost breakdown</h4>' +
+    '<div class="pop-sub">' + (b.model || 'model not recorded') + ' &middot; ' + priceLine + '</div>';
+
+  html += '<div class="pop-section">Measured tokens (' +
+    (b.n_golden != null ? b.n_golden + '-row golden run' : 'golden run, n not recorded') + ')</div>';
+  html += '<table>';
+  if (b.per_pass && b.per_pass.pass_a && b.per_pass.pass_b) {
+    html += passRow('Pass A', b.per_pass.pass_a);
+    html += passRow('Pass B', b.per_pass.pass_b);
+  } else {
+    html += '<tr><td colspan="2">per-pass split ' + NOT_RECORDED + '</td></tr>';
+  }
+  const hitBit = b.cache_hit_rate != null ? ' = ' + rate(b.cache_hit_rate) + ' hit' : '';
+  html += '<tr><td>Total in ' + tok(b.total_input_tokens) +
+    ' (cached ' + tok(b.total_cached_tokens) + hitBit + ')</td>' +
+    '<td class="val">out ' + tok(b.total_output_tokens) + '</td></tr>';
+  html += '</table>';
+
+  html += '<div class="pop-section">Cost ladder</div><table>';
+  const canSync = p && b.total_input_tokens != null && b.total_output_tokens != null;
+  html += '<tr><td>1 &middot; Sync list: ' + (canSync
+    ? tok(b.total_input_tokens) + ' &times; $' + p.input + '/1M + ' +
+      tok(b.total_output_tokens) + ' &times; $' + p.output + '/1M'
+    : 'tokens or prices not recorded') +
+    '</td><td class="val">' + usd(b.golden_sync_usd, 4) + '</td></tr>';
+
+  if (b.golden_after_cache_usd != null && p && b.total_cached_tokens != null && b.cache_discount != null) {
+    const uncached = b.total_input_tokens - b.total_cached_tokens;
+    const cachedPrice = p.input * b.cache_discount;
+    html += '<tr><td>2 &middot; Cache: ' + tok(uncached) + ' &times; $' + p.input + '/1M + ' +
+      tok(b.total_cached_tokens) + ' &times; $' + cachedPrice + '/1M + output' +
+      '</td><td class="val">' + usd(b.golden_after_cache_usd, 4) + '</td></tr>';
+  } else {
+    html += '<tr><td>2 &middot; Cache adjustment</td><td class="val">' + NOT_RECORDED + '</td></tr>';
+  }
+
+  html += '<tr><td>3 &middot; Batch API &times; ' +
+    (b.batch_discount != null ? b.batch_discount.toFixed(2) : '?') +
+    '</td><td class="val">' + usd(b.golden_after_batch_usd, 4) + '</td></tr>';
+
+  const scaleBit = (b.n_prod != null && b.n_golden != null)
+    ? '&times; (' + tok(b.n_prod) + ' / ' + tok(b.n_golden) + ')'
+    : 'scale ' + (b.scale_factor != null ? '&times; ' + b.scale_factor : NOT_RECORDED);
+  html += '<tr class="total"><td>4 &middot; Scale to production ' + scaleBit +
+    '</td><td class="val">' + usd(b.estimated_production_usd, 2) + '</td></tr>';
+  html += '<tr><td>&nbsp;&nbsp;&nbsp; per company</td><td class="val">' +
+    usd(b.estimated_usd_per_company, 4) + '</td></tr>';
+  html += '</table>';
+
+  const notes = [];
+  if (b.n_prod_label) notes.push('N = ' + tok(b.n_prod) + ' (' + b.n_prod_label + ').');
+  notes.push('Reasoning tokens are billed inside output.');
+  if (b.cache_source) notes.push('Cache rate: ' + b.cache_source.replaceAll('_', ' ') + '.');
+  if (b.cache_step_reason) notes.push('Cache step unavailable: ' + b.cache_step_reason);
+  else if (!b.available && b.reason) notes.push('Ladder unavailable: ' + b.reason.replaceAll('_', ' ') + '.');
+  html += '<div class="pop-note">' + notes.join(' ') + '</div>';
+  return html;
+}
+
+let openCostId = null;
+
+function closeCostPopover() {
+  const pop = document.getElementById('cost-popover');
+  if (pop) pop.remove();
+  document.querySelectorAll('.cost-info.open').forEach(el => el.classList.remove('open'));
+  openCostId = null;
+}
+
+function openCostPopover(btn, c) {
+  closeCostPopover();
+  const pop = document.createElement('div');
+  pop.id = 'cost-popover';
+  pop.className = 'cost-popover';
+  pop.innerHTML = costBreakdownHtml(c);
+  document.body.appendChild(pop);
+  const r = btn.getBoundingClientRect();
+  pop.style.top = (window.scrollY + r.bottom + 8) + 'px';
+  const left = Math.max(8, window.scrollX + r.right - pop.offsetWidth);
+  pop.style.left = left + 'px';
+  btn.classList.add('open');
+  openCostId = c.id;
+}
+
+function toggleCostPopover(btn) {
+  const id = btn.dataset.costInfo;
+  if (openCostId === id) { closeCostPopover(); return; }
+  const c = M.configs.find(x => x.id === id);
+  if (c && c.cost_breakdown) openCostPopover(btn, c);
 }
 
 let visible = new Set(M.configs.map(c => c.id));
@@ -741,6 +936,7 @@ function sampleCaption(c) {
 function renderLeaderboard() {
   const tbody = document.getElementById('leaderboard-body');
   if (!tbody) return;
+  closeCostPopover();
   const runs = visibleConfigs().slice().sort((a, b) => b.subclass_acc - a.subclass_acc);
   if (!runs.length) {
     tbody.innerHTML = '<tr><td colspan="7"><div class="empty">No configs visible.</div></td></tr>';
@@ -763,7 +959,12 @@ function renderLeaderboard() {
         '<div class="score-bar"><span style="width:' + (100 * bar).toFixed(1) + '%"></span></div></div></td>' +
       '<td class="num mono">' + pct(c.ai_native_acc) + '</td>' +
       '<td class="num mono">' + pct(c.rad_acc) + '</td>' +
-      '<td class="num mono">' + money(c.projected_usd) + '</td>' +
+      '<td class="num mono"><span class="cost-cell">' + money(c.projected_usd) +
+        (c.cost_breakdown
+          ? '<button type="button" class="cost-info" data-cost-info="' + c.id +
+            '" aria-label="How this cost estimate was computed" title="Cost breakdown">' + INFO_SVG + '</button>'
+          : '') +
+        '</span></td>' +
       '<td class="num"><span class="' + pillCls + '">' + CLOCK_SVG + sec(lat) + '</span></td>' +
       '</tr>';
   }).join('');
@@ -945,6 +1146,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   document.querySelectorAll('.tab').forEach(t => {
     t.addEventListener('click', () => showTab(t.dataset.tab));
+  });
+  // Cost-info icons live inside a re-rendered tbody, so delegate from the
+  // document: toggle on icon click, close on outside click or Escape.
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.cost-info');
+    if (btn) { toggleCostPopover(btn); return; }
+    if (!e.target.closest('.cost-popover')) closeCostPopover();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeCostPopover();
   });
   syncChips();
   renderAll();

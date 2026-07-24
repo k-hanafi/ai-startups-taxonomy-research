@@ -379,6 +379,78 @@ table.ls td.mono { font-family: var(--mono); font-size: 12px; color: var(--text2
   color: var(--rose-text);
 }
 
+/* Cost-breakdown popover (info icon beside each Total Cost value) */
+.cost-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cost-info {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--muted);
+  line-height: 0;
+}
+.cost-info:hover, .cost-info.open { color: var(--accent); }
+.cost-info svg { width: 13px; height: 13px; }
+.cost-popover {
+  position: absolute;
+  z-index: 40;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.10);
+  padding: 14px 16px 12px;
+  font-size: 12px;
+  color: var(--text2);
+  text-align: left;
+}
+.cost-popover h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.cost-popover .pop-sub { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+.cost-popover .pop-section {
+  margin: 8px 0 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cost-popover table { width: 100%; border-collapse: collapse; }
+.cost-popover td {
+  padding: 3px 0;
+  vertical-align: top;
+  border: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+}
+.cost-popover td.val {
+  color: var(--text);
+  text-align: right;
+  white-space: nowrap;
+  padding-left: 10px;
+}
+.cost-popover tr.total td { font-weight: 600; color: var(--text); }
+.cost-popover .pop-note {
+  margin-top: 8px;
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.cost-popover .nr { color: var(--muted); font-style: italic; }
+
 .partial-badge {
   display: inline-flex;
   align-items: center;
@@ -422,6 +494,7 @@ SCRIPT = r"""
 const M = __M_JSON__;
 const COLORS = __GROUP_COLORS__;
 const CLOCK_SVG = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.2l2 1.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const INFO_SVG = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="5.1" r="0.9" fill="currentColor"/><path d="M8 7.4v3.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
 
 const cfg = {displayModeBar: false, responsive: true};
 const axisFont = {family: 'Plus Jakarta Sans, Segoe UI, sans-serif', size: 11, color: '#94a3b8'};
@@ -455,6 +528,128 @@ function money(x) {
 function sec(x) {
   if (x === null || x === undefined) return 'n/a';
   return Number(x).toFixed(2) + 's';
+}
+
+// --- Cost breakdown popover ------------------------------------------------
+// Renders only recorded fields; anything missing shows "not recorded".
+const NOT_RECORDED = '<span class="nr">not recorded</span>';
+
+function tok(x) {
+  if (x === null || x === undefined) return NOT_RECORDED;
+  return Number(x).toLocaleString();
+}
+
+function usd(x, digits) {
+  if (x === null || x === undefined) return NOT_RECORDED;
+  return '$' + Number(x).toLocaleString(undefined, {
+    minimumFractionDigits: digits, maximumFractionDigits: digits,
+  });
+}
+
+function rate(x) {
+  if (x === null || x === undefined) return NOT_RECORDED;
+  return (100 * x).toFixed(1) + '%';
+}
+
+function passRow(label, p) {
+  return '<tr><td>' + label + ' in ' + tok(p.input) + ' (cached ' + tok(p.cached) + ')</td>' +
+    '<td class="val">out ' + tok(p.output) + ' (reason ' + tok(p.reasoning) + ')</td></tr>';
+}
+
+function costBreakdownHtml(c) {
+  const b = c.cost_breakdown;
+  const p = b.pricing_per_mtok || null;
+  const priceLine = p
+    ? 'input $' + p.input + ' / output $' + p.output + ' per 1M tokens'
+    : 'per-1M prices not recorded';
+  let html = '<h4>' + c.label + ' &middot; cost breakdown</h4>' +
+    '<div class="pop-sub">' + (b.model || 'model not recorded') + ' &middot; ' + priceLine + '</div>';
+
+  html += '<div class="pop-section">Measured tokens (' +
+    (b.n_golden != null ? b.n_golden + '-row golden run' : 'golden run, n not recorded') + ')</div>';
+  html += '<table>';
+  if (b.per_pass && b.per_pass.pass_a && b.per_pass.pass_b) {
+    html += passRow('Pass A', b.per_pass.pass_a);
+    html += passRow('Pass B', b.per_pass.pass_b);
+  } else {
+    html += '<tr><td colspan="2">per-pass split ' + NOT_RECORDED + '</td></tr>';
+  }
+  const hitBit = b.cache_hit_rate != null ? ' = ' + rate(b.cache_hit_rate) + ' hit' : '';
+  html += '<tr><td>Total in ' + tok(b.total_input_tokens) +
+    ' (cached ' + tok(b.total_cached_tokens) + hitBit + ')</td>' +
+    '<td class="val">out ' + tok(b.total_output_tokens) + '</td></tr>';
+  html += '</table>';
+
+  html += '<div class="pop-section">Cost ladder</div><table>';
+  const canSync = p && b.total_input_tokens != null && b.total_output_tokens != null;
+  html += '<tr><td>1 &middot; Sync list: ' + (canSync
+    ? tok(b.total_input_tokens) + ' &times; $' + p.input + '/1M + ' +
+      tok(b.total_output_tokens) + ' &times; $' + p.output + '/1M'
+    : 'tokens or prices not recorded') +
+    '</td><td class="val">' + usd(b.golden_sync_usd, 4) + '</td></tr>';
+
+  if (b.golden_after_cache_usd != null && p && b.total_cached_tokens != null && b.cache_discount != null) {
+    const uncached = b.total_input_tokens - b.total_cached_tokens;
+    const cachedPrice = p.input * b.cache_discount;
+    html += '<tr><td>2 &middot; Cache: ' + tok(uncached) + ' &times; $' + p.input + '/1M + ' +
+      tok(b.total_cached_tokens) + ' &times; $' + cachedPrice + '/1M + output' +
+      '</td><td class="val">' + usd(b.golden_after_cache_usd, 4) + '</td></tr>';
+  } else {
+    html += '<tr><td>2 &middot; Cache adjustment</td><td class="val">' + NOT_RECORDED + '</td></tr>';
+  }
+
+  html += '<tr><td>3 &middot; Batch API &times; ' +
+    (b.batch_discount != null ? b.batch_discount.toFixed(2) : '?') +
+    '</td><td class="val">' + usd(b.golden_after_batch_usd, 4) + '</td></tr>';
+
+  const scaleBit = (b.n_prod != null && b.n_golden != null)
+    ? '&times; (' + tok(b.n_prod) + ' / ' + tok(b.n_golden) + ')'
+    : 'scale ' + (b.scale_factor != null ? '&times; ' + b.scale_factor : NOT_RECORDED);
+  html += '<tr class="total"><td>4 &middot; Scale to production ' + scaleBit +
+    '</td><td class="val">' + usd(b.estimated_production_usd, 2) + '</td></tr>';
+  html += '<tr><td>&nbsp;&nbsp;&nbsp; per company</td><td class="val">' +
+    usd(b.estimated_usd_per_company, 4) + '</td></tr>';
+  html += '</table>';
+
+  const notes = [];
+  if (b.n_prod_label) notes.push('N = ' + tok(b.n_prod) + ' (' + b.n_prod_label + ').');
+  notes.push('Reasoning tokens are billed inside output.');
+  if (b.cache_source) notes.push('Cache rate: ' + b.cache_source.replaceAll('_', ' ') + '.');
+  if (b.cache_step_reason) notes.push('Cache step unavailable: ' + b.cache_step_reason);
+  else if (!b.available && b.reason) notes.push('Ladder unavailable: ' + b.reason.replaceAll('_', ' ') + '.');
+  html += '<div class="pop-note">' + notes.join(' ') + '</div>';
+  return html;
+}
+
+let openCostId = null;
+
+function closeCostPopover() {
+  const pop = document.getElementById('cost-popover');
+  if (pop) pop.remove();
+  document.querySelectorAll('.cost-info.open').forEach(el => el.classList.remove('open'));
+  openCostId = null;
+}
+
+function openCostPopover(btn, c) {
+  closeCostPopover();
+  const pop = document.createElement('div');
+  pop.id = 'cost-popover';
+  pop.className = 'cost-popover';
+  pop.innerHTML = costBreakdownHtml(c);
+  document.body.appendChild(pop);
+  const r = btn.getBoundingClientRect();
+  pop.style.top = (window.scrollY + r.bottom + 8) + 'px';
+  const left = Math.max(8, window.scrollX + r.right - pop.offsetWidth);
+  pop.style.left = left + 'px';
+  btn.classList.add('open');
+  openCostId = c.id;
+}
+
+function toggleCostPopover(btn) {
+  const id = btn.dataset.costInfo;
+  if (openCostId === id) { closeCostPopover(); return; }
+  const c = M.configs.find(x => x.id === id);
+  if (c && c.cost_breakdown) openCostPopover(btn, c);
 }
 
 let visible = new Set(M.configs.map(c => c.id));
@@ -663,6 +858,7 @@ function sampleCaption(c) {
 function renderLeaderboard() {
   const tbody = document.getElementById('leaderboard-body');
   if (!tbody) return;
+  closeCostPopover();
   const runs = visibleConfigs().slice().sort((a, b) => b.subclass_acc - a.subclass_acc);
   if (!runs.length) {
     tbody.innerHTML = '<tr><td colspan="7"><div class="empty">No configs visible.</div></td></tr>';
@@ -685,7 +881,12 @@ function renderLeaderboard() {
         '<div class="score-bar"><span style="width:' + (100 * bar).toFixed(1) + '%"></span></div></div></td>' +
       '<td class="num mono">' + pct(c.ai_native_acc) + '</td>' +
       '<td class="num mono">' + pct(c.rad_acc) + '</td>' +
-      '<td class="num mono">' + money(c.projected_usd) + '</td>' +
+      '<td class="num mono"><span class="cost-cell">' + money(c.projected_usd) +
+        (c.cost_breakdown
+          ? '<button type="button" class="cost-info" data-cost-info="' + c.id +
+            '" aria-label="How this cost estimate was computed" title="Cost breakdown">' + INFO_SVG + '</button>'
+          : '') +
+        '</span></td>' +
       '<td class="num"><span class="' + pillCls + '">' + CLOCK_SVG + sec(lat) + '</span></td>' +
       '</tr>';
   }).join('');
@@ -867,6 +1068,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   document.querySelectorAll('.tab').forEach(t => {
     t.addEventListener('click', () => showTab(t.dataset.tab));
+  });
+  // Cost-info icons live inside a re-rendered tbody, so delegate from the
+  // document: toggle on icon click, close on outside click or Escape.
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.cost-info');
+    if (btn) { toggleCostPopover(btn); return; }
+    if (!e.target.closest('.cost-popover')) closeCostPopover();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeCostPopover();
   });
   syncChips();
   renderAll();
