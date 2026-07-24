@@ -364,23 +364,33 @@ def _sensitivity(f: pd.DataFrame) -> dict:
     return {"by_thin_history": by_thin, "by_snapshot_age": by_age}
 
 
-def _funnel(f: pd.DataFrame, paths: Paths) -> dict:
+def _funnel(f: pd.DataFrame, paths: Paths, preview: bool = False) -> dict:
     """Coverage funnel: not-found cohort -> archive targets -> classified with
     recovered evidence. The residuals are what survivorship correction still
-    cannot see."""
+    cannot see.
+
+    In PREVIEW mode the final stage uses the metadata stand-in dead count (same
+    `is_dead` definition the rest of the dashboard uses) so the funnel does not
+    collapse to zero while hero metrics show thousands of dead firms.
+    """
     n_not_found = None
     if paths.not_found.exists():
         n_not_found = int(len(_read(paths.not_found)))
     n_targets = None
     if paths.targets_dead.exists():
         n_targets = int(len(_read(paths.targets_dead)))
-    n_classified = int(f["is_dead_recovered"].sum())
+    if preview:
+        n_classified = int(f["is_dead"].sum())
+        classified_label = "Preview dead (metadata stand-in)"
+    else:
+        n_classified = int(f["is_dead_recovered"].sum())
+        classified_label = "Classified on recovered evidence"
     stages = []
     if n_not_found is not None:
         stages.append({"label": "Not found by Tavily", "n": n_not_found})
     if n_targets is not None:
         stages.append({"label": "Usable pre-death snapshot", "n": n_targets})
-    stages.append({"label": "Classified on recovered evidence", "n": n_classified})
+    stages.append({"label": classified_label, "n": n_classified})
     out = {"stages": stages}
     if n_not_found is not None and n_targets is not None:
         out["no_archive"] = n_not_found - n_targets
@@ -389,8 +399,11 @@ def _funnel(f: pd.DataFrame, paths: Paths) -> dict:
 
 
 def _rad_survival(f: pd.DataFrame) -> dict:
+    # RAD-H/M/L mortality is an AI-native story (chart + insight say so); keep
+    # non-AI rows out so a stray RAD label cannot dilute the rates.
+    ai = f[f["ai_native_int"] == 1]
     return {
-        "by_rad": _mortality_by(f, "rad_score", AI_RAD_ORDER),
+        "by_rad": _mortality_by(ai, "rad_score", AI_RAD_ORDER),
         "by_subclass": _mortality_by(f, "subclass", SUBCLASS_ORDER),
         "by_subclass_group": _mortality_by(f, "subclass_group", SUBCLASS_GROUP_ORDER),
         "by_era": _mortality_by(f, "founding_era", ["PRE-GENAI", "GENAI-ERA"]),
@@ -398,14 +411,15 @@ def _rad_survival(f: pd.DataFrame) -> dict:
 
 
 def _dependency_trap(f: pd.DataFrame) -> dict:
-    """Mortality grid: funding bucket (rows) x RAD level (cols)."""
+    """Mortality grid among AI-native firms: funding bucket (rows) x RAD (cols)."""
+    ai = f[f["ai_native_int"] == 1]
     cells = []
     for fb in FUNDING_BUCKET_ORDER:
         row = []
         for rad in AI_RAD_ORDER:
-            sel = (f["funding_bucket"] == fb) & (f["rad_score"] == rad)
-            dead = int((sel & f["is_dead"]).sum())
-            surv = int((sel & f["is_survivor"]).sum())
+            sel = (ai["funding_bucket"] == fb) & (ai["rad_score"] == rad)
+            dead = int((sel & ai["is_dead"]).sum())
+            surv = int((sel & ai["is_survivor"]).sum())
             tot = dead + surv
             row.append({"dead": dead, "survivor": surv, "n": tot,
                         "mortality": round(dead / tot * 100, 1) if tot else None})
@@ -479,6 +493,23 @@ def _flips(f: pd.DataFrame, paths: Paths, preview: bool) -> dict:
     return out
 
 
+def _regression_cis_stable(terms: list[dict], max_log_width: float = 5.0) -> bool:
+    """True when every odds-ratio CI is finite, positive, and not explosively wide.
+
+    max_log_width=5 means hi/lo may span at most e^5 ≈ 148x on the OR scale.
+    Wider intervals usually mean separation or a sparse cell, not a usable estimate.
+    """
+    if not terms:
+        return False
+    for t in terms:
+        lo, hi = t["ci_low"], t["ci_high"]
+        if not (math.isfinite(lo) and math.isfinite(hi) and lo > 0 and hi > 0):
+            return False
+        if math.log(hi / lo) > max_log_width:
+            return False
+    return True
+
+
 def _regression(f: pd.DataFrame) -> dict:
     """Logistic models. died=1 for the dead cohort, 0 for survivors.
 
@@ -486,7 +517,7 @@ def _regression(f: pd.DataFrame) -> dict:
     funding, founding era, and vertical. Model 2 (AI-native only): does RAD
     dependency predict death among AI firms (the RAD-validation test).
     Model 3 (AI-native only): Model 2 plus a funding x RAD interaction; the
-    builder renders it only if it converged.
+    builder renders it only if it converged with stable CIs.
     """
     try:
         import statsmodels.formula.api as smf
@@ -530,12 +561,14 @@ def _regression(f: pd.DataFrame) -> dict:
         ai,
         "died ~ C(rad_score, Treatment('RAD-L')) + C(subclass_group) + log_funding + C(founding_era)",
     )
-    # Attempt-then-fall-back: funding x RAD interaction. Sparse RAD-L cells may
-    # not support it; the descriptive heatmap stands alone if this fails.
+    # Attempt-then-fall-back: funding x RAD interaction. Ship only when the fit
+    # converges with stable CIs; otherwise the descriptive heatmap stands alone.
     model3 = fit(
         ai,
         "died ~ C(rad_score, Treatment('RAD-L')) * log_funding + C(founding_era)",
     )
+    if model3.get("available") and not _regression_cis_stable(model3["terms"]):
+        model3 = {"available": False, "error": "unstable confidence intervals"}
     return {"model1": model1, "model2": model2, "model3": model3}
 
 
@@ -552,7 +585,7 @@ def compute_metrics(df: pd.DataFrame, meta: dict, paths: Paths) -> dict:
         "temporal": _temporal(df),
         "confidence": _confidence(df),
         "sensitivity": _sensitivity(df),
-        "funnel": _funnel(df, paths),
+        "funnel": _funnel(df, paths, meta["preview"]),
         "flips": _flips(df, paths, meta["preview"]),
         "regression": _regression(df),
     }

@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-23 · Active branch: `dashboards/v1-alive-dead` (V1 alive-vs-dead dashboard, evidence-only universe; PREVIEW until `survivorship_corrected.csv` lands)
+Last updated: 2026-07-23 · Active branch: `dashboards/v1-alive-dead` (V1 alive-vs-dead dashboard on evidence-based dead verdicts; Bugbot fixes for RAD/preview honesty)
 
 ---
 

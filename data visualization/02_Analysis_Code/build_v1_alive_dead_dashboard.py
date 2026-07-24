@@ -167,7 +167,9 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); line
 ::selection { background: var(--navy); color: white; }
 
 .preview-banner {
-  position: sticky; top: 0; z-index: 200;
+  /* Sit in the main column only so the fixed left nav stays fully clickable. */
+  position: sticky; top: 0; z-index: 50;
+  margin-left: 216px;
   background: #b45309; color: #ffffff;
   padding: 0.8rem 1.5rem; text-align: center;
   font-size: 0.85rem; font-weight: 600; letter-spacing: 0.02em;
@@ -290,6 +292,7 @@ footer strong { color: var(--text2); }
 
 @media (max-width: 1100px) {
   nav { display: none; } main { margin-left: 0; } section { padding: 3rem 1.5rem; }
+  .preview-banner { margin-left: 0; }
   .hero-metrics, .hero-metrics.cols4, .hero-metrics.cols3 { grid-template-columns: repeat(2, 1fr); }
   .chart-row { grid-template-columns: 1fr; }
   footer { margin-left: 0; padding: 2rem 1.5rem; }
@@ -297,7 +300,7 @@ footer strong { color: var(--text2); }
 @media print {
   section { opacity: 1 !important; transform: none !important; }
   nav { display: none; } main { margin-left: 0; }
-  .preview-banner { position: static; }
+  .preview-banner { position: static; margin-left: 0; }
 }
 """
 
@@ -779,9 +782,10 @@ function renderAge() {
 
 function renderStrict() {
   const ar = MS.ai_vs_survival.ai_rate;
+  const deadLabel = MS.meta.preview ? 'Dead (metadata preview)' : 'Dead (evidence)';
   aiRateBars('chart-strict', [
     {label: 'Alive', ...ar.survivor},
-    {label: 'Dead (evidence)', ...ar.dead},
+    {label: deadLabel, ...ar.dead},
     {label: 'Dead (strict subset)', ...ar.dead_strict},
   ], [ALIVE_COLOR, DEAD_COLOR, DEAD_STRICT_COLOR]);
 }
@@ -984,12 +988,44 @@ def build_html(mb: dict, ms: dict, filter_data: dict) -> str:
         else "Significance annotations unavailable for this run."
     )
 
+    rad_headline = ""
     rad_line = ""
     if radh is not None and radl is not None:
         rad_line = (f"RAD-H firms die at <strong>{radh}%</strong> versus "
                     f"<strong>{radl}%</strong> for RAD-L.")
+        if radh > radl:
+            rad_headline = "Dependency tracks death."
+        elif radh < radl:
+            rad_headline = "Raw RAD mortality does not track dependency."
+            rad_line += (" Higher dependency is not deadlier in the uncontrolled "
+                         "rates; Act 3 checks whether controls change the story.")
+        else:
+            rad_headline = "RAD mortality is flat in the raw rates."
 
     mode_label = "PREVIEW (provisional)" if preview else "evidence-based"
+
+    if preview:
+        overview_p = (
+            f"Every <strong>alive</strong> company on this dashboard was classified from "
+            f"real website evidence ({meta['n_survivor']:,} live Tavily crawls). The dead "
+            f"cohort ({meta['n_dead']:,}) is still a <strong>PREVIEW stand-in</strong>: "
+            f"metadata-only labels for companies on the frozen dead work list, not yet "
+            f"reclassified from recovered Internet Archive snapshots. Dead-side rates are "
+            f"provisional until <code>survivorship_corrected.csv</code> lands and this "
+            f"builder is re-run. The unchanged V1 classifier and taxonomy stay fixed; only "
+            f"the evidence source changes."
+        )
+    else:
+        overview_p = (
+            f"Every company on this dashboard was classified from "
+            f"<strong>real website evidence</strong>. "
+            f"The alive cohort ({meta['n_survivor']:,}) is every company whose live site "
+            f"Tavily successfully scraped. The dead cohort ({meta['n_dead']:,}) is every "
+            f"company whose site is gone but whose pre-death homepage was recovered from "
+            f"the Internet Archive and run through the <strong>unchanged V1 classifier</strong>. "
+            f"Metadata-only classifications appear nowhere below: the only thing that "
+            f"differs between the two cohorts is where the evidence came from."
+        )
 
     return f'''<!DOCTYPE html>
 <html lang="en">
@@ -1042,12 +1078,7 @@ def build_html(mb: dict, ms: dict, filter_data: dict) -> str:
   <span class="section-label">Evidence-Only Universe</span>
   <h1>Alive vs Dead: the Survivorship-Corrected Landscape</h1>
   <p>
-    Every company on this dashboard was classified from <strong>real website evidence</strong>.
-    The alive cohort ({meta["n_survivor"]:,}) is every company whose live site Tavily successfully
-    scraped. The dead cohort ({meta["n_dead"]:,}) is every company whose site is gone but whose
-    pre-death homepage was recovered from the Internet Archive and run through the
-    <strong>unchanged V1 classifier</strong>. Metadata-only classifications appear nowhere below:
-    the only thing that differs between the two cohorts is where the evidence came from.
+    {overview_p}
   </p>
 
   <div class="hero-metrics">
@@ -1064,7 +1095,7 @@ def build_html(mb: dict, ms: dict, filter_data: dict) -> str:
     <div class="metric-card bad">
       <div class="mc-label">Dead</div>
       <div class="mc-val">{meta["n_dead"]:,}</div>
-      <div class="mc-ctx">pre-death archive snapshot</div>
+      <div class="mc-ctx">{"metadata stand-in (preview)" if preview else "pre-death archive snapshot"}</div>
     </div>
     <div class="metric-card">
       <div class="mc-label">Corrected AI-native rate</div>
@@ -1374,7 +1405,7 @@ def build_html(mb: dict, ms: dict, filter_data: dict) -> str:
   </div>
 
   <div class="insight insight-green">
-    <p><strong>Dependency tracks death.</strong> {rad_line}
+    <p>{f"<strong>{rad_headline}</strong> {rad_line}" if rad_headline else rad_line}
     AI-native rate among the dead: {ar["dead"]["rate"]}% vs {ar["survivor"]["rate"]}% among the living.
     {sig_line}</p>
   </div>
@@ -1414,7 +1445,7 @@ def build_html(mb: dict, ms: dict, filter_data: dict) -> str:
     <div class="chart-box">
       <div class="chart-box-header">
         <div class="chart-box-title">Model 3: funding &times; RAD interaction</div>
-        <div class="chart-box-desc">Does funding buffer high dependency? Shown only when the interaction model converges</div>
+        <div class="chart-box-desc">Does funding buffer high dependency? Shown only when the interaction model converges with stable CIs</div>
       </div>
       <div class="chart-body"><div id="chart-forest3" style="height:340px;"></div></div>
     </div>

@@ -43,7 +43,9 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); line
 ::selection { background: var(--navy); color: white; }
 
 .preview-banner {
-  position: sticky; top: 0; z-index: 200;
+  /* Sit in the main column only so the fixed left nav stays fully clickable. */
+  position: sticky; top: 0; z-index: 50;
+  margin-left: 216px;
   background: #b45309; color: #ffffff;
   padding: 0.8rem 1.5rem; text-align: center;
   font-size: 0.85rem; font-weight: 600; letter-spacing: 0.02em;
@@ -166,6 +168,7 @@ footer strong { color: var(--text2); }
 
 @media (max-width: 1100px) {
   nav { display: none; } main { margin-left: 0; } section { padding: 3rem 1.5rem; }
+  .preview-banner { margin-left: 0; }
   .hero-metrics, .hero-metrics.cols4, .hero-metrics.cols3 { grid-template-columns: repeat(2, 1fr); }
   .chart-row { grid-template-columns: 1fr; }
   footer { margin-left: 0; padding: 2rem 1.5rem; }
@@ -173,7 +176,7 @@ footer strong { color: var(--text2); }
 @media print {
   section { opacity: 1 !important; transform: none !important; }
   nav { display: none; } main { margin-left: 0; }
-  .preview-banner { position: static; }
+  .preview-banner { position: static; margin-left: 0; }
 }
 </style>
 </head>
@@ -216,12 +219,7 @@ footer strong { color: var(--text2); }
   <span class="section-label">Evidence-Only Universe</span>
   <h1>Alive vs Dead: the Survivorship-Corrected Landscape</h1>
   <p>
-    Every company on this dashboard was classified from <strong>real website evidence</strong>.
-    The alive cohort (21,990) is every company whose live site Tavily successfully
-    scraped. The dead cohort (15,682) is every company whose site is gone but whose
-    pre-death homepage was recovered from the Internet Archive and run through the
-    <strong>unchanged V1 classifier</strong>. Metadata-only classifications appear nowhere below:
-    the only thing that differs between the two cohorts is where the evidence came from.
+    Every company on this dashboard was classified from <strong>real website evidence</strong>. The alive cohort (21,990) is every company whose live site Tavily successfully scraped. The dead cohort (15,682) is every company whose site is gone but whose pre-death homepage was recovered from the Internet Archive and run through the <strong>unchanged V1 classifier</strong>. Metadata-only classifications appear nowhere below: the only thing that differs between the two cohorts is where the evidence came from.
   </p>
 
   <div class="hero-metrics">
@@ -548,7 +546,7 @@ footer strong { color: var(--text2); }
   </div>
 
   <div class="insight insight-green">
-    <p><strong>Dependency tracks death.</strong> RAD-H firms die at <strong>16.3%</strong> versus <strong>18.4%</strong> for RAD-L.
+    <p><strong>Raw RAD mortality does not track dependency.</strong> RAD-H firms die at <strong>16.3%</strong> versus <strong>18.4%</strong> for RAD-L. Higher dependency is not deadlier in the uncontrolled rates; Act 3 checks whether controls change the story.
     AI-native rate among the dead: 5.0% vs 15.6% among the living.
     BH-significant subclasses at alpha 0.05: <strong>1A, 1B, 1D, 1E, 1F, 0A, 0B, 0C</strong> (omnibus chi-square p = 0.00e+00).</p>
   </div>
@@ -588,7 +586,7 @@ footer strong { color: var(--text2); }
     <div class="chart-box">
       <div class="chart-box-header">
         <div class="chart-box-title">Model 3: funding &times; RAD interaction</div>
-        <div class="chart-box-desc">Does funding buffer high dependency? Shown only when the interaction model converges</div>
+        <div class="chart-box-desc">Does funding buffer high dependency? Shown only when the interaction model converges with stable CIs</div>
       </div>
       <div class="chart-body"><div id="chart-forest3" style="height:340px;"></div></div>
     </div>
@@ -1184,9 +1182,10 @@ function renderAge() {
 
 function renderStrict() {
   const ar = MS.ai_vs_survival.ai_rate;
+  const deadLabel = MS.meta.preview ? 'Dead (metadata preview)' : 'Dead (evidence)';
   aiRateBars('chart-strict', [
     {label: 'Alive', ...ar.survivor},
-    {label: 'Dead (evidence)', ...ar.dead},
+    {label: deadLabel, ...ar.dead},
     {label: 'Dead (strict subset)', ...ar.dead_strict},
   ], [ALIVE_COLOR, DEAD_COLOR, DEAD_STRICT_COLOR]);
 }
