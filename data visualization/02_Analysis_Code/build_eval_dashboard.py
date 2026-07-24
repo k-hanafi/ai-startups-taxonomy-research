@@ -192,6 +192,19 @@ code {
   padding: 2px 7px;
   background: var(--surface);
 }
+.notice.scored .tag { color: var(--accent); }
+.notice .run-headline {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+.notice .run-meta {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
 
 /* Robustness checks panel */
 .check {
@@ -1264,13 +1277,66 @@ def _robustness_panel_html(metrics: dict) -> str:
     return "".join(parts)
 
 
-def build_html(metrics: dict) -> str:
-    today = datetime.date.today().isoformat()
-    synthetic = bool(metrics.get("synthetic"))
-    notice = ""
-    if synthetic:
-        notice = """
-<div class="notice" id="synthetic-notice">
+def _clock(moment: datetime.datetime) -> str:
+    """2:47 PM. Built by hand: %-I is not portable across platforms."""
+    hour = moment.hour % 12 or 12
+    meridiem = "AM" if moment.hour < 12 else "PM"
+    return f"{hour}:{moment.minute:02d} {meridiem}"
+
+
+def _day(moment: datetime.datetime) -> str:
+    return f"{moment.strftime('%b')} {moment.day}, {moment.year}"
+
+
+def _local(iso: str | None) -> datetime.datetime | None:
+    """Recorded UTC instant in the build machine's local timezone."""
+    if not iso:
+        return None
+    try:
+        parsed = datetime.datetime.fromisoformat(iso)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed.astimezone()
+
+
+def _run_headline(run: dict) -> str:
+    """Which eval instance this page is for, in one line."""
+    n_runs = int(run.get("n_runs") or 0)
+    lead = "Eval run" if n_runs == 1 else f"{n_runs} eval runs"
+    first = _local(run.get("started_first"))
+    last = _local(run.get("started_last"))
+    if first is None or last is None:
+        return f"{lead}, start time not recorded"
+    if (last - first).total_seconds() < 60:
+        return f"{lead}, {_day(first)} at {_clock(first)}"
+    if first.date() == last.date():
+        return f"{lead}, {_day(first)}, {_clock(first)} to {_clock(last)}"
+    return f"{lead}, {_day(first)} {_clock(first)} to {_day(last)} {_clock(last)}"
+
+
+def _run_meta(run: dict) -> str:
+    """Secondary provenance line: models, golden size, commit."""
+    bits: list[str] = []
+    groups = [g for g in (run.get("model_groups") or []) if g]
+    if groups:
+        bits.append(", ".join(groups))
+    n_gold = run.get("n_gold")
+    if n_gold:
+        bits.append(f"{int(n_gold)} golden companies")
+    commit = run.get("git_commit")
+    if commit:
+        bits.append(f"commit {commit}")
+    return " &middot; ".join(html.escape(b) for b in bits)
+
+
+def _run_instance_card_html(metrics: dict) -> str:
+    """Header card naming the run behind the page, synthetic or scored."""
+    run = metrics.get("run_instance") or {}
+    if metrics.get("synthetic") or run.get("synthetic"):
+        return """
+<div class="notice" id="run-instance" data-mode="synthetic">
   <span class="tag">Synthetic data</span>
   <div>All numbers on this page are internally consistent placeholders for the
   locked evaluation matrix (3 models &times; 3 Pass B reasoning efforts).
@@ -1278,6 +1344,24 @@ def build_html(metrics: dict) -> str:
   <code>--runs</code> or <code>--scored</code>.</div>
 </div>
 """
+    recorded = [s for s in (run.get("started_first"), run.get("started_last")) if s]
+    utc_span = " to ".join(dict.fromkeys(recorded))
+    title = f' title="Run start recorded as {html.escape(utc_span)}"' if utc_span else ""
+    meta = _run_meta(run)
+    meta_html = f'\n    <span class="run-meta">{meta}</span>' if meta else ""
+    return f"""
+<div class="notice scored" id="run-instance" data-mode="scored">
+  <span class="tag">Run</span>
+  <div{title}>
+    <span class="run-headline">{html.escape(_run_headline(run))}</span>{meta_html}
+  </div>
+</div>
+"""
+
+
+def build_html(metrics: dict) -> str:
+    today = datetime.date.today().isoformat()
+    notice = _run_instance_card_html(metrics)
     toolbar = _filter_toolbar_html(metrics)
     robustness_panel = _robustness_panel_html(metrics)
     script = (
@@ -1405,7 +1489,7 @@ def build_html(metrics: dict) -> str:
   </section>
 
   <footer>
-    Generated {today} &middot; regenerate with
+    Page built {today} (run times are on the card above) &middot; regenerate with
     <code>python -m evals dashboard</code> (synthetic fixture by default) or
     pass <code>--runs</code> / <code>--scored</code> to load real scored runs.
   </footer>

@@ -5,6 +5,7 @@ No OpenAI key required: dashboard_metrics does not import src.config.
 
 from __future__ import annotations
 
+import datetime
 import json
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from evals.dashboard_metrics import (
     build_metrics,
     config_row_from_scored,
     load_fixture,
+    load_from_scored_paths,
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -777,8 +779,9 @@ def test_build_html_is_three_tab_suite():
     assert "chart-reliability" in page
     assert "chart-ece" in page
     assert "chart-selective" in page
-    # Synthetic notice is present but flat (no shouting banner class).
-    assert "synthetic-notice" in page
+    # Run instance card is present but flat (no shouting banner class).
+    assert 'id="run-instance"' in page
+    assert 'data-mode="synthetic"' in page
     assert "internally consistent placeholders" in page
 
 
@@ -831,3 +834,162 @@ def test_resolve_metrics_defaults_to_fixture_not_discovered_runs():
         runs=None,
     )
     assert mod.resolve_metrics(ns_force)["synthetic"] is True
+
+
+# --- Run instance card: which eval run is this dashboard for? ---------------
+
+
+def _run_stub(model: str, started: str | None = None, **extra) -> dict:
+    stub = {"run_id": f"{model}_{started or 'undated'}", "model": model, "n_gold": 100}
+    if started:
+        stub["run_started_utc"] = started
+    stub.update(extra)
+    return stub
+
+
+def _matrix_stubs() -> list[dict]:
+    """Nine runs, three models, staggered start times across one afternoon."""
+    models = ["gpt-5.4-nano"] * 3 + ["gpt-5.4-mini"] * 3 + ["gpt-5.6-luna"] * 3
+    start = datetime.datetime(2026, 7, 24, 18, 47, 11, tzinfo=datetime.timezone.utc)
+    return [
+        _run_stub(
+            model,
+            (start + datetime.timedelta(minutes=9 * i)).isoformat(),
+            git_commit="acb70acd8b26",
+        )
+        for i, model in enumerate(models)
+    ]
+
+
+def test_run_instance_on_fixture_is_synthetic_without_times():
+    """Mock matrix must not claim a run happened at any time."""
+    run = load_fixture(MOCK)["run_instance"]
+    assert run["synthetic"] is True
+    assert run["n_runs"] == 9
+    assert run["started_first"] is None
+    assert run["started_last"] is None
+    assert run["model_groups"] == list(MODEL_GROUP_ORDER)
+
+
+def test_run_instance_spans_matrix_runs():
+    run = build_metrics(_matrix_stubs())["run_instance"]
+    assert run["synthetic"] is False
+    assert run["n_runs"] == 9
+    assert run["started_first"] == "2026-07-24T18:47:11+00:00"
+    assert run["started_last"] == "2026-07-24T19:59:11+00:00"
+    assert run["model_groups"] == ["nano", "mini", "luna"]
+    assert run["n_gold"] == 100
+    assert run["git_commit"] == "acb70ac"
+
+
+def test_run_instance_orders_by_instant_not_string():
+    """Out-of-order loads and mixed offsets must still bound the span."""
+    runs = [
+        _run_stub("gpt-5.4-nano", "2026-07-24T19:30:00+00:00"),
+        _run_stub("gpt-5.4-mini", "2026-07-24T14:05:00-04:00"),  # 18:05 UTC
+    ]
+    run = build_metrics(runs)["run_instance"]
+    assert run["started_first"] == "2026-07-24T14:05:00-04:00"
+    assert run["started_last"] == "2026-07-24T19:30:00+00:00"
+
+
+def test_run_instance_collapses_single_run_span():
+    run = build_metrics([_run_stub("gpt-5.4-nano", "2026-07-24T18:47:11+00:00")])[
+        "run_instance"
+    ]
+    assert run["n_runs"] == 1
+    assert run["started_first"] == run["started_last"] == "2026-07-24T18:47:11+00:00"
+
+
+def test_run_instance_start_time_absent_when_never_recorded():
+    """No config.json start time means say so, never fall back to now."""
+    run = build_metrics([_run_stub("gpt-5.4-nano")])["run_instance"]
+    assert run["started_first"] is None
+    assert run["started_last"] is None
+    assert run["git_commit"] is None
+
+
+def test_run_instance_drops_provenance_when_runs_disagree():
+    """A mixed load must not claim one commit or one golden set."""
+    runs = [
+        _run_stub("gpt-5.4-nano", "2026-07-24T18:00:00+00:00", git_commit="aaaaaaa1111"),
+        _run_stub("gpt-5.4-mini", "2026-07-24T19:00:00+00:00", git_commit="bbbbbbb2222"),
+    ]
+    runs[1]["n_gold"] = 80
+    run = build_metrics(runs)["run_instance"]
+    assert run["git_commit"] is None
+    assert run["n_gold"] is None
+
+
+def test_loader_reads_run_start_from_sibling_config(tmp_path):
+    """scored.json records scoring time; config.json records the run start."""
+    run_dir = tmp_path / "2026-07-24_2pass_gpt-5.4-nano_low_r1"
+    run_dir.mkdir()
+    (run_dir / "scored.json").write_text(
+        json.dumps(
+            {
+                "run_id": run_dir.name,
+                "model": "gpt-5.4-nano",
+                "effort_b": "low",
+                "n_gold": 100,
+                "scored_at_utc": "2026-07-24T21:15:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "config.json").write_text(
+        json.dumps(
+            {
+                "run_id": run_dir.name,
+                "created_utc": "2026-07-24T18:47:11.013416+00:00",
+                "git_commit": "acb70acd8b26f0b5e109b99bc1fb700cb54e90d3",
+            }
+        ),
+        encoding="utf-8",
+    )
+    run = load_from_scored_paths([run_dir / "scored.json"])["run_instance"]
+    assert run["synthetic"] is False
+    assert run["started_first"] == "2026-07-24T18:47:11.013416+00:00"
+    assert run["git_commit"] == "acb70ac"
+
+
+def test_loader_survives_missing_config_json(tmp_path):
+    (tmp_path / "scored.json").write_text(
+        json.dumps({"run_id": "legacy_run", "model": "gpt-5.4-nano"}), encoding="utf-8"
+    )
+    run = load_from_scored_paths([tmp_path / "scored.json"])["run_instance"]
+    assert run["started_first"] is None
+    assert run["n_runs"] == 1
+
+
+def test_build_html_run_instance_card_names_the_run():
+    """Scored pages must headline the run date, synthetic pages must not."""
+    _, mod = _load_eval_dashboard_builder()
+
+    scored = mod.build_html(build_metrics(_matrix_stubs()))
+    assert 'data-mode="scored"' in scored
+    assert "9 eval runs" in scored
+    assert "Jul 24, 2026" in scored
+    assert "commit acb70ac" in scored
+    assert "100 golden companies" in scored
+    assert "internally consistent placeholders" not in scored
+
+    undated = mod.build_html(build_metrics([_run_stub("gpt-5.4-nano")]))
+    assert "start time not recorded" in undated
+
+    synthetic = mod.build_html(load_fixture(MOCK))
+    assert 'data-mode="synthetic"' in synthetic
+    assert "Synthetic data" in synthetic
+    assert "eval runs, Jul" not in synthetic
+
+
+def test_committed_html_carries_the_run_instance_card():
+    from evals.paths import PROJECT_ROOT
+
+    page = (
+        PROJECT_ROOT
+        / "data visualization"
+        / "01_Presentation_Materials"
+        / "eval_dashboard.html"
+    ).read_text(encoding="utf-8")
+    assert 'id="run-instance"' in page

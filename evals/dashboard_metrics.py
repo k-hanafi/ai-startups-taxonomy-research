@@ -10,11 +10,12 @@ exist.
 
 from __future__ import annotations
 
+import datetime
 import json
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from evals.paths import PROJECT_ROOT, RUNS_DIR, run_scored_path
+from evals.paths import PROJECT_ROOT, RUNS_DIR, run_config_path, run_scored_path
 
 DEFAULT_FIXTURE = (
     PROJECT_ROOT
@@ -738,6 +739,102 @@ def build_robustness(scored_runs: list[dict[str, Any]]) -> dict[str, Any]:
     return {"checks": checks}
 
 
+def _text(value: Any) -> Optional[str]:
+    """Non-empty stripped string, or None."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _parse_iso(value: Optional[str]) -> Optional[datetime.datetime]:
+    """Timezone-aware datetime from an ISO string, or None when unparseable."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed
+
+
+def build_run_instance(
+    scored_runs: Iterable[dict[str, Any]],
+    *,
+    synthetic: bool = False,
+) -> dict[str, Any]:
+    """Identity of the runs behind this dashboard: which eval instance is this?
+
+    Start times are each run's ``created_utc`` from config.json, injected by
+    the loaders. Runs that never recorded one leave the span empty rather
+    than falling back to a scoring or page-build timestamp. Golden size and
+    commit report only when every run agrees, so a mixed load cannot claim a
+    single provenance it does not have.
+    """
+    runs = list(scored_runs)
+
+    # Sort on the parsed instant, not the raw text: offsets can differ.
+    dated: list[tuple[datetime.datetime, str]] = []
+    models: list[str] = []
+    commits: set[str] = set()
+    golds: set[int] = set()
+    for scored in runs:
+        started = _text(scored.get("run_started_utc"))
+        parsed = _parse_iso(started)
+        if parsed is not None and started is not None:
+            dated.append((parsed, started))
+
+        model = _text(scored.get("model")) or _text(
+            _parse_model_from_run_id(str(scored.get("run_id") or ""))
+        )
+        if model and model not in models:
+            models.append(model)
+
+        commit = _text(scored.get("git_commit"))
+        if commit:
+            commits.add(commit)
+
+        n_gold = scored.get("n_gold")
+        if isinstance(n_gold, int) and not isinstance(n_gold, bool):
+            golds.add(n_gold)
+    dated.sort(key=lambda pair: pair[0])
+
+    return {
+        "synthetic": synthetic,
+        "n_runs": len(runs),
+        "started_first": dated[0][1] if dated else None,
+        "started_last": dated[-1][1] if dated else None,
+        "models": models,
+        "model_groups": [_short_model(m) for m in models],
+        "n_gold": golds.pop() if len(golds) == 1 else None,
+        "git_commit": next(iter(commits))[:7] if len(commits) == 1 else None,
+    }
+
+
+def _run_config_meta(config_path: Path) -> dict[str, Any]:
+    """Run start time and commit from a run's config.json, empty when absent.
+
+    scored.json records when scoring ran; config.json records when the eval
+    run itself started, which is the identity the dashboard card reports.
+    """
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    meta: dict[str, Any] = {}
+    started = _text(data.get("created_utc"))
+    if started:
+        meta["run_started_utc"] = started
+    commit = _text(data.get("git_commit"))
+    if commit:
+        meta["git_commit"] = commit
+    return meta
+
+
 def build_metrics(
     scored_runs: Iterable[dict[str, Any]],
     *,
@@ -754,6 +851,7 @@ def build_metrics(
         "synthetic": synthetic,
         "source": source,
         "n_configs": len(configs),
+        "run_instance": build_run_instance(scored_runs, synthetic=synthetic),
         "robustness": build_robustness(scored_runs),
         "configs": configs,
         "config_ids": [c["id"] for c in configs],
@@ -806,7 +904,9 @@ def load_from_run_ids(run_ids: Iterable[str]) -> dict[str, Any]:
         if not path.exists():
             missing.append(run_id)
             continue
-        runs.append(load_scored_json(path))
+        runs.append(
+            {**load_scored_json(path), **_run_config_meta(run_config_path(run_id))}
+        )
     if missing:
         raise FileNotFoundError(
             "Missing scored.json for: " + ", ".join(missing)
@@ -820,7 +920,12 @@ def load_from_run_ids(run_ids: Iterable[str]) -> dict[str, Any]:
 
 def load_from_scored_paths(paths: Iterable[Path]) -> dict[str, Any]:
     """Load one or more scored.json paths into dashboard metrics."""
-    runs = [load_scored_json(Path(p)) for p in paths]
+    runs: list[dict[str, Any]] = []
+    for raw_path in paths:
+        path = Path(raw_path)
+        runs.append(
+            {**load_scored_json(path), **_run_config_meta(path.parent / "config.json")}
+        )
     return build_metrics(
         runs,
         synthetic=False,
