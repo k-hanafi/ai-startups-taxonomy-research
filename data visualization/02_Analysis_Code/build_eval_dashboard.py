@@ -103,20 +103,25 @@ code {
 /* App bar */
 .appbar {
   display: flex;
-  align-items: baseline;
+  flex-wrap: wrap;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
+  gap: 10px 24px;
   border-bottom: 1px solid var(--border);
   padding: 18px 36px;
 }
 .brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.015em;
   color: var(--text);
 }
 .brand small {
-  margin-left: 12px;
+  margin-left: 0;
   font-size: 12px;
   font-weight: 400;
   color: var(--muted);
@@ -126,6 +131,9 @@ code {
   font-family: var(--mono);
   color: var(--muted);
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Tab bar */
@@ -311,6 +319,29 @@ table.mini td.mono { font-family: var(--mono); font-size: 12px; }
 .mini-status.pass { color: var(--pass); }
 .mini-status.fail { color: var(--fail); }
 .mini-status.pending { color: var(--pending); }
+
+/* Shared filter shell (benchmarks + confidence; hidden on robustness) */
+.filter-shell {
+  border-bottom: 1px solid var(--border);
+  padding: 14px 36px 10px;
+  background: var(--bg);
+}
+.filter-shell[hidden] { display: none !important; }
+.filter-shell-inner { max-width: 1160px; margin: 0 auto; }
+.filter-shell .toolbar { padding-bottom: 8px; }
+.toolbar-hint {
+  width: 100%;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: -2px;
+  margin-bottom: 4px;
+}
+th.gloss {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--muted);
+}
 
 /* Toolbar */
 .toolbar {
@@ -588,9 +619,12 @@ footer {
 }
 
 @media (max-width: 720px) {
-  .appbar, .tabs { padding-left: 18px; padding-right: 18px; }
+  .appbar, .tabs, .filter-shell { padding-left: 18px; padding-right: 18px; }
   .notice { margin: 14px 18px 0; }
   .content { padding: 20px 18px 56px; }
+  .appbar-meta { white-space: normal; }
+  .tabs { flex-wrap: wrap; }
+  .tab { padding: 10px 10px; font-size: 12.5px; }
   .toolbar-right { width: 100%; margin-left: 0; }
   .search { width: 100%; }
   .chart, .chart.short { height: 240px; }
@@ -831,6 +865,18 @@ function emptyChart(id, msg) {
   el.innerHTML = '<div class="empty">' + msg + '</div>';
 }
 
+const NO_CONFIGS_MSG =
+  'No configurations selected. Use the filters above to show at least one configuration.';
+
+function emptyChartOrFilter(id, missingMsg) {
+  if (!visibleConfigs().length) {
+    emptyChart(id, NO_CONFIGS_MSG);
+    return true;
+  }
+  emptyChart(id, missingMsg);
+  return true;
+}
+
 // --- Row captions -----------------------------------------------------------
 
 function effortCaption(c) {
@@ -1026,7 +1072,10 @@ function renderReliability() {
   if (!host) return;
   const groups = calibrationGroups();
   if (!groups.length) {
-    emptyChart('chart-reliability', 'Reliability bins appear when a scored run carries calibration.reliability.bins (score with --confidence-from-raw).');
+    emptyChartOrFilter(
+      'chart-reliability',
+      'Reliability bins appear when a scored run carries calibration.reliability.bins (score with --confidence-from-raw).'
+    );
     return;
   }
   host.innerHTML = '';
@@ -1062,22 +1111,35 @@ function renderReliability() {
 }
 
 function renderEce() {
-  const runs = visibleConfigs().filter(c => !c.is_aggregate && c.ece != null);
+  // One bar per model: Pass A confidence is banked once and reused across efforts.
+  const seen = new Set();
+  const runs = [];
+  for (const c of visibleConfigs()) {
+    if (c.is_aggregate || c.ece == null || seen.has(c.model_group)) continue;
+    seen.add(c.model_group);
+    runs.push(c);
+  }
   const host = document.getElementById('chart-ece');
   if (!host) return;
-  if (!runs.length) { emptyChart('chart-ece', 'ECE appears when a scored run carries calibration (score with --confidence-from-raw).'); return; }
+  if (!runs.length) {
+    emptyChartOrFilter(
+      'chart-ece',
+      'ECE appears when a scored run carries calibration (score with --confidence-from-raw).'
+    );
+    return;
+  }
   host.innerHTML = '';
   Plotly.newPlot('chart-ece', [{
     type: 'bar',
-    x: runs.map(c => c.label),
+    x: runs.map(c => c.model_group),
     y: runs.map(c => 100 * c.ece),
     marker: {color: runs.map(c => colorFor(c)), opacity: 0.9},
     hovertemplate: '%{x}<br>ECE %{y:.2f} pp<extra></extra>',
   }], layout({
     yaxis: {title: {text: 'ECE, percentage points (lower is better)', font: axisFont}, gridcolor: '#222222', tickfont: numFont},
-    xaxis: {tickangle: -30, gridcolor: 'rgba(0,0,0,0)', tickfont: numFont},
+    xaxis: {tickangle: 0, gridcolor: 'rgba(0,0,0,0)', tickfont: numFont},
     showlegend: false,
-    margin: {l: 54, r: 12, t: 16, b: 80},
+    margin: {l: 54, r: 12, t: 16, b: 48},
   }), cfg);
 }
 
@@ -1093,7 +1155,10 @@ function renderSelective() {
     groups.push(c);
   }
   if (!groups.length) {
-    emptyChart('chart-selective', 'Selective-prediction curves appear when a scored run carries calibration.selective_prediction.');
+    emptyChartOrFilter(
+      'chart-selective',
+      'Selective-prediction curves appear when a scored run carries calibration.selective_prediction.'
+    );
     return;
   }
   host.innerHTML = '';
@@ -1131,6 +1196,8 @@ function showTab(name) {
   document.querySelectorAll('.panel').forEach(p => {
     p.classList.toggle('active', p.id === 'panel-' + name);
   });
+  const shell = document.getElementById('filter-shell');
+  if (shell) shell.hidden = (name === 'robustness');
   closeCostPopover();
   if (name === 'benchmarks') {
     setTimeout(() => { renderPareto(); renderLatency(); }, 30);
@@ -1193,6 +1260,7 @@ def _filter_toolbar_html(metrics: dict) -> str:
         )
     return f"""
 <div class="toolbar" id="config-filter">
+  <p class="toolbar-hint">Filters the model benchmarks table and the confidence charts.</p>
   <div class="toolbar-left">
     <span class="toolbar-label">Model family</span>
     {"".join(group_btns)}
@@ -1325,6 +1393,31 @@ def _run_instance_card_html(metrics: dict) -> str:
 """
 
 
+def _appbar_meta_html(metrics: dict) -> str:
+    """Short professor-facing label; full source path stays in the tooltip."""
+    n = int(metrics.get("n_configs") or 0)
+    source = str(metrics.get("source") or "fixture")
+    label = (
+        f"{n} configurations · Mock matrix"
+        if metrics.get("synthetic")
+        else f"{n} configurations · Scored runs"
+    )
+    return (
+        f'<div class="appbar-meta" title="{html.escape(source)}">'
+        f"{html.escape(label)}</div>"
+    )
+
+
+def _footer_times_note(metrics: dict) -> str:
+    """Footer should not claim run times exist when the card has none."""
+    run = metrics.get("run_instance") or {}
+    if metrics.get("synthetic") or run.get("synthetic"):
+        return "run times appear on the card above when a scored run is loaded"
+    if run.get("started_first"):
+        return "run times are on the card above"
+    return "run times appear on the card above when recorded"
+
+
 def build_html(metrics: dict) -> str:
     today = datetime.date.today().isoformat()
     notice = _run_instance_card_html(metrics)
@@ -1334,8 +1427,8 @@ def build_html(metrics: dict) -> str:
         SCRIPT.replace("__M_JSON__", json.dumps(metrics, ensure_ascii=False))
         .replace("__GROUP_COLORS__", json.dumps(GROUP_COLORS))
     )
-    source = html.escape(str(metrics.get("source") or "fixture"))
-    n = metrics.get("n_configs", 0)
+    appbar_meta = _appbar_meta_html(metrics)
+    footer_times = _footer_times_note(metrics)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1353,7 +1446,7 @@ def build_html(metrics: dict) -> str:
 <body>
 <header class="appbar">
   <div class="brand">Classifier Eval Suite<small>AI-native startup classifier</small></div>
-  <div class="appbar-meta">{n} configurations &middot; {source}</div>
+  {appbar_meta}
 </header>
 
 <nav class="tabs" aria-label="Suite sections">
@@ -1364,14 +1457,21 @@ def build_html(metrics: dict) -> str:
 
 {notice}
 
+<div class="filter-shell" id="filter-shell" hidden>
+  <div class="filter-shell-inner">
+    {toolbar}
+  </div>
+</div>
+
 <main class="content">
   <section class="panel active" id="panel-robustness">
     <div class="tab-lead">
       <h2>Will this pipeline survive production?</h2>
       <p>Structural checks on the confidence pipeline: whether a confidence
       score was recovered for every golden-set company, the probability
-      mass behind each confidence value, and the transfer from the sync API
-      used in evaluation to the Batch API used at scale.</p>
+      mass behind each confidence value, and whether sync and Batch API
+      request shapes stay equivalent. Production classification runs on the
+      sync API; the parity check is about request equivalence, not pricing.</p>
     </div>
     {robustness_panel}
   </section>
@@ -1384,7 +1484,6 @@ def build_html(metrics: dict) -> str:
       production-practice metric (sync API wall-clock), not a model-quality
       score.</p>
     </div>
-    {toolbar}
     <div class="table-wrap">
       <table class="grid" id="leaderboard">
         <thead>
@@ -1393,7 +1492,7 @@ def build_html(metrics: dict) -> str:
             <th>Configuration</th>
             <th class="num">Subclass accuracy</th>
             <th class="num">AI-native</th>
-            <th class="num">RAD</th>
+            <th class="num gloss" title="Resource-Adjusted AI Dependency: how dependent the company is on foundation-model providers">RAD</th>
             <th class="num">Mean confidence</th>
             <th class="num">Projected cost</th>
             <th class="num">Latency p50</th>
@@ -1440,8 +1539,10 @@ def build_html(metrics: dict) -> str:
     <div class="card">
       <div class="card-title">Expected calibration error</div>
       <div class="card-desc">The population-weighted gap between confidence
-      and accuracy across bins, per configuration. Lower is better; zero
-      means confidence values can be read as probabilities.</div>
+      and accuracy across bins, one bar per model. Pass A confidence is
+      banked once and reused across Pass B efforts, so effort cells for the
+      same model share this value. Lower is better; zero means confidence
+      can be read as a probability.</div>
       <div id="chart-ece" class="chart short"></div>
     </div>
     <div class="card">
@@ -1454,7 +1555,7 @@ def build_html(metrics: dict) -> str:
   </section>
 
   <footer>
-    Page built {today} (run times are on the card above) &middot; regenerate with
+    Page built {today} ({footer_times}) &middot; regenerate with
     <code>python -m evals dashboard</code> (synthetic fixture by default) or
     pass <code>--runs</code> / <code>--scored</code> to load real scored runs.
   </footer>

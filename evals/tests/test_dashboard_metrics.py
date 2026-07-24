@@ -847,6 +847,42 @@ def test_build_html_is_three_tab_suite():
     assert "internally consistent placeholders" in page
 
 
+def test_build_html_visual_qa_followups():
+    """Presentation fixes from the end-to-end visual pass before the paid run."""
+    _, mod = _load_eval_dashboard_builder()
+    page = mod.build_html(load_fixture(MOCK))
+
+    # App bar: short label, full source only in the tooltip.
+    assert "Mock matrix" in page
+    assert 'title="evals/tests/fixtures/dashboard/dashboard_mock_runs.json"' in page
+    assert "9 configurations · evals/tests/fixtures" not in page
+
+    # Shared filter shell (hidden on robustness, used by benchmarks + confidence).
+    assert 'id="filter-shell"' in page
+    assert "Filters the model benchmarks table and the confidence charts." in page
+    # Toolbar is no longer nested only inside the benchmarks panel.
+    bench = page.split('id="panel-benchmarks"', 1)[1].split('id="panel-confidence"', 1)[0]
+    assert 'id="config-filter"' not in bench
+
+    # Sync production story: parity stays, "Batch at scale" billing language goes.
+    assert "Batch API used at scale" not in page
+    assert "request shapes stay equivalent" in page
+    assert "parity check is about request equivalence, not pricing" in page
+
+    # Cleared filters must not pretend calibration is missing.
+    assert "No configurations selected. Use the filters above" in page
+    assert "emptyChartOrFilter" in page
+
+    # ECE is one bar per model (bank-once Pass A), not nine effort cells.
+    assert "one bar per model" in page
+    assert "seen.has(c.model_group)" in page
+
+    # RAD gloss for non-CS readers; softer footer on synthetic.
+    assert "Resource-Adjusted AI Dependency" in page
+    assert "run times appear on the card above when a scored run is loaded" in page
+    assert "run times are on the card above" not in page
+
+
 def test_finalize_html_is_self_contained_for_email():
     """Written pages must open offline: Plotly inlined, no CDN fonts or scripts.
 
