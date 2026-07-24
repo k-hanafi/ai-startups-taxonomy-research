@@ -122,8 +122,13 @@ def load_frame(paths: Paths) -> tuple[pd.DataFrame, dict]:
         base["evidence_source"] = np.where(base["CompanyID"].isin(dead_ids), "dead_metadata", "live")
     else:
         base = _read(paths.corrected)
-        if "evidence_source" not in base:
-            base["evidence_source"] = np.where(base["CompanyID"].isin(dead_ids), "dead_metadata", "live")
+        # Corrected CSV should carry evidence_source from merge_survivorship. If an
+        # older export omitted it, target-list members are recovered archive dead
+        # (wayback_dead), not metadata stand-ins.
+        if "evidence_source" not in base.columns:
+            base["evidence_source"] = np.where(
+                base["CompanyID"].isin(dead_ids), "wayback_dead", "live"
+            )
 
     # Static metadata join (funding, category, founded, liveness).
     meta_cols = ["org_uuid", "founded_date", "employee_count", "total_funding_usd",
@@ -481,6 +486,9 @@ def _flips(f: pd.DataFrame, paths: Paths, preview: bool) -> dict:
         return {"available": False, "reason": "preview" if preview else "no production csv"}
     before = _read(paths.production).set_index("CompanyID")
     dead = f[f["is_dead_recovered"]]
+    # Skip IDs absent from production: reindex NaNs cast to "nan" and look like
+    # flips even though there is no before-label to compare.
+    dead = dead[dead["CompanyID"].isin(before.index)]
     n = int(len(dead))
     out = {"available": True, "n": n}
     for col in ("ai_native", "subclass", "rad_score"):

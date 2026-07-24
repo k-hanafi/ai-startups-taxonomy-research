@@ -32,7 +32,9 @@ from types import ModuleType
 import pandas as pd
 
 _HERE = Path(__file__).resolve().parent
-_PROJECT_ROOT = _HERE.parents[1]
+# Same idiom as build_classification_dashboard.py: file -> Analysis_Code ->
+# data visualization -> repo root.
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_PATH = (
     _PROJECT_ROOT / "data visualization" / "01_Presentation_Materials" / "v1_alive_dead_cohort.html"
 )
@@ -929,7 +931,10 @@ def build_html(mb: dict, ms: dict, filter_data: dict) -> str:
     sig_subclasses = ([t["subclass"] for t in tests.get("tests", []) if t.get("significant")]
                       if tests.get("available") else [])
     funnel = ms["funnel"]
-    n_not_found = funnel["stages"][0]["n"] if funnel["stages"] else 0
+    n_not_found = next(
+        (s["n"] for s in funnel.get("stages", []) if s["label"] == "Not found by Tavily"),
+        0,
+    )
     today = datetime.date.today().strftime("%b %d, %Y")
 
     # Median confidence is 5 (over half the universe self-reports 5), which
@@ -980,13 +985,21 @@ def build_html(mb: dict, ms: dict, filter_data: dict) -> str:
         flip_line = ("Flip analysis runs once the evidence-based verdicts land: it will quantify "
                      "how often recovered evidence overturns a metadata-only label.")
 
-    sig_line = (
-        f'BH-significant subclasses at alpha {tests["alpha"]}: '
-        f'<strong>{", ".join(sig_subclasses)}</strong> '
-        f'(omnibus chi-square p = {tests["chi2"]["pvalue"]:.2e}).'
-        if tests.get("available") and sig_subclasses
-        else "Significance annotations unavailable for this run."
-    )
+    if tests.get("available"):
+        chi_p = tests["chi2"]["pvalue"]
+        if sig_subclasses:
+            sig_line = (
+                f'BH-significant subclasses at alpha {tests["alpha"]}: '
+                f'<strong>{", ".join(sig_subclasses)}</strong> '
+                f'(omnibus chi-square p = {chi_p:.2e}).'
+            )
+        else:
+            sig_line = (
+                f'No subclass passed BH at alpha {tests["alpha"]} '
+                f'(omnibus chi-square p = {chi_p:.2e}).'
+            )
+    else:
+        sig_line = "Significance annotations unavailable for this run."
 
     rad_headline = ""
     rad_line = ""
