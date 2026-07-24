@@ -1,6 +1,6 @@
 {
   "synthetic": true,
-  "note": "SYNTHETIC locked-matrix mock for the Classifier Eval Suite. Numbers are design placeholders, not measured eval results. Pass A metrics (ai_native accuracy, calibration, confidence, robustness) are identical across Pass B efforts within each model, matching the bank-once Pass A design. Calibration blocks (reliability bins, ECE, selective curve, mean confidence, share above 0.9) were all computed from the same 100 synthetic per-row confidence/correctness pairs per model, so every derived number recomputes from every other; nano seeds the documented early signal (ECE near 0.077, top-half confidence fully correct). Cost blocks + production_cost_estimate ladders were generated with evals.cost_extrapolate.extrapolate_production_cost on synthetic token totals, so the popover arithmetic recomputes exactly to the displayed projected $. Replace by loading real evals/runs/*/scored.json after the paid sweep.",
+  "note": "SYNTHETIC locked-matrix mock for the Classifier Eval Suite. Numbers are design placeholders, not measured eval results. Pass A metrics (ai_native accuracy, calibration, confidence, robustness) are identical across Pass B efforts within each model, matching the bank-once Pass A design. Calibration blocks (reliability bins, ECE, selective curve, mean confidence, share above 0.9) were all computed from the same 100 synthetic per-row confidence/correctness pairs per model, so every derived number recomputes from every other; nano seeds the documented early signal (ECE near 0.077, top-half confidence fully correct). Cost blocks + production_cost_estimate ladders were generated with evals.cost_extrapolate.extrapolate_production_cost on synthetic token totals, so the popover arithmetic recomputes exactly to the displayed projected $ (sync Responses API pricing with the cache discount; no Batch API discount, since production two-pass runs sync). Replace by loading real evals/runs/*/scored.json after the paid sweep.",
   "scored_runs": [
     {
       "run_id": "mock_gpt-5.4-nano_low_r1",
@@ -57,11 +57,10 @@
           "n_golden": 100,
           "model": "gpt-5.4-nano",
           "architecture": "classification",
-          "batch_discount": 0.5,
           "cache_discount": 0.5,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -84,30 +83,21 @@
             "mean_usd_per_row": 0.004625000000000001,
             "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
           },
-          "3_batch": {
-            "label": "batch_adjustment",
-            "available": true,
-            "batch_discount": 0.5,
-            "total_usd_after_batch": 0.23125,
-            "mean_usd_per_row": 0.0023125000000000003,
-            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
-          },
-          "4_scale": {
+          "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
             "n_prod": 41076,
             "n_prod_label": "alive_plus_dead",
             "scale_factor": 410.76,
-            "estimated_production_usd": 94.98825000000001,
-            "estimated_usd_per_company": 0.0023125000000000003,
-            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "estimated_production_usd": 189.97650000000002,
+            "estimated_usd_per_company": 0.004625000000000001,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 0.5575,
           "golden_after_cache_usd": 0.4625,
-          "golden_after_batch_usd": 0.23125,
-          "estimated_production_usd": 94.98825000000001,
+          "estimated_production_usd": 189.97650000000002,
           "cache_hit_rate": 0.76,
           "n_prod": 41076
         }
@@ -379,11 +369,10 @@
           "n_golden": 100,
           "model": "gpt-5.4-nano",
           "architecture": "classification",
-          "batch_discount": 0.5,
           "cache_discount": 0.5,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -406,30 +395,21 @@
             "mean_usd_per_row": 0.005750000000000001,
             "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
           },
-          "3_batch": {
-            "label": "batch_adjustment",
-            "available": true,
-            "batch_discount": 0.5,
-            "total_usd_after_batch": 0.28750000000000003,
-            "mean_usd_per_row": 0.0028750000000000004,
-            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
-          },
-          "4_scale": {
+          "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
             "n_prod": 41076,
             "n_prod_label": "alive_plus_dead",
             "scale_factor": 410.76,
-            "estimated_production_usd": 118.0935,
-            "estimated_usd_per_company": 0.002875,
-            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "estimated_production_usd": 236.187,
+            "estimated_usd_per_company": 0.00575,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 0.67,
           "golden_after_cache_usd": 0.5750000000000001,
-          "golden_after_batch_usd": 0.28750000000000003,
-          "estimated_production_usd": 118.0935,
+          "estimated_production_usd": 236.187,
           "cache_hit_rate": 0.76,
           "n_prod": 41076
         }
@@ -701,11 +681,10 @@
           "n_golden": 100,
           "model": "gpt-5.4-nano",
           "architecture": "classification",
-          "batch_discount": 0.5,
           "cache_discount": 0.5,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -728,30 +707,21 @@
             "mean_usd_per_row": 0.008525,
             "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
           },
-          "3_batch": {
-            "label": "batch_adjustment",
-            "available": true,
-            "batch_discount": 0.5,
-            "total_usd_after_batch": 0.42625,
-            "mean_usd_per_row": 0.0042625,
-            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
-          },
-          "4_scale": {
+          "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
             "n_prod": 41076,
             "n_prod_label": "alive_plus_dead",
             "scale_factor": 410.76,
-            "estimated_production_usd": 175.08645,
-            "estimated_usd_per_company": 0.004262500000000001,
-            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "estimated_production_usd": 350.1729,
+            "estimated_usd_per_company": 0.008525000000000001,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 0.9475,
           "golden_after_cache_usd": 0.8525,
-          "golden_after_batch_usd": 0.42625,
-          "estimated_production_usd": 175.08645,
+          "estimated_production_usd": 350.1729,
           "cache_hit_rate": 0.76,
           "n_prod": 41076
         }
@@ -1023,11 +993,10 @@
           "n_golden": 100,
           "model": "gpt-5.4-mini",
           "architecture": "classification",
-          "batch_discount": 0.5,
           "cache_discount": 0.5,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -1050,30 +1019,21 @@
             "mean_usd_per_row": 0.014092499999999999,
             "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
           },
-          "3_batch": {
-            "label": "batch_adjustment",
-            "available": true,
-            "batch_discount": 0.5,
-            "total_usd_after_batch": 0.704625,
-            "mean_usd_per_row": 0.0070462499999999996,
-            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
-          },
-          "4_scale": {
+          "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
             "n_prod": 41076,
             "n_prod_label": "alive_plus_dead",
             "scale_factor": 410.76,
-            "estimated_production_usd": 289.431765,
-            "estimated_usd_per_company": 0.0070462499999999996,
-            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "estimated_production_usd": 578.86353,
+            "estimated_usd_per_company": 0.014092499999999999,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 1.7654999999999998,
           "golden_after_cache_usd": 1.40925,
-          "golden_after_batch_usd": 0.704625,
-          "estimated_production_usd": 289.431765,
+          "estimated_production_usd": 578.86353,
           "cache_hit_rate": 0.76,
           "n_prod": 41076
         }
@@ -1345,11 +1305,10 @@
           "n_golden": 100,
           "model": "gpt-5.4-mini",
           "architecture": "classification",
-          "batch_discount": 0.5,
           "cache_discount": 0.5,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -1372,30 +1331,21 @@
             "mean_usd_per_row": 0.0200775,
             "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
           },
-          "3_batch": {
-            "label": "batch_adjustment",
-            "available": true,
-            "batch_discount": 0.5,
-            "total_usd_after_batch": 1.003875,
-            "mean_usd_per_row": 0.01003875,
-            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
-          },
-          "4_scale": {
+          "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
             "n_prod": 41076,
             "n_prod_label": "alive_plus_dead",
             "scale_factor": 410.76,
-            "estimated_production_usd": 412.351695,
-            "estimated_usd_per_company": 0.01003875,
-            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "estimated_production_usd": 824.70339,
+            "estimated_usd_per_company": 0.0200775,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 2.364,
           "golden_after_cache_usd": 2.00775,
-          "golden_after_batch_usd": 1.003875,
-          "estimated_production_usd": 412.351695,
+          "estimated_production_usd": 824.70339,
           "cache_hit_rate": 0.76,
           "n_prod": 41076
         }
@@ -1667,11 +1617,10 @@
           "n_golden": 100,
           "model": "gpt-5.4-mini",
           "architecture": "classification",
-          "batch_discount": 0.5,
           "cache_discount": 0.5,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -1694,30 +1643,21 @@
             "mean_usd_per_row": 0.028222499999999998,
             "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
           },
-          "3_batch": {
-            "label": "batch_adjustment",
-            "available": true,
-            "batch_discount": 0.5,
-            "total_usd_after_batch": 1.411125,
-            "mean_usd_per_row": 0.014111249999999999,
-            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
-          },
-          "4_scale": {
+          "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
             "n_prod": 41076,
             "n_prod_label": "alive_plus_dead",
             "scale_factor": 410.76,
-            "estimated_production_usd": 579.633705,
-            "estimated_usd_per_company": 0.014111249999999999,
-            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "estimated_production_usd": 1159.26741,
+            "estimated_usd_per_company": 0.028222499999999998,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 3.1785,
           "golden_after_cache_usd": 2.82225,
-          "golden_after_batch_usd": 1.411125,
-          "estimated_production_usd": 579.633705,
+          "estimated_production_usd": 1159.26741,
           "cache_hit_rate": 0.76,
           "n_prod": 41076
         }
@@ -1989,11 +1929,10 @@
           "n_golden": 100,
           "model": "gpt-5.6-luna",
           "architecture": "classification",
-          "batch_discount": 0.5,
           "cache_discount": 0.5,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -2016,30 +1955,21 @@
             "mean_usd_per_row": 0.04771000000000001,
             "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
           },
-          "3_batch": {
-            "label": "batch_adjustment",
-            "available": true,
-            "batch_discount": 0.5,
-            "total_usd_after_batch": 2.3855000000000004,
-            "mean_usd_per_row": 0.023855000000000005,
-            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
-          },
-          "4_scale": {
+          "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
             "n_prod": 41076,
             "n_prod_label": "alive_plus_dead",
             "scale_factor": 410.76,
-            "estimated_production_usd": 979.8679800000001,
-            "estimated_usd_per_company": 0.023855,
-            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "estimated_production_usd": 1959.7359600000002,
+            "estimated_usd_per_company": 0.04771,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 5.246,
           "golden_after_cache_usd": 4.771000000000001,
-          "golden_after_batch_usd": 2.3855000000000004,
-          "estimated_production_usd": 979.8679800000001,
+          "estimated_production_usd": 1959.7359600000002,
           "cache_hit_rate": 0.76,
           "n_prod": 41076
         }
@@ -2311,11 +2241,10 @@
           "n_golden": 100,
           "model": "gpt-5.6-luna",
           "architecture": "classification",
-          "batch_discount": 0.5,
           "cache_discount": 0.5,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -2338,30 +2267,21 @@
             "mean_usd_per_row": 0.07057000000000001,
             "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
           },
-          "3_batch": {
-            "label": "batch_adjustment",
-            "available": true,
-            "batch_discount": 0.5,
-            "total_usd_after_batch": 3.5285,
-            "mean_usd_per_row": 0.035285000000000004,
-            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
-          },
-          "4_scale": {
+          "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
             "n_prod": 41076,
             "n_prod_label": "alive_plus_dead",
             "scale_factor": 410.76,
-            "estimated_production_usd": 1449.3666600000001,
-            "estimated_usd_per_company": 0.035285000000000004,
-            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "estimated_production_usd": 2898.7333200000003,
+            "estimated_usd_per_company": 0.07057000000000001,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 7.532,
           "golden_after_cache_usd": 7.057,
-          "golden_after_batch_usd": 3.5285,
-          "estimated_production_usd": 1449.3666600000001,
+          "estimated_production_usd": 2898.7333200000003,
           "cache_hit_rate": 0.76,
           "n_prod": 41076
         }
@@ -2633,11 +2553,10 @@
           "n_golden": 100,
           "model": "gpt-5.6-luna",
           "architecture": "classification",
-          "batch_discount": 0.5,
           "cache_discount": 0.5,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "batch_discount on all tokens; cache_discount additionally on cached input portion (cached input = sync_input * batch * cache)",
+          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -2660,30 +2579,21 @@
             "mean_usd_per_row": 0.10225,
             "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
           },
-          "3_batch": {
-            "label": "batch_adjustment",
-            "available": true,
-            "batch_discount": 0.5,
-            "total_usd_after_batch": 5.1125,
-            "mean_usd_per_row": 0.051125,
-            "note": "Production Batch API at 50% of sync. Applied to the cache-adjusted golden total."
-          },
-          "4_scale": {
+          "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
             "n_prod": 41076,
             "n_prod_label": "alive_plus_dead",
             "scale_factor": 410.76,
-            "estimated_production_usd": 2100.0105,
-            "estimated_usd_per_company": 0.051125,
-            "note": "Linear scale × (41076 / 100). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "estimated_production_usd": 4200.021,
+            "estimated_usd_per_company": 0.10225,
+            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 10.7,
           "golden_after_cache_usd": 10.225,
-          "golden_after_batch_usd": 5.1125,
-          "estimated_production_usd": 2100.0105,
+          "estimated_production_usd": 4200.021,
           "cache_hit_rate": 0.76,
           "n_prod": 41076
         }

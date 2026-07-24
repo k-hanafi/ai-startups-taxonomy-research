@@ -65,8 +65,9 @@ def test_fixture_rows_carry_chart_fields():
     assert row["kind"] == "classification"
     assert 0.8 < row["subclass_acc"] < 0.9
     # Fixture ladders are generated with the real extrapolation formula, so
-    # the projected $ is the exact step-4 output (displays as $412).
-    assert row["projected_usd"] == pytest.approx(412.3517, abs=1e-3)
+    # the projected $ is the exact scale-step output (displays as $825:
+    # sync Responses API pricing, no batch discount).
+    assert row["projected_usd"] == pytest.approx(824.7034, abs=1e-3)
     assert row["latency_p50"] == 4.6
     assert row["share_above_90"] == 0.61
     assert row["ece"] == pytest.approx(0.046185)
@@ -325,10 +326,10 @@ def test_fixture_cost_breakdowns_recompute_to_displayed_total():
             b["total_cached_tokens"] / b["total_input_tokens"]
         ), c["id"]
 
-        # Step 3: batch discount, step 4: scale to production N.
-        after_batch = after_cache * b["batch_discount"]
-        assert after_batch == pytest.approx(b["golden_after_batch_usd"]), c["id"]
-        projected = after_batch * (b["n_prod"] / b["n_golden"])
+        # Step 3: scale the cache-adjusted sync total to production N.
+        # No batch discount: production runs the sync Responses API.
+        assert "batch_discount" not in b, c["id"]
+        projected = after_cache * (b["n_prod"] / b["n_golden"])
         assert projected == pytest.approx(b["estimated_production_usd"]), c["id"]
         assert projected == pytest.approx(c["projected_usd"]), c["id"]
 
@@ -404,7 +405,6 @@ def test_cost_breakdown_marks_unavailable_ladder_without_fabricating():
                 "n_prod_label": "alive_plus_dead",
                 "n_golden": 100,
                 "model": "gpt-5.4-nano",
-                "batch_discount": 0.5,
                 "cache_discount": 0.5,
                 "cache_source": "unavailable_legacy_run_missing_cached_tokens",
             },
@@ -422,8 +422,7 @@ def test_cost_breakdown_marks_unavailable_ladder_without_fabricating():
                     "cache_hit_rate": None,
                     "total_usd_after_cache": None,
                 },
-                "3_batch": {"available": False, "total_usd_after_batch": None},
-                "4_scale": {"available": False, "estimated_production_usd": None},
+                "3_scale": {"available": False, "estimated_production_usd": None},
             },
             "golden_sync_usd": 0.325,
         },
@@ -438,7 +437,6 @@ def test_cost_breakdown_marks_unavailable_ladder_without_fabricating():
     assert b["total_cached_tokens"] is None
     assert b["cache_hit_rate"] is None
     assert b["golden_after_cache_usd"] is None
-    assert b["golden_after_batch_usd"] is None
     assert b["estimated_production_usd"] is None
     assert b["per_pass"] is None
     assert "cached_tokens" in b["cache_step_reason"]
@@ -484,7 +482,7 @@ def test_config_row_from_minimal_scored_stub():
         },
         "production_cost_estimate": {
             "available": True,
-            "steps": {"4_scale": {"available": True, "estimated_production_usd": 120.5}},
+            "steps": {"3_scale": {"available": True, "estimated_production_usd": 120.5}},
         },
         "latency": {"latency_s": {"p50": 3.0, "p95": 7.0}},
         "calibration": None,
@@ -733,7 +731,10 @@ def test_build_html_includes_cost_breakdown_popover():
     assert "not recorded" in html
     # Breakdown payloads ride along in the embedded metrics JSON.
     assert '"cost_breakdown"' in html
-    assert '"golden_after_batch_usd"' in html
+    assert '"golden_after_cache_usd"' in html
+    # Batch pricing is gone from cost estimates (production runs sync).
+    assert '"golden_after_batch_usd"' not in html
+    assert "Batch API &times;" not in html
 
 
 def test_committed_html_includes_cost_breakdown_popover():

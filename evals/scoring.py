@@ -13,7 +13,7 @@ token summary that sizes MAX_OUTPUT_TOKENS and the cost model (gate Q6),
 and wall-clock latency distributions when the run recorded them (pivot 7;
 older banked runs score unchanged with latency: null). When predictions
 carry ``cached_tokens`` (pivot 8), ``production_cost_estimate`` adds the
-cache → batch → scale ladder for a production-N projection; legacy runs
+cache → scale ladder (sync pricing) for a production-N projection; legacy runs
 without that field mark the cache step unavailable instead of inventing
 a hit rate.
 
@@ -274,8 +274,8 @@ def cost_and_tokens(records: list[dict[str, Any]], model: str) -> dict[str, Any]
     if cache_present:
         pricing_note = (
             "Sync list price on total input tokens (no cache discount in this "
-            "block). See production_cost_estimate for the cache → batch → "
-            "scale ladder. Reasoning tokens are inside output_tokens."
+            "block). See production_cost_estimate for the cache → scale "
+            "ladder (sync pricing). Reasoning tokens are inside output_tokens."
         )
     else:
         pricing_note = (

@@ -41,8 +41,8 @@ cherry-picked as the base of this branch).
      latency (latency labeled as a production-practice metric). Carry
      over: the experiments leaderboard table, model-group filter chips +
      search, Pareto chart, latency p50/p95 chart, and the cost-breakdown
-     popover ladder (per-pass tokens x prices -> cache -> batch -> scale
-     to production N) on every cost value.
+     popover ladder (per-pass tokens x prices -> cache -> scale to
+     production N, priced at sync Responses API rates) on every cost value.
    - **Confidence correctness correlation**: answers "how correlated is
      logprob confidence with actual correctness?" Content: reliability
      diagram (binned confidence vs accuracy), ECE per config,
@@ -104,9 +104,16 @@ Question: which GPT-family model should production use?
   (label + model, effort, n scored, partial badge), subclass accuracy +
   inline bar, AI-native accuracy, RAD accuracy, mean confidence, projected
   production cost with the cost-breakdown popover (per-pass tokens x
-  prices -> cache -> batch -> scale to production N) on every cost value,
+  prices -> cache -> scale to production N) on every cost value,
   latency p50 (labeled as a production-practice metric, not a quality
   metric).
+- Cost estimates assume the sync Responses API, not the Batch API:
+  production two-pass classification will run sync because it is faster
+  and far simpler than orchestrating async dependencies between Pass A
+  and Pass B through batch jobs. The prompt-cache discount stays (caching
+  applies to the sync API); no 50% batch discount is applied anywhere in
+  the ladder, so projected totals are roughly double the old batch-priced
+  ones. That is deliberate honesty, not an error.
 - Pareto chart: projected production $ (log x) vs subclass accuracy, CI
   whiskers, partial-run markers.
 - Latency chart: p50/p95 grouped bars per config, production-practice

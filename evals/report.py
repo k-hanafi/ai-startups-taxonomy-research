@@ -35,7 +35,7 @@ def _step_row(label: str, value: str, note: str = "") -> str:
 
 
 def render_cost_html(run_id: str, estimate: dict) -> str:
-    """Minimal static HTML for the five-step ladder (embeddable later)."""
+    """Minimal static HTML for the sync-priced cost ladder (embeddable later)."""
     assumptions = estimate.get("assumptions") or {}
     steps = estimate.get("steps") or {}
     rows: list[str] = []
@@ -63,33 +63,19 @@ def render_cost_html(run_id: str, estimate: dict) -> str:
             rows.append(
                 _step_row("2. Cache adjustment", "UNAVAILABLE", s2.get("reason", ""))
             )
-    s3 = steps.get("3_batch")
+    s3 = steps.get("3_scale")
     if s3:
         if s3.get("available"):
             rows.append(
                 _step_row(
-                    "3. After batch discount",
-                    f"${s3['total_usd_after_batch']:,.4f}",
+                    f"3. Scaled to N={s3['n_prod']:,}",
+                    f"${s3['estimated_production_usd']:,.2f}",
                     s3.get("note", ""),
                 )
             )
         else:
             rows.append(
-                _step_row("3. Batch adjustment", "UNAVAILABLE", s3.get("reason", ""))
-            )
-    s4 = steps.get("4_scale")
-    if s4:
-        if s4.get("available"):
-            rows.append(
-                _step_row(
-                    f"4. Scaled to N={s4['n_prod']:,}",
-                    f"${s4['estimated_production_usd']:,.2f}",
-                    s4.get("note", ""),
-                )
-            )
-        else:
-            rows.append(
-                _step_row("4. Scale to production", "UNAVAILABLE", s4.get("reason", ""))
+                _step_row("3. Scale to production", "UNAVAILABLE", s3.get("reason", ""))
             )
 
     avail = "available" if estimate.get("available") else "unavailable"
@@ -131,7 +117,7 @@ def render_cost_html(run_id: str, estimate: dict) -> str:
         ({html.escape(str(assumptions.get("n_prod_label")))})</li>
     <li>n_golden = {html.escape(str(assumptions.get("n_golden")))}</li>
     <li>Cache source: {html.escape(str(assumptions.get("cache_source")))}</li>
-    <li>Batch discount = {html.escape(str(assumptions.get("batch_discount")))},
+    <li>Sync Responses API pricing (no Batch API discount),
         cache discount = {html.escape(str(assumptions.get("cache_discount")))}</li>
     <li>Reasoning tokens billed inside output</li>
     <li>Do not use historical production cache rate

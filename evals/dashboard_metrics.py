@@ -123,7 +123,7 @@ def _projected_usd(scored: dict[str, Any]) -> Optional[float]:
     if not est:
         return None
     steps = est.get("steps") or {}
-    scale = steps.get("4_scale") or {}
+    scale = steps.get("3_scale") or {}
     if scale.get("available") and scale.get("estimated_production_usd") is not None:
         return float(scale["estimated_production_usd"])
     screen = scored.get("screen") or {}
@@ -148,8 +148,7 @@ def _cost_breakdown(scored: dict[str, Any]) -> Optional[dict[str, Any]]:
     steps = est.get("steps") or {}
     s1 = steps.get("1_golden_sync") or {}
     s2 = steps.get("2_cache") or {}
-    s3 = steps.get("3_batch") or {}
-    s4 = steps.get("4_scale") or {}
+    s3 = steps.get("3_scale") or {}
 
     def _f(value: Any) -> Optional[float]:
         return float(value) if value is not None else None
@@ -166,9 +165,8 @@ def _cost_breakdown(scored: dict[str, Any]) -> Optional[dict[str, Any]]:
         # with, so absent pricing renders as "not recorded" instead.
         "pricing_per_mtok": cost.get("pricing_per_mtok"),
         "n_golden": _i(assumptions.get("n_golden", s1.get("n_rows", cost.get("n_rows")))),
-        "n_prod": _i(assumptions.get("n_prod", s4.get("n_prod"))),
-        "n_prod_label": assumptions.get("n_prod_label") or s4.get("n_prod_label"),
-        "batch_discount": _f(assumptions.get("batch_discount", s3.get("batch_discount"))),
+        "n_prod": _i(assumptions.get("n_prod", s3.get("n_prod"))),
+        "n_prod_label": assumptions.get("n_prod_label") or s3.get("n_prod_label"),
         "cache_discount": _f(assumptions.get("cache_discount", s2.get("cache_discount"))),
         "cache_source": assumptions.get("cache_source"),
         "total_input_tokens": _i(
@@ -184,10 +182,9 @@ def _cost_breakdown(scored: dict[str, Any]) -> Optional[dict[str, Any]]:
         "golden_sync_usd": _f(s1.get("total_usd", est.get("golden_sync_usd"))),
         "cache_hit_rate": _f(s2.get("cache_hit_rate")),
         "golden_after_cache_usd": _f(s2.get("total_usd_after_cache")),
-        "golden_after_batch_usd": _f(s3.get("total_usd_after_batch")),
-        "scale_factor": _f(s4.get("scale_factor")),
-        "estimated_production_usd": _f(s4.get("estimated_production_usd")),
-        "estimated_usd_per_company": _f(s4.get("estimated_usd_per_company")),
+        "scale_factor": _f(s3.get("scale_factor")),
+        "estimated_production_usd": _f(s3.get("estimated_production_usd")),
+        "estimated_usd_per_company": _f(s3.get("estimated_usd_per_company")),
         "cache_step_reason": (
             s2.get("reason") if s2 and not s2.get("available") else None
         ),

@@ -684,14 +684,10 @@ function costBreakdownHtml(c) {
     html += '<tr><td>2 &middot; Cache adjustment</td><td class="val">' + NOT_RECORDED + '</td></tr>';
   }
 
-  html += '<tr><td>3 &middot; Batch API &times; ' +
-    (b.batch_discount != null ? b.batch_discount.toFixed(2) : '?') +
-    '</td><td class="val">' + usd(b.golden_after_batch_usd, 4) + '</td></tr>';
-
   const scaleBit = (b.n_prod != null && b.n_golden != null)
     ? '&times; (' + tok(b.n_prod) + ' / ' + tok(b.n_golden) + ')'
     : 'scale ' + (b.scale_factor != null ? '&times; ' + b.scale_factor : NOT_RECORDED);
-  html += '<tr class="total"><td>4 &middot; Scale to production ' + scaleBit +
+  html += '<tr class="total"><td>3 &middot; Scale to production ' + scaleBit +
     '</td><td class="val">' + usd(b.estimated_production_usd, 2) + '</td></tr>';
   html += '<tr><td>&nbsp;&nbsp;&nbsp; per company</td><td class="val">' +
     usd(b.estimated_usd_per_company, 4) + '</td></tr>';
@@ -699,6 +695,7 @@ function costBreakdownHtml(c) {
 
   const notes = [];
   if (b.n_prod_label) notes.push('N = ' + tok(b.n_prod) + ' (' + b.n_prod_label + ').');
+  notes.push('Sync Responses API pricing; production runs sync, so no Batch API discount is assumed.');
   notes.push('Reasoning tokens are billed inside output.');
   if (b.cache_source) notes.push('Cache rate: ' + b.cache_source.replaceAll('_', ' ') + '.');
   if (b.cache_step_reason) notes.push('Cache step unavailable: ' + b.cache_step_reason);
