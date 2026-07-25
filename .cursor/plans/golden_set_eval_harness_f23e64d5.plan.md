@@ -27,7 +27,7 @@ todos:
     content: "Stage 7: Batch parity smoke (gate Q4, PASS) + evals/scoring.py scorer — MERGED #16. Calibration wire-up (score --confidence-from-raw, chosen-digit confidence per pivot 6) — MERGED #18"
     status: completed
   - id: stage8-experiments
-    content: "Stage 8 (paid CLI): locked 9-cell matrix nano/mini/luna x Pass B low/medium/high; Pass A auto-banks once per model (evals/runs/pass_a_banks/<model>/, --rerun-pass-a escape); PASS_A_TOP_LOGPROBS=2 + both {0,1} required; pass_b_metrics + score --baseline. Science contracts on main via #25. Paid sweep next from main after auto-bank UX lands."
+    content: "Stage 8 (paid CLI): locked 9-cell matrix nano/mini/luna x Pass B low/medium/high; Pass A auto-banks once per model (evals/runs/pass_a_banks/<model>/, --rerun-pass-a escape); PASS_A_TOP_LOGPROBS=2 + both {0,1} required; pass_b_metrics + score --baseline. Science contracts on main via #25. Paid sweep driven by `python -m evals run-evals` (PR #34 cli-redesign)."
     status: pending
   - id: stage9-dashboard
     content: "Stage 9: LangSmith-light HTML dashboard: Pareto, ECE/selective/reliability, vs_baseline, finalist mean±range, config filter. Skeleton + mock (#22) + science charts (#24/#25) on main; real charts after Stage 8 runs"
@@ -42,14 +42,14 @@ isProject: false
 
 ## STATUS (source of truth — update after every PR merge / pivot)
 
-Last updated: **2026-07-12** (rename in flight: public CLI/module `run-classification` / `evals/classification.py`; Pass A auto-bank still default. Next = Stage 8 paid 9-cell from `main` after merge.)
+Last updated: **2026-07-25** (paid path is now `cost-preview` → `run-evals` → `open-dashboard` on `eval/cli-redesign` / PR #34, stacked on suite-redesign #33.)
 
 | Field | Value |
 |-------|--------|
 | **Last merged** | PR **#26** — Pass A auto-bank default on `main` (stable `pass_a_banks/<model>/`, `--rerun-pass-a` / `--pass-a-from` escapes, `matrix` without reuse flag). Prior: PR **#25** Stage 8 science stack. |
-| **Open now** | PR **#23** (`cursor/eval-dashboard-langsmith-ux-0263`) — separate LangSmith UX branch (do not delete). Rename branch `cursor/rename-two-pass-to-classification-c7d5`. |
-| **Working branch** | Rename branch → then `main` for paid Stage 8. |
-| **Next** | Paid **9-cell matrix** from `main`: for each model, run three `run-classification --effort-b {low,medium,high} --require-matrix-cell` (first cell creates the Pass A bank; later efforts auto-reuse). Score with `--confidence-from-raw` and `--baseline`. Use `python -m evals matrix` for the command list. Then real dashboard → report. |
+| **Open now** | PR **#33** (`eval/suite-redesign`) three-tab suite. PR **#34** (`eval/cli-redesign`) beginner paid CLI stacked on #33. |
+| **Working branch** | `eval/cli-redesign` (stacked on `eval/suite-redesign`). |
+| **Next** | Merge #33 then #34. Paid **9-cell matrix** via `python -m evals cost-preview` then `python -m evals run-evals` (banks Pass A ×3 in parallel, then 9 Pass B cells, scores, builds dashboard). Open results with `python -m evals open-dashboard`. Lower-level `matrix` / `run-classification` remain as escape hatches. |
 | **Gold labels** | Fable `draft_*` = provisional gold **accepted for the paid Stage 8 sweep** (user 2026-07-11; pivot 4; human review waived, `gold_verdict` stays 0/100 by design). No gold CSV edits this session. ONE full agent re-draft deferred to end of pipeline (pivot 5); all runs re-scored offline afterwards. |
 | **Orchestration mode** | Plan + this STATUS block = continuity. Fresh implementer chat per PR. Thin orchestrator chat for orientation only (no stage implementation dumps). |
 | **Architecture reminder** | Pass A/B classification is COMMITTED for production promotion (pivots 7–8). Pass A is banked once per model across Pass B effort arms (science invariant). `src/` classifier is still historically one-pass. Banked single-pass runs are reference points only. Do **not** start `src/` promotion until Stage 8–9 insights land. |
@@ -76,7 +76,7 @@ Last updated: **2026-07-12** (rename in flight: public CLI/module `run-classific
 
 ### In progress
 
-- **Paid matrix (next from `main`):** `python -m evals matrix` then `run-classification` per cell (Pass A auto-banks once per model). Provisional `draft_*` gold accepted for this sweep.
+- **Paid matrix:** `python -m evals run-evals` (PR #34). Provisional `draft_*` gold accepted for this sweep. Lower-level per-cell `run-classification` still available.
 
 ### Pending (in order) — NEXT STEPS
 

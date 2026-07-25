@@ -347,10 +347,19 @@ def run_confidence(raw_dir: Path) -> dict[str, float]:
     raw responses at all, so an explicit --confidence-from-raw request never
     silently degrades into a calibration-free score.
     """
+    raw_files = sorted(raw_dir.glob("*_a.json")) or sorted(raw_dir.glob("*.json"))
     rows = extract_run(raw_dir)
     if not rows:
+        if not raw_dir.exists() or not raw_files:
+            raise LogprobExtractionError(
+                f"no raw response files under {raw_dir}; this run cannot supply "
+                "logprob confidence (raw/ is git-ignored and machine-local)"
+            )
         raise LogprobExtractionError(
-            f"no raw response files under {raw_dir}; this run cannot supply "
-            "logprob confidence (raw/ is git-ignored and machine-local)"
+            f"raw responses under {raw_dir} exist ({len(raw_files)} file(s)) "
+            "but none yielded binary confidence: every decision token was "
+            "missing unmasked evidence for both {{0,1}} in top_logprobs. "
+            "Re-bank Pass A with a higher PASS_A_TOP_LOGPROBS, or pass "
+            "--allow-partial-confidence only for deliberate incomplete scoring."
         )
     return {row["custom_id"]: chosen_confidence(row) for row in rows}
