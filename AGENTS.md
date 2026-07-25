@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-24 · Active branch: `eval/suite-redesign` (Classifier Eval Suite: three-tab eval dashboard redesign with robustness checks, confidence correlation, run-instance card, kept instance archive)
+Last updated: 2026-07-25 · Active branch: `eval/cli-redesign` (paid eval CLI: `cost-preview` / `run-evals` / `open-dashboard`, stacked on `eval/suite-redesign`)
 
 ---
 
@@ -50,9 +50,10 @@ Authoritative plans (read when resuming a strand; committed under **`.cursor/pla
 - `.cursor/plans/survivorship_bias_wayback_*.plan.md` — death-anchored CDX probe (active survivorship strand).
 - `.cursor/plans/survivorship_tavily_pipeline_*.plan.md` — post-probe Tavily extract + classify pipeline.
 - `.cursor/plans/logprob_confidence_classifier_*.plan.md` — logprob-based confidence methodology (active).
-- `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; classification committed; #22 dashboard + #24/#25 science on `main`; provisional `draft_*` gold accepted for paid sweep; next = paid 9-cell matrix with Pass A auto-banked once per model).
+- `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; classification committed; #22 dashboard + #24/#25 science on `main`; provisional `draft_*` gold accepted for paid sweep; next = `python -m evals run-evals` for the paid 9-cell matrix).
 - `.cursor/plans/v1_alive_dead_dashboard.plan.md` — V1 alive-vs-dead dashboard PRD (implemented; evidence-only universe, 4-act survivorship section, coverage checklist for the retired insights dashboard).
 - `.cursor/plans/eval_suite_redesign.plan.md` — Classifier Eval Suite redesign contract + per-tab spec (implemented on `eval/suite-redesign`).
+- `.cursor/plans/eval_cli_redesign.plan.md` — beginner-friendly paid eval CLI (`cost-preview` / `run-evals` / `open-dashboard`) on `eval/cli-redesign`.
 
 Cursor writes new plans to `~/.cursor/plans/` by default; copy or sync them into **`.cursor/plans/`** in this repo so they are version-controlled. Legacy copies may still exist in **`plans/`** at repo root. Repo agent skills (committed): **`portfolio-git-messages`**, **`git-commit-batch-plan`**, **`code-structure`**, **`clean-my-repo`** under **`.cursor/skills/`**. **`.cursor/rules/`** stays local.
 
@@ -180,11 +181,13 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `dashboard_metrics.py` | Eval dashboard metrics: scored.json/fixture → chart metrics (ECE, reliability bins, selective curves, vs_baseline, Pass B isolating fields, finalist mean±range aggregates, per-config `cost_breakdown` for the cost popover) + `build_robustness` (tokenization / valid_mass / batch-parity checks with pass/fail/pending statuses, nothing fabricated) + `build_run_instance` (which run the page is for; start times read from each run's `config.json` `created_utc`). No OpenAI import. |
 | `tests/fixtures/dashboard/dashboard_mock_runs.json` | Synthetic locked matrix; Pass A metrics identical across efforts within each model (bank-once design); calibration blocks derive from one set of 100 synthetic rows per model (nano seeds the ECE ~0.077 early signal); per-run robustness blocks |
 | `instances.py` | Numbered dashboard archive: writes `eval_instance_NN.html` + `index.html` + `instances.json` under `01_Presentation_Materials/eval_instances/`; an instance is keyed on the runs behind it (start span + config ids), so rebuilding the same sweep replaces it instead of taking a new number. Also owns the run-headline / run-meta text shared with the suite header card. |
-| `config.py` | Locked matrix `EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`; `PASS_A_TOP_LOGPROBS=2` (binary); legacy `TOP_LOGPROBS` for old single-pass only |
-| `classification.py` | Pass A/B classification runner; Pass A auto-banks under `evals/runs/pass_a_banks/<model>/` (reuse by default; `--rerun-pass-a` / `--pass-a-from` escapes) |
+| `config.py` | Locked matrix `EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`; `PASS_A_TOP_LOGPROBS=5` (binary; depth 5 so opposing digit can appear when near-certain); legacy `TOP_LOGPROBS` for old single-pass only |
+| `classification.py` | Pass A/B classification runner + `bank_pass_a` (Pass-A-only); Pass A auto-banks under `evals/runs/pass_a_banks/<model>/` (reuse by default; `--rerun-pass-a` / `--pass-a-from` escapes) |
+| `cost_preview.py` | Offline matrix cost estimates (Pass A once per model + 9 Pass B cells + grand total); shared formula with classification `--dry-run` |
+| `orchestrate.py` | `run-evals` supervisor: phase-1 Pass A banks in parallel, then 9 cells in parallel, score, dashboard; rich live checklist; `open-dashboard` opens the instance index |
 | `logprob_extract.py` | Pass A confidence; requires both `{0,1}` candidates or marks unavailable |
 | `scoring.py` | End-to-end axes + `pass_b_metrics` (family-conditional subclass, AI-native-only RAD, boundary_disagreement); `--baseline` paired deltas; refuses partial confidence unless `--allow-partial-confidence` |
-| `__main__.py` | CLI: `run-classification` (paid matrix), `matrix` (list cells), `score`, `dashboard`; legacy `run` warns and is not the matrix path |
+| `__main__.py` | CLI: `cost-preview` / `run-evals` / `open-dashboard` (paid path); also `bank-pass-a`, `run-classification`, `matrix`, `score`, `dashboard`; legacy `run` warns and is not the matrix path |
 
 ### Other
 | Path | Purpose |
@@ -250,6 +253,11 @@ python scripts/run_tavily_crawl.py             # live homepage crawl
 
 pytest evals/tests -q                       # full eval harness (use OPENAI_API_KEY=placeholder)
 pytest evals/tests/test_dashboard_metrics.py   # dashboard metrics (no OpenAI key)
+# Paid matrix (beginner path). Key loads from keys/openai.env automatically.
+python -m evals cost-preview                    # per-config + total $ estimate (no API calls)
+python -m evals run-evals                       # bank Pass A → 9 cells → score → dashboard (live checklist)
+python -m evals open-dashboard                  # open eval_instances/index.html (newest run at top)
+# Lower-level / escape hatches:
 python -m evals matrix                          # list locked 9-cell matrix commands
 python -m evals run-classification --model gpt-5.4-nano --effort-b low --require-matrix-cell
 # later efforts for the same model auto-reuse Pass A (bank at evals/runs/pass_a_banks/<model>/)
@@ -260,6 +268,7 @@ python -m evals dashboard --save-instance       # also keep this mock build as e
 python -m evals score <run_id> --confidence-from-raw [--baseline <run_id>]
 python -m evals score <run_id> --allow-partial                 # incomplete n_scored only
 python -m evals score <run_id> --allow-partial-confidence      # incomplete raw confidence only
+python -m evals score <run_id> --confidence-from-raw --allow-missing-confidence  # accuracy even if no row has both {0,1}
 # legacy: python -m evals run  (single-pass; retired for matrix path; warns)```
 
 ## Conventions & invariants (don't break these)
@@ -291,7 +300,7 @@ python -m evals score <run_id> --allow-partial-confidence      # incomplete raw 
 | Alive-vs-dead dashboard / survivorship stats | `survivorship_analysis.py` (compute) + `build_v1_alive_dead_dashboard.py` (render); rebuild after `merge_survivorship.py` to leave PREVIEW mode |
 | Eval dashboard (Classifier Eval Suite) | `evals/dashboard_metrics.py` (metrics + robustness checks) + `build_eval_dashboard.py` (three tabs: robustness / benchmarks / confidence; mock fixture until paid matrix runs; `--runs` for real data) |
 | Kept dashboard builds / instance index | `evals/instances.py` (numbering, registry, index page) |
-| Eval matrix / scoring | `evals/config.py` (`EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`); `run-classification` (auto Pass A bank); `matrix`; `score --confidence-from-raw [--baseline]` |
+| Eval matrix / scoring | `evals/config.py` (`EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`); paid path `cost-preview` → `run-evals` → `open-dashboard` (`evals/orchestrate.py`); lower-level `run-classification` / `matrix` / `score --confidence-from-raw` |
 
 ## Maintaining this file
 

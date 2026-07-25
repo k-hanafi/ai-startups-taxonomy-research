@@ -595,3 +595,23 @@ def test_matrix_cli_omits_reuse_flag(capsys):
     assert "auto-reuses" in out or "auto-create" in out
     assert "--require-matrix-cell" in out
     assert "--rerun-pass-a" in out
+
+
+def test_bank_pass_a_incomplete_exit_not_indexerror(tmp_path, monkeypatch):
+    """When covers fails but the in-memory index looks full, still SystemExit."""
+    _patch_run_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(classification, "load_golden_rows", _golden_one_row)
+    monkeypatch.setattr(classification, "identity_hashes", _identity_hashes)
+    monkeypatch.setattr(classification, "_git_commit", lambda: "abc")
+    monkeypatch.setattr(classification, "OPENAI_API_KEY", "placeholder")
+    monkeypatch.setattr(classification, "OpenAI", lambda api_key: object())
+    monkeypatch.setattr(
+        classification, "_create",
+        lambda client, kwargs: _resp("completed", {"ai_native": 1}),
+    )
+    # Persist succeeds (bank_index full) but pretend disk coverage still fails.
+    monkeypatch.setattr(
+        classification, "pass_a_bank_covers", lambda *a, **k: False,
+    )
+    with pytest.raises(SystemExit, match="incomplete after run"):
+        classification.bank_pass_a("gpt-5.4-nano", limit=1)

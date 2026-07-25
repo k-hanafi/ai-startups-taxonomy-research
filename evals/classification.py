@@ -851,6 +851,99 @@ def run_classification(model: str = cfg.EVAL_MODELS[0],
     return run_id
 
 
+def bank_pass_a(
+    model: str,
+    limit: int | None = None,
+    dry_run: bool = False,
+) -> str:
+    """Bank Pass A for *model* only (no Pass B). Returns the bank run_id.
+
+    Idempotent: skips custom_ids already completed in the stable bank so a
+    re-run resumes. Used by ``run-evals`` phase 1 so all three models can
+    bank in parallel before the 9 Pass B cells start.
+    """
+    if limit is not None and limit < 1:
+        raise ValueError(f"--limit must be a positive row cap, got {limit}")
+
+    rows = load_golden_rows()
+    if limit is not None:
+        rows = rows[:limit]
+
+    bank_id = pass_a_bank_run_id(model)
+    prompt_a = load_pass_a_prompt()
+    custom_ids = [build_custom_id(r["org_uuid"]) for r in rows]
+
+    if dry_run:
+        from evals.cost_preview import estimate_pass_a
+
+        est = estimate_pass_a(model, rows)
+        logger.info(
+            "DRY RUN Pass A bank %s: model=%s rows=%d "
+            "~$%.4f (in ~%d + out ~%d)",
+            bank_id, model, est.n_rows, est.est_total_cost,
+            est.est_input_tokens, est.est_output_tokens,
+        )
+        return bank_id
+
+    run_dir(bank_id).mkdir(parents=True, exist_ok=True)
+    run_raw_dir(bank_id).mkdir(parents=True, exist_ok=True)
+    _ensure_pass_a_bank_config(bank_id, model, len(rows))
+    bank_index = _index_banked_pass_a(bank_id)
+
+    todo = [
+        r for r in rows
+        if build_custom_id(r["org_uuid"]) not in bank_index
+    ]
+    if not todo and pass_a_bank_covers(bank_id, custom_ids, index=bank_index):
+        logger.info(
+            "Pass A bank %s already covers %d rows; nothing to do",
+            bank_id, len(rows),
+        )
+        return bank_id
+
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    logger.info(
+        "Banking Pass A to %s: %d rows remaining (%s)",
+        bank_id, len(todo), model,
+    )
+    for i, row in enumerate(todo, start=1):
+        cid = build_custom_id(row["org_uuid"])
+        started_a = time.monotonic()
+        resp_a = _create(client, pass_a_kwargs(row, prompt_a, model))
+        latency_a_s = round(time.monotonic() - started_a, 3)
+        raw_a = resp_a.model_dump()
+        a = _parse_output(resp_a)
+        if a is not None and a.get("ai_native") in (0, 1):
+            _persist_pass_a_bank_row(
+                bank_id, model, cid, row["org_uuid"], resp_a, latency_a_s,
+                raw_a, index=bank_index,
+            )
+            logger.info(
+                "  [%d/%d] %s -> A=%s",
+                i, len(todo), str(row.get("name", ""))[:24], a["ai_native"],
+            )
+        else:
+            logger.warning(
+                "Pass A gave no usable verdict for %s (status=%s); "
+                "row will retry on resume",
+                cid, getattr(resp_a, "status", None),
+            )
+
+    if not pass_a_bank_covers(bank_id, custom_ids):
+        # Re-read disk: bank_index can disagree with pass_a_bank_covers if a
+        # row landed on disk outside this process's index.
+        on_disk = _index_banked_pass_a(bank_id)
+        missing = [cid for cid in custom_ids if cid not in on_disk]
+        example = missing[0] if missing else custom_ids[0]
+        raise SystemExit(
+            f"Pass A bank {bank_id!r} incomplete after run: "
+            f"{len(missing)} row(s) still missing (e.g. {example}). "
+            "Re-run bank-pass-a to resume."
+        )
+    logger.info("Pass A bank %s complete: %d rows", bank_id, len(rows))
+    return bank_id
+
+
 def matrix_cells() -> list[tuple[str, str]]:
     """Locked (model, Pass B effort) pairs in screen order."""
     return [
@@ -877,35 +970,28 @@ def validate_matrix_cell(model: str, effort_b: str) -> None:
 def _print_dry_run(rows: list[dict[str, Any]], prompt_a: str, model: str,
                    effort_b: str, run_id: str,
                    pass_a_bank_id: str | None = None) -> None:
-    pricing = cfg.require_model_pricing(model)
-    prompt_b1 = load_pass_b_prompt(1)
-    prompt_b0 = load_pass_b_prompt(0)
-    # ~4 chars/token; Pass B prompt size depends on the family, use the mean.
-    a_chars = sum(len(prompt_a) + len(pass_a_message(r)) for r in rows)
-    b_prompt_mean = (len(prompt_b1) + len(prompt_b0)) / 2
-    b_chars = sum(b_prompt_mean + len(format_user_message(r)) + 40 for r in rows)
-    n = len(rows)
+    # Single cost formula shared with ``python -m evals cost-preview``.
+    from evals.cost_preview import estimate_cell
+
+    include_pass_a = pass_a_bank_id is None
+    est = estimate_cell(
+        model, effort_b, rows, include_pass_a=include_pass_a
+    )
     if pass_a_bank_id:
-        est_input = b_chars / 4
-        est_out = n * cfg.PASS_B_OUTPUT_TOKEN_ESTIMATE.get(effort_b, 1_000)
-        logger.info("DRY RUN %s (Pass A reused from %s; input+output for Pass B only)",
-                    run_id, pass_a_bank_id)
-    else:
-        est_input = (a_chars + b_chars) / 4
-        est_out = (
-            n * cfg.PASS_A_OUTPUT_TOKEN_ESTIMATE
-            + n * cfg.PASS_B_OUTPUT_TOKEN_ESTIMATE.get(effort_b, 1_000)
+        logger.info(
+            "DRY RUN %s (Pass A reused from %s; input+output for Pass B only)",
+            run_id, pass_a_bank_id,
         )
+    else:
         logger.info("DRY RUN %s (Pass A + Pass B; no bank yet)", run_id)
-    est_in_cost = est_input / 1e6 * pricing["input"]
-    est_out_cost = est_out / 1e6 * pricing["output"]
     logger.info("  model=%s pass A effort=%s, pass B effort=%s, rows=%d",
-                model, cfg.PASS_A_EFFORT, effort_b, n)
+                model, cfg.PASS_A_EFFORT, effort_b, est.n_rows)
     logger.info(
         "  est input tokens ~%d (~$%.4f) + rough output/reasoning ~%d (~$%.4f) "
         "→ total ~$%.4f (output estimate is order-of-magnitude only)",
-        int(est_input), est_in_cost, int(est_out), est_out_cost,
-        est_in_cost + est_out_cost,
+        est.est_input_tokens, est.est_input_cost,
+        est.est_output_tokens, est.est_output_cost,
+        est.est_total_cost,
     )
     if effort_b in ("medium", "high"):
         logger.info(

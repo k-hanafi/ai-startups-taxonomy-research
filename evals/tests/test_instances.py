@@ -18,6 +18,7 @@ from evals.instances import (
     next_instance_number,
     render_index,
     run_meta_bits,
+    sync_index,
 )
 
 UTC = datetime.timezone.utc
@@ -210,3 +211,15 @@ def test_run_headline_and_meta_read_as_english():
 
 def test_run_headline_without_times_says_not_recorded():
     assert format_run_headline({"n_runs": 1}) == "Eval run, start time not recorded"
+
+
+def test_sync_index_drops_entries_whose_html_is_missing(tmp_path):
+    first = _archive(tmp_path, _metrics("2026-07-24T18:00:00+00:00"))
+    second = _archive(tmp_path, _metrics("2026-07-25T09:30:00+00:00"), minute=5)
+    second.path.unlink()
+
+    index = sync_index(tmp_path)
+    entries = load_registry(tmp_path)
+    assert [e["n"] for e in entries] == [1]
+    assert first.path.name in index.read_text(encoding="utf-8")
+    assert second.path.name not in index.read_text(encoding="utf-8")

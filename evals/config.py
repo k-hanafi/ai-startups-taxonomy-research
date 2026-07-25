@@ -64,10 +64,14 @@ COHORT_BOUNDARY: tuple[int, int] = (2023, 3)
 # Request parameters (experimental; production does not send these yet)
 # ---------------------------------------------------------------------------
 
-# Pass A is a binary {0,1} digit decision. Request depth 2 so both legal
-# values can appear in top_logprobs. Legacy TOP_LOGPROBS=15 was a single-pass
-# subclass leftover and must not drive Pass A or parity success criteria.
-PASS_A_TOP_LOGPROBS: int = 2
+# Pass A is a binary {0,1} digit decision. Request depth 5 so the opposing
+# digit can still appear when the model is near-certain (with depth 2 the
+# second slot is often whitespace, which makes confidence unavailable and
+# blocks score --confidence-from-raw). Extraction still requires both {0,1}
+# in the pool; it never invents mass for a missing digit. Legacy
+# TOP_LOGPROBS=15 was a single-pass subclass leftover and must not drive
+# Pass A or parity success criteria.
+PASS_A_TOP_LOGPROBS: int = 5
 # Kept for legacy single-pass runner / older banked runs only.
 TOP_LOGPROBS: int = 15
 LOGPROB_INCLUDE: list[str] = ["message.output_text.logprobs"]
