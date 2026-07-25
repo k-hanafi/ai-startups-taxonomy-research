@@ -35,7 +35,9 @@ from evals.jsonl_io import iter_jsonl
 from evals.paths import (
     EVAL_INSTANCES_DIR,
     PROJECT_ROOT,
+    RUNS_DIR,
     pass_a_bank_run_id,
+    run_config_path,
     run_dir,
     run_predictions_path,
     run_scored_path,
@@ -145,15 +147,24 @@ def _format_elapsed(seconds: float) -> str:
     return f"{h}h{m:02d}m"
 
 
-def spend_from_predictions(run_id: str, model: str) -> float:
-    """Sum billed USD from token fields already written into predictions.jsonl."""
+def spend_from_predictions(
+    run_id: str,
+    model: str,
+    *,
+    prefixes: tuple[str, ...] = ("a", "b"),
+) -> float:
+    """Sum billed USD from token fields already written into predictions.jsonl.
+
+    Pass ``prefixes=("a",)`` for Pass A banks and ``prefixes=("b",)`` for
+    Pass B cells so banked Pass A usage is not double-counted in the footer.
+    """
     path = run_predictions_path(run_id)
     if not path.exists():
         return 0.0
     pricing = cfg.require_model_pricing(model)
     total = 0.0
     for rec in iter_jsonl(path, tolerate_truncated_final=True):
-        for prefix in ("a", "b"):
+        for prefix in prefixes:
             inp = rec.get(f"{prefix}_input_tokens") or 0
             out = rec.get(f"{prefix}_output_tokens") or 0
             total += (inp / 1e6) * pricing["input"] + (out / 1e6) * pricing["output"]
@@ -172,6 +183,11 @@ def count_completed_predictions(run_id: str) -> int:
 
 
 def cell_already_scored(run_id: str, expected_n: int) -> bool:
+    """True only when this run was scored for exactly *expected_n* rows.
+
+    Exact match (not ≥) so a finished full matrix cannot be mistaken for a
+    ``--limit N`` smoke, and vice versa.
+    """
     path = run_scored_path(run_id)
     if not path.exists():
         return False
@@ -179,12 +195,81 @@ def cell_already_scored(run_id: str, expected_n: int) -> bool:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return False
-    return int(data.get("n_scored") or 0) >= expected_n
+    if int(data.get("n_scored") or 0) != expected_n:
+        return False
+    cfg_path = run_config_path(run_id)
+    if cfg_path.exists():
+        try:
+            conf = json.loads(cfg_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return False
+        if conf.get("n_rows") is not None and int(conf["n_rows"]) != expected_n:
+            return False
+    return True
 
 
 def bank_already_complete(model: str, custom_ids: list[str]) -> bool:
     bank_id = pass_a_bank_run_id(model)
     return pass_a_bank_covers(bank_id, custom_ids)
+
+
+def find_cell_run_id(
+    model: str,
+    effort_b: str,
+    expected_n: int,
+    *,
+    repeat: int = 1,
+    date: str | None = None,
+) -> str:
+    """Pick a run_id that resumes prior work, or mint a fresh dated id.
+
+    Scans ``evals/runs/`` for ``*_classification_{model}_{effort}_r{repeat}``
+    dirs whose config ``n_rows`` matches *expected_n*. Prefers a fully scored
+    run, then the newest partial, so a resume on a later calendar day does not
+    re-pay finished cells. When *date* is set (tests), skip discovery and use
+    that day for a fresh id only if nothing matching exists.
+    """
+    suffix = f"_classification_{model}_{effort_b}_r{repeat}"
+    candidates: list[tuple[bool, float, str]] = []
+    if RUNS_DIR.exists():
+        for path in RUNS_DIR.iterdir():
+            if not path.is_dir() or not path.name.endswith(suffix):
+                continue
+            cfg_path = path / "config.json"
+            if not cfg_path.exists():
+                continue
+            try:
+                conf = json.loads(cfg_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                continue
+            if conf.get("model") != model or conf.get("effort_b") != effort_b:
+                continue
+            if int(conf.get("n_rows") or 0) != expected_n:
+                continue
+            complete = False
+            scored_path = path / "scored.json"
+            if scored_path.exists():
+                try:
+                    n_scored = int(
+                        json.loads(scored_path.read_text(encoding="utf-8")).get(
+                            "n_scored"
+                        )
+                        or 0
+                    )
+                    complete = n_scored == expected_n
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    complete = False
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                mtime = 0.0
+            candidates.append((complete, mtime, path.name))
+    if candidates:
+        # Fully scored first, then newest mtime.
+        candidates.sort(key=lambda t: (not t[0], -t[1]))
+        return candidates[0][2]
+    day = date or _dt.date.today().isoformat()
+    return f"{day}_classification_{model}_{effort_b}_r{repeat}"
 
 
 def build_job_plan(
@@ -194,7 +279,6 @@ def build_job_plan(
     repeat: int = 1,
 ) -> list[Job]:
     """Build the checklist rows (3 Pass A + 9 cells + dashboard)."""
-    day = date or _dt.date.today().isoformat()
     jobs: list[Job] = []
     for model in cfg.EVAL_MODELS:
         short = model.split("-")[-1]
@@ -210,7 +294,9 @@ def build_job_plan(
         )
     for model, effort in matrix_cells():
         short = model.split("-")[-1]
-        run_id = f"{day}_classification_{model}_{effort}_r{repeat}"
+        run_id = find_cell_run_id(
+            model, effort, n_rows, repeat=repeat, date=date,
+        )
         jobs.append(
             Job(
                 key=f"cell:{model}:{effort}",
@@ -242,7 +328,15 @@ def refresh_job_progress(job: Job) -> None:
     if job.run_id is None or job.model is None:
         return
     job.rows_done = count_completed_predictions(job.run_id)
-    job.spend_usd = spend_from_predictions(job.run_id, job.model)
+    if job.kind == "pass_a":
+        job.spend_usd = spend_from_predictions(
+            job.run_id, job.model, prefixes=("a",),
+        )
+    elif job.kind == "cell":
+        # Pass B only: Pass A tokens were already billed on the bank job.
+        job.spend_usd = spend_from_predictions(
+            job.run_id, job.model, prefixes=("b",),
+        )
     if job.kind == "cell" and job.status in ("done", "skipped"):
         # Prefer scored.json coverage once scoring finished.
         if cell_already_scored(job.run_id, job.rows_total):

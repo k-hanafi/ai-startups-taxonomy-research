@@ -73,7 +73,7 @@ def test_count_completed_and_spend_from_predictions(tmp_path, monkeypatch):
         "status": "completed",
         "a_input_tokens": 1_000_000,
         "a_output_tokens": 0,
-        "b_input_tokens": 0,
+        "b_input_tokens": 500_000,
         "b_output_tokens": 0,
     })
     append_jsonl(path, {
@@ -81,17 +81,31 @@ def test_count_completed_and_spend_from_predictions(tmp_path, monkeypatch):
         "status": "failed",
         "a_input_tokens": 1_000_000,
         "a_output_tokens": 0,
+        "b_input_tokens": 0,
+        "b_output_tokens": 0,
     })
     assert orch.count_completed_predictions(run_id) == 1
-    # 1M input tokens at nano $0.20 / 1M = $0.20
-    assert orch.spend_from_predictions(run_id, model) == pytest.approx(0.40)
+    # Default sums a+b: 2.5M input at nano $0.20 / 1M = $0.50
+    assert orch.spend_from_predictions(run_id, model) == pytest.approx(0.50)
+    # Cell footer must not re-bill Pass A (bank job already counted it).
+    assert orch.spend_from_predictions(
+        run_id, model, prefixes=("b",),
+    ) == pytest.approx(0.10)
+    assert orch.spend_from_predictions(
+        run_id, model, prefixes=("a",),
+    ) == pytest.approx(0.40)
 
 
-def test_cell_already_scored(tmp_path, monkeypatch):
-    monkeypatch.setattr(orch, "run_scored_path", lambda rid: tmp_path / f"{rid}.json")
-    path = tmp_path / "r1.json"
-    path.write_text(json.dumps({"n_scored": 100}), encoding="utf-8")
+def test_cell_already_scored_requires_exact_row_count(tmp_path, monkeypatch):
+    monkeypatch.setattr(orch, "run_scored_path", lambda rid: tmp_path / rid / "scored.json")
+    monkeypatch.setattr(orch, "run_config_path", lambda rid: tmp_path / rid / "config.json")
+    run = tmp_path / "r1"
+    run.mkdir()
+    (run / "scored.json").write_text(json.dumps({"n_scored": 100}), encoding="utf-8")
+    (run / "config.json").write_text(json.dumps({"n_rows": 100}), encoding="utf-8")
     assert orch.cell_already_scored("r1", 100)
+    # Full matrix must not satisfy a --limit 1 smoke skip.
+    assert not orch.cell_already_scored("r1", 1)
     assert not orch.cell_already_scored("r1", 101)
     assert not orch.cell_already_scored("missing", 10)
 
@@ -132,6 +146,27 @@ def test_seed_skipped_marks_scored_cells(tmp_path, monkeypatch):
     assert cell.status == "skipped"
     pending_cells = [j for j in jobs if j.kind == "cell" and j.status == "pending"]
     assert len(pending_cells) == 8
+
+
+def test_find_cell_run_id_resumes_prior_day(tmp_path, monkeypatch):
+    monkeypatch.setattr(orch, "RUNS_DIR", tmp_path)
+    model = cfg.EVAL_MODELS[0]
+    effort = "low"
+    old_id = f"2026-07-20_classification_{model}_{effort}_r1"
+    run = tmp_path / old_id
+    run.mkdir()
+    (run / "config.json").write_text(
+        json.dumps({"model": model, "effort_b": effort, "n_rows": 100}),
+        encoding="utf-8",
+    )
+    (run / "scored.json").write_text(
+        json.dumps({"n_scored": 100}), encoding="utf-8",
+    )
+    found = orch.find_cell_run_id(model, effort, 100, date="2026-07-25")
+    assert found == old_id
+    # Different row count must mint a fresh id for the requested day.
+    fresh = orch.find_cell_run_id(model, effort, 1, date="2026-07-25")
+    assert fresh == f"2026-07-25_classification_{model}_{effort}_r1"
 
 
 def test_open_dashboard_index_missing(tmp_path, monkeypatch):

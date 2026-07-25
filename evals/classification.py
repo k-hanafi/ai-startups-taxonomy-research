@@ -930,10 +930,14 @@ def bank_pass_a(
             )
 
     if not pass_a_bank_covers(bank_id, custom_ids):
-        missing = [cid for cid in custom_ids if cid not in bank_index]
+        # Re-read disk: bank_index can disagree with pass_a_bank_covers if a
+        # row landed on disk outside this process's index.
+        on_disk = _index_banked_pass_a(bank_id)
+        missing = [cid for cid in custom_ids if cid not in on_disk]
+        example = missing[0] if missing else custom_ids[0]
         raise SystemExit(
             f"Pass A bank {bank_id!r} incomplete after run: "
-            f"{len(missing)} row(s) still missing (e.g. {missing[0]}). "
+            f"{len(missing)} row(s) still missing (e.g. {example}). "
             "Re-run bank-pass-a to resume."
         )
     logger.info("Pass A bank %s complete: %d rows", bank_id, len(rows))
