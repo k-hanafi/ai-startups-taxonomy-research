@@ -181,7 +181,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `dashboard_metrics.py` | Eval dashboard metrics: scored.json/fixture → chart metrics (ECE, reliability bins, selective curves, vs_baseline, Pass B isolating fields, finalist mean±range aggregates, per-config `cost_breakdown` for the cost popover) + `build_robustness` (tokenization / valid_mass / batch-parity checks with pass/fail/pending statuses, nothing fabricated) + `build_run_instance` (which run the page is for; start times read from each run's `config.json` `created_utc`). No OpenAI import. |
 | `tests/fixtures/dashboard/dashboard_mock_runs.json` | Synthetic locked matrix; Pass A metrics identical across efforts within each model (bank-once design); calibration blocks derive from one set of 100 synthetic rows per model (nano seeds the ECE ~0.077 early signal); per-run robustness blocks |
 | `instances.py` | Numbered dashboard archive: writes `eval_instance_NN.html` + `index.html` + `instances.json` under `01_Presentation_Materials/eval_instances/`; an instance is keyed on the runs behind it (start span + config ids), so rebuilding the same sweep replaces it instead of taking a new number. Also owns the run-headline / run-meta text shared with the suite header card. |
-| `config.py` | Locked matrix `EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`; `PASS_A_TOP_LOGPROBS=2` (binary); legacy `TOP_LOGPROBS` for old single-pass only |
+| `config.py` | Locked matrix `EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`; `PASS_A_TOP_LOGPROBS=5` (binary; depth 5 so opposing digit can appear when near-certain); legacy `TOP_LOGPROBS` for old single-pass only |
 | `classification.py` | Pass A/B classification runner + `bank_pass_a` (Pass-A-only); Pass A auto-banks under `evals/runs/pass_a_banks/<model>/` (reuse by default; `--rerun-pass-a` / `--pass-a-from` escapes) |
 | `cost_preview.py` | Offline matrix cost estimates (Pass A once per model + 9 Pass B cells + grand total); shared formula with classification `--dry-run` |
 | `orchestrate.py` | `run-evals` supervisor: phase-1 Pass A banks in parallel, then 9 cells in parallel, score, dashboard; rich live checklist; `open-dashboard` opens the instance index |
@@ -268,6 +268,7 @@ python -m evals dashboard --save-instance       # also keep this mock build as e
 python -m evals score <run_id> --confidence-from-raw [--baseline <run_id>]
 python -m evals score <run_id> --allow-partial                 # incomplete n_scored only
 python -m evals score <run_id> --allow-partial-confidence      # incomplete raw confidence only
+python -m evals score <run_id> --confidence-from-raw --allow-missing-confidence  # accuracy even if no row has both {0,1}
 # legacy: python -m evals run  (single-pass; retired for matrix path; warns)```
 
 ## Conventions & invariants (don't break these)

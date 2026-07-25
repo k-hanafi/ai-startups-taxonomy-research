@@ -204,6 +204,17 @@ def main() -> None:
              "eligible rows (incomplete raw/ or one-sided binary pools). "
              "Default refuses incomplete confidence coverage.",
     )
+    p_score.add_argument(
+        "--allow-missing-confidence",
+        action="store_true",
+        help=(
+            "With --confidence-from-raw: if no row yields binary confidence "
+            "(API returned a one-sided {0,1} pool), score accuracy axes "
+            "without calibration instead of exiting. Used by run-evals so "
+            "mini/luna sweeps are not blocked when top_logprobs omit the "
+            "opposing digit."
+        ),
+    )
     p_parity = subs.add_parser(
         "batch-parity",
         help="PAID: 10-row Batch-vs-sync parity smoke on Pass A (gate Q4, Stage 7)",
@@ -414,7 +425,16 @@ def main() -> None:
             try:
                 confidence = run_confidence(run_raw_dir(args.run_id))
             except LogprobExtractionError as exc:
-                sys.exit(f"--confidence-from-raw failed: {exc}")
+                if args.allow_missing_confidence:
+                    logging.warning(
+                        "--confidence-from-raw unavailable (%s); "
+                        "scoring accuracy without calibration "
+                        "(--allow-missing-confidence)",
+                        exc,
+                    )
+                    confidence = None
+                else:
+                    sys.exit(f"--confidence-from-raw failed: {exc}")
         score_cli(
             args.run_id,
             args.baseline,

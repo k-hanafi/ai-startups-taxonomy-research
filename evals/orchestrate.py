@@ -405,8 +405,14 @@ def _start_cell_classify(job: Job, limit: int | None) -> None:
 
 def _start_cell_score(job: Job) -> None:
     assert job.run_id
+    # allow-partial / allow-missing: mini/luna often return a one-sided
+    # {0,1} top_logprobs pool even at depth 5, so calibration may cover
+    # only a subset (or none). Accuracy scoring must still finish.
     cmd = _python_cmd() + [
-        "score", job.run_id, "--confidence-from-raw",
+        "score", job.run_id,
+        "--confidence-from-raw",
+        "--allow-partial-confidence",
+        "--allow-missing-confidence",
     ]
     log_path = run_dir(job.run_id) / "run.log"
     job.cell_stage = "score"

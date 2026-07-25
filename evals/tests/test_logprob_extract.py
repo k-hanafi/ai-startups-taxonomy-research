@@ -371,3 +371,14 @@ def test_run_confidence_refuses_a_run_without_raw_responses(tmp_path: Path):
         lpx.run_confidence(tmp_path / "does-not-exist")
     with pytest.raises(lpx.LogprobExtractionError, match="no raw response"):
         lpx.run_confidence(tmp_path)
+
+
+def test_run_confidence_distinguishes_missing_opposing_digit(tmp_path: Path):
+    # Files exist but every decision token lacks the opposing digit: different
+    # error than an empty raw/ dir (so operators know to raise top_logprobs).
+    decision = entry("0", -0.01, [(" ", -4.0)])  # no opposing '1'
+    (tmp_path / "startup-x_a.json").write_text(
+        json.dumps(pass_a_response("0", decision))
+    )
+    with pytest.raises(lpx.LogprobExtractionError, match="missing unmasked"):
+        lpx.run_confidence(tmp_path)
