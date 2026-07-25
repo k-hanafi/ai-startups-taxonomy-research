@@ -173,10 +173,12 @@ def require_model_pricing(model: str) -> dict[str, float]:
 # ---------------------------------------------------------------------------
 # Production cost extrapolation (pivot 8)
 # ---------------------------------------------------------------------------
-# Same stacking as src/tokens.py / src/merger.py: batch 50% on all tokens,
-# then an extra 50% on the cached portion of input (cached input = 25% of
-# sync list). Do NOT import from src — evals stays offline-safe without keys.
-BATCH_DISCOUNT: float = 0.50
+# Projections price the sync Responses API: production two-pass will run
+# sync (faster, and far simpler than orchestrating async Pass A -> Pass B
+# dependencies through the Batch API), so no Batch discount is assumed.
+# Prompt caching applies to the sync API, so the cached portion of input
+# bills at 50% of the sync input rate. Do NOT import from src: evals
+# stays offline-safe without keys.
 CACHE_DISCOUNT: float = 0.50
 
 # Scale-up N: alive non-empty evidence + dead extractable targets (default).

@@ -4,14 +4,15 @@ Turns measured golden-set token usage into an interpretable ladder:
 
 1. Golden-set actual — sync list price on measured tokens
 2. Cache adjustment — measured cache rate + $ after cache discount
-3. Batch adjustment — 50% → production-equivalent $ on the golden n
-4. Scale — × (N_prod / n_golden) → full-dataset estimate
-5. Assumptions — N, cache source, discounts, classification, reasoning in output
+3. Scale: × (N_prod / n_golden) → full-dataset estimate
+4. Assumptions: N, cache source, cache discount, classification, reasoning in output
 
-Stacking matches ``src/tokens.py`` / ``src/merger.py``: batch discount on
-all tokens, then an extra cache discount on the cached portion of input
-(cached input = 25% of sync list). Reasoning tokens are billed inside
-output (OpenAI Responses usage).
+Priced at sync Responses API rates: production two-pass classification will
+run through the sync API (faster, and far simpler than orchestrating async
+dependencies between Pass A and Pass B), so no Batch API discount is
+assumed. The prompt-cache discount stays (caching applies to the sync API):
+cached input bills at 50% of the sync input rate. Reasoning tokens are
+billed inside output (OpenAI Responses usage).
 
 Legacy runs without ``cached_tokens`` fields do NOT invent a production
 cache rate: the cache step is marked ``unavailable`` and later steps that
@@ -97,7 +98,7 @@ def extrapolate_production_cost(
     n_prod_label: str = "alive_plus_dead",
     architecture: str = "classification",
 ) -> dict[str, Any]:
-    """Build the five-step production cost ladder as a structured dict.
+    """Build the sync-priced production cost ladder as a structured dict.
 
     ``total_cached_tokens`` may be 0 with ``cache_field_present=True`` (real
     zero hits). When ``cache_field_present=False``, the cache step is
@@ -110,7 +111,6 @@ def extrapolate_production_cost(
         "n_golden": n_golden,
         "model": model,
         "architecture": architecture,
-        "batch_discount": cfg.BATCH_DISCOUNT,
         "cache_discount": cfg.CACHE_DISCOUNT,
         "cache_source": (
             "measured_from_run"
@@ -119,8 +119,9 @@ def extrapolate_production_cost(
         ),
         "reasoning_billed_inside_output": True,
         "stacking": (
-            "batch_discount on all tokens; cache_discount additionally on "
-            "cached input portion (cached input = sync_input * batch * cache)"
+            "sync Responses API list price on all tokens (production runs "
+            "sync, no Batch API discount); cache_discount on the cached "
+            "input portion (cached input = sync_input * cache)"
         ),
         "do_not_use_historical_production_cache_rate": True,
     }
@@ -166,13 +167,7 @@ def extrapolate_production_cost(
             "total_usd_after_cache": None,
         }
         steps["2_cache"] = step2
-        steps["3_batch"] = {
-            "label": "batch_adjustment",
-            "available": False,
-            "reason": "blocked_on_missing_cache_measurement",
-            "total_usd_after_batch": None,
-        }
-        steps["4_scale"] = {
+        steps["3_scale"] = {
             "label": "scale_to_production_n",
             "available": False,
             "reason": "blocked_on_missing_cache_measurement",
@@ -210,24 +205,11 @@ def extrapolate_production_cost(
         ),
     }
 
-    # Step 3: batch adjustment (50% on the after-cache sync total)
-    after_batch = after_cache * cfg.BATCH_DISCOUNT
-    steps["3_batch"] = {
-        "label": "batch_adjustment",
-        "available": True,
-        "batch_discount": cfg.BATCH_DISCOUNT,
-        "total_usd_after_batch": after_batch,
-        "mean_usd_per_row": after_batch / n_golden,
-        "note": (
-            f"Production Batch API at {cfg.BATCH_DISCOUNT:.0%} of sync. "
-            "Applied to the cache-adjusted golden total."
-        ),
-    }
-
-    # Step 4: scale to N_prod
+    # Step 3: scale the cache-adjusted sync total to N_prod. Production runs
+    # the sync Responses API, so no Batch API discount is applied.
     scale = n_prod / n_golden
-    prod_usd = after_batch * scale
-    steps["4_scale"] = {
+    prod_usd = after_cache * scale
+    steps["3_scale"] = {
         "label": "scale_to_production_n",
         "available": True,
         "n_prod": n_prod,
@@ -236,8 +218,10 @@ def extrapolate_production_cost(
         "estimated_production_usd": prod_usd,
         "estimated_usd_per_company": prod_usd / n_prod,
         "note": (
-            f"Linear scale × ({n_prod} / {n_golden}). Assumes golden-set "
-            "token mix and measured cache rate hold at production volume."
+            f"Linear scale × ({n_prod} / {n_golden}) at sync Responses API "
+            "pricing (production runs sync, no Batch API discount). Assumes "
+            "golden-set token mix and measured cache rate hold at "
+            "production volume."
         ),
     }
 
@@ -248,7 +232,6 @@ def extrapolate_production_cost(
         "summary": {
             "golden_sync_usd": sync_usd,
             "golden_after_cache_usd": after_cache,
-            "golden_after_batch_usd": after_batch,
             "estimated_production_usd": prod_usd,
             "cache_hit_rate": hit_rate,
             "n_prod": n_prod,
@@ -322,8 +305,8 @@ def format_cost_ladder(estimate: dict[str, Any]) -> str:
     )
     lines.append(f"Cache source: {assumptions.get('cache_source', '?')}")
     lines.append(
-        f"Discounts: batch={assumptions.get('batch_discount')}, "
-        f"cache={assumptions.get('cache_discount')} (stacking as production)"
+        f"Pricing: sync Responses API list (no Batch API discount), "
+        f"cache discount={assumptions.get('cache_discount')}"
     )
     lines.append("Reasoning tokens: billed inside output")
     lines.append("")
@@ -346,25 +329,16 @@ def format_cost_ladder(estimate: dict[str, Any]) -> str:
             )
         else:
             lines.append(f"2. Cache adjustment:    UNAVAILABLE — {s2.get('reason')}")
-    s3 = steps.get("3_batch")
+    s3 = steps.get("3_scale")
     if s3:
         if s3.get("available"):
             lines.append(
-                f"3. After batch (×{s3['batch_discount']}): "
-                f"${s3['total_usd_after_batch']:,.4f}"
+                f"3. Scaled to N={s3['n_prod']:,}: "
+                f"${s3['estimated_production_usd']:,.2f}  "
+                f"(${s3['estimated_usd_per_company']:.4f}/company)"
             )
         else:
-            lines.append(f"3. Batch adjustment:    UNAVAILABLE — {s3.get('reason')}")
-    s4 = steps.get("4_scale")
-    if s4:
-        if s4.get("available"):
-            lines.append(
-                f"4. Scaled to N={s4['n_prod']:,}: "
-                f"${s4['estimated_production_usd']:,.2f}  "
-                f"(${s4['estimated_usd_per_company']:.4f}/company)"
-            )
-        else:
-            lines.append(f"4. Scale to production: UNAVAILABLE — {s4.get('reason')}")
+            lines.append(f"3. Scale to production: UNAVAILABLE ({s3.get('reason')})")
 
     if not estimate.get("available"):
         lines.append("")

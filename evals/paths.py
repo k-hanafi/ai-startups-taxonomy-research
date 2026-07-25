@@ -20,6 +20,12 @@ CLASSIFIER_INPUT_CSV = (
     PROJECT_ROOT / "outputs" / "tavilycrawl" / "processed" / "classifier_input.csv"
 )
 
+# Rendered dashboards. eval_dashboard.html is overwritten on every build;
+# eval_instances/ keeps numbered copies of the runs worth going back to.
+PRESENTATION_DIR = PROJECT_ROOT / "data visualization" / "01_Presentation_Materials"
+EVAL_DASHBOARD_HTML = PRESENTATION_DIR / "eval_dashboard.html"
+EVAL_INSTANCES_DIR = PRESENTATION_DIR / "eval_instances"
+
 # Harness artifacts.
 EVALS_DIR = PROJECT_ROOT / "evals"
 GOLDEN_DIR = EVALS_DIR / "golden"

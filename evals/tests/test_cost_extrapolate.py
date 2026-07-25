@@ -15,8 +15,8 @@ from evals import scoring
 def test_ladder_known_answer_classification_with_cache():
     # 1M input (500k cached) + 1M output on nano: sync in=$0.20, out=$1.25.
     # After cache: uncached 0.5M @ 0.20 = $0.10, cached 0.5M @ 0.10 = $0.05
-    # → $0.15 + $1.25 = $1.40. After batch ×0.5 → $0.70.
-    # Scale × 41076 (n_golden=1) → $0.70 * 41076.
+    # → $0.15 + $1.25 = $1.40. Production runs the sync Responses API, so
+    # no batch discount: scale × 41076 (n_golden=1) → $1.40 * 41076.
     records = [{
         "a_input_tokens": 400_000, "a_output_tokens": 100_000,
         "a_cached_tokens": 200_000, "a_reasoning_tokens": 0,
@@ -40,12 +40,10 @@ def test_ladder_known_answer_classification_with_cache():
     assert s2["cache_hit_rate"] == pytest.approx(0.5)
     assert s2["total_usd_after_cache"] == pytest.approx(1.40)
 
-    s3 = est["steps"]["3_batch"]
-    assert s3["total_usd_after_batch"] == pytest.approx(0.70)
-
-    s4 = est["steps"]["4_scale"]
-    assert s4["n_prod"] == 41_076
-    assert s4["estimated_production_usd"] == pytest.approx(0.70 * 41_076)
+    assert "3_batch" not in est["steps"]
+    s3 = est["steps"]["3_scale"]
+    assert s3["n_prod"] == 41_076
+    assert s3["estimated_production_usd"] == pytest.approx(1.40 * 41_076)
 
 
 def test_legacy_run_without_cached_field_marks_cache_unavailable():
@@ -59,7 +57,7 @@ def test_legacy_run_without_cached_field_marks_cache_unavailable():
     assert est["steps"]["2_cache"]["available"] is False
     assert "invent" in est["steps"]["2_cache"]["reason"].lower() or \
         "re-run" in est["steps"]["2_cache"]["reason"].lower()
-    assert est["steps"]["3_batch"]["available"] is False
+    assert est["steps"]["3_scale"]["available"] is False
     assert est["assumptions"]["architecture"] == "single-pass"
 
 

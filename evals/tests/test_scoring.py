@@ -95,6 +95,8 @@ def test_cost_from_actual_usage_single_pass():
     # 1M input @ $0.20 + 1M output @ $1.25.
     assert cost["total_usd"] == pytest.approx(0.20 + 1.25)
     assert cost["mean_usd_per_row"] == pytest.approx((0.20 + 1.25) / 2)
+    # Single-pass records have no Pass A/B split to report.
+    assert cost["per_pass"] is None
     assert cost["output_tokens"]["max"] == 1_000_000
     assert cost["reasoning_tokens"]["max"] == 400
 
@@ -108,6 +110,11 @@ def test_cost_sums_classification_usage_fields():
     assert cost["total_input_tokens"] == 300
     assert cost["total_output_tokens"] == 50
     assert cost["reasoning_tokens"]["max"] == 30
+    # Per-pass totals feed the dashboard cost-breakdown popover.
+    assert cost["per_pass"] == {
+        "pass_a": {"input": 100, "cached": 0, "output": 10, "reasoning": 0},
+        "pass_b": {"input": 200, "cached": 0, "output": 40, "reasoning": 30},
+    }
 
 
 def test_cost_unknown_model_reports_tokens_without_dollars():
