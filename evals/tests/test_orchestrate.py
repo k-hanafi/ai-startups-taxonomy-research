@@ -143,15 +143,27 @@ def test_open_dashboard_index_missing(tmp_path, monkeypatch):
 def test_open_dashboard_index_opens_index(tmp_path, monkeypatch):
     inst = tmp_path / "eval_instances"
     inst.mkdir()
-    index = inst / "index.html"
-    index.write_text("<html>ok</html>", encoding="utf-8")
+    (inst / "eval_instance_01.html").write_text("<html>ok</html>", encoding="utf-8")
+    (inst / "instances.json").write_text(
+        json.dumps({
+            "instances": [{
+                "n": 1,
+                "file": "eval_instance_01.html",
+                "archived_utc": "2026-07-24T20:00:00+00:00",
+                "n_configs": 1,
+                "run": {},
+            }]
+        }),
+        encoding="utf-8",
+    )
     monkeypatch.setattr(orch, "EVAL_INSTANCES_DIR", inst)
     opened: list[str] = []
     monkeypatch.setattr(
         orch.webbrowser, "open", lambda uri: opened.append(uri)
     )
     path = orch.open_dashboard_index()
-    assert path == index
+    assert path == inst / "index.html"
+    assert path.exists()
     assert opened and opened[0].startswith("file:")
 
 

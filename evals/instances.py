@@ -121,6 +121,31 @@ def _write_registry(directory: Path, entries: list[dict[str, Any]]) -> None:
     )
 
 
+def sync_index(directory: Path = EVAL_INSTANCES_DIR) -> Path:
+    """Rewrite index.html from the registry, dropping entries whose HTML is gone.
+
+    Stops ``open-dashboard`` from showing a stale row after a smoke page was
+    deleted (browser tabs can also keep an old index open). Returns the
+    index path.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    entries = load_registry(directory)
+    kept: list[dict[str, Any]] = []
+    dropped: list[str] = []
+    for entry in entries:
+        name = str(entry.get("file") or instance_filename(int(entry["n"])))
+        if (directory / name).is_file():
+            entry = {**entry, "file": name}
+            kept.append(entry)
+        else:
+            dropped.append(name)
+    if dropped:
+        _write_registry(directory, kept)
+    index_path = directory / INDEX_NAME
+    index_path.write_text(render_index(kept), encoding="utf-8")
+    return index_path
+
+
 def next_instance_number(directory: Path, entries: list[dict[str, Any]]) -> int:
     """One past the highest number in the registry or on disk.
 

@@ -105,15 +105,20 @@ def require_openai_key() -> None:
 
 
 def open_dashboard_index() -> Path:
-    """Open the instance archive index in the default browser. Returns the path."""
-    from evals.instances import INDEX_NAME
+    """Open the instance archive index in the default browser. Returns the path.
 
-    index_path = EVAL_INSTANCES_DIR / INDEX_NAME
-    if not index_path.exists():
+    Rebuilds the index first so deleted smoke pages cannot leave a dead link.
+    """
+    from evals.instances import load_registry, sync_index
+
+    index_path = sync_index(EVAL_INSTANCES_DIR)
+    entries = load_registry(EVAL_INSTANCES_DIR)
+    pages = list(EVAL_INSTANCES_DIR.glob("eval_instance_*.html"))
+    if not entries and not pages:
         raise SystemExit(
-            f"No eval instance archive at {index_path}.\n"
+            f"No saved eval instances under {EVAL_INSTANCES_DIR}.\n"
             "Run a paid sweep first:\n"
-            "  python -m evals run-evals\n"
+            "  python3 -m evals run-evals\n"
             "That builds the dashboard and refreshes the index "
             "(newest run at the top)."
         )
