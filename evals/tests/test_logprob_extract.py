@@ -223,6 +223,48 @@ def test_all_candidates_masked_raises():
 
 
 # ---------------------------------------------------------------------------
+# Censored (one-sided) candidate pools
+# ---------------------------------------------------------------------------
+
+def test_censored_pool_bounds_the_missing_digit():
+    # mini/luna truncate candidates below ~2% probability, so a confident row
+    # omits the opposing digit entirely. Bound it by the unreported residual
+    # instead of renormalizing against a hard zero.
+    decision = entry("0", math.log(0.98))  # 2% residual, no opposing '1'
+    result = lpx.extract_binary_confidence(pass_a_response("0", decision))
+    assert result.censored is True
+    assert result.p_other_max == pytest.approx(0.02)
+    assert result.interval_width == pytest.approx(0.02)
+    # Midpoint of [0, 0.02] sits strictly inside the bound, never at p = 1.
+    assert result.top1_prob == pytest.approx(0.98 / (0.98 + 0.01))
+    assert result.top1_prob < 1.0
+
+
+def test_censored_pool_refuses_when_residual_is_too_wide():
+    decision = entry("0", math.log(0.5), [(" ", math.log(0.1))])
+    with pytest.raises(lpx.BinaryConfidenceUnavailable, match="wider than"):
+        lpx.extract_binary_confidence(pass_a_response("0", decision))
+
+
+def test_censored_pool_tolerates_reported_mass_above_one():
+    # luna returns logprobs a hair above 0 (p = 1.000015) from reduced-
+    # precision normalization; the residual must clamp at 0, not go negative.
+    decision = entry("0", 1.5e-5)
+    result = lpx.extract_binary_confidence(pass_a_response("0", decision))
+    assert result.censored is True
+    assert result.p_other_max == 0.0
+    assert result.top1_prob == pytest.approx(1.0)
+
+
+def test_uncensored_pool_is_not_flagged_censored():
+    decision = entry("1", math.log(0.7), [("0", math.log(0.3))])
+    result = lpx.extract_binary_confidence(pass_a_response("1", decision))
+    assert result.censored is False
+    assert result.p_other_max == 0.0
+    assert result.p_one == pytest.approx(0.7)
+
+
+# ---------------------------------------------------------------------------
 # Metrics
 # ---------------------------------------------------------------------------
 
@@ -373,12 +415,12 @@ def test_run_confidence_refuses_a_run_without_raw_responses(tmp_path: Path):
         lpx.run_confidence(tmp_path)
 
 
-def test_run_confidence_distinguishes_missing_opposing_digit(tmp_path: Path):
-    # Files exist but every decision token lacks the opposing digit: different
-    # error than an empty raw/ dir (so operators know to raise top_logprobs).
-    decision = entry("0", -0.01, [(" ", -4.0)])  # no opposing '1'
+def test_run_confidence_distinguishes_unboundable_rows(tmp_path: Path):
+    # Files exist but every decision token is one-sided AND leaves too wide a
+    # residual to bound: different error than an empty raw/ dir.
+    decision = entry("0", math.log(0.5), [(" ", math.log(0.1))])  # no '1'
     (tmp_path / "startup-x_a.json").write_text(
         json.dumps(pass_a_response("0", decision))
     )
-    with pytest.raises(lpx.LogprobExtractionError, match="missing unmasked"):
+    with pytest.raises(lpx.LogprobExtractionError, match="too wide a residual"):
         lpx.run_confidence(tmp_path)

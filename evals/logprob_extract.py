@@ -38,6 +38,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from evals import config as cfg
+
 # Logprob value the API uses for grammar-masked top_logprobs fillers: tokens
 # the JSON-schema decoder forbade, listed with a placeholder "probability".
 # Exactly -100.0, per the banked responses (real logprobs near it, e.g.
@@ -53,10 +55,10 @@ class LogprobExtractionError(ValueError):
 
 
 class BinaryConfidenceUnavailable(LogprobExtractionError):
-    """Both {0,1} candidates are not available at the decision token.
+    """The decision token carries too little evidence to bound confidence.
 
     Raised instead of inventing a fake p=0/p=1 when the opposing digit is
-    missing from the (unmasked) candidate pool.
+    missing AND the unreported residual is too wide to bound it usefully.
     """
 
 
@@ -77,6 +79,9 @@ class BinaryConfidence:
     valid_mass: float           # raw (pre-renormalization) mass on {0, 1}
     decision_token: str         # the token that carried the decision
     decision_token_index: int   # its position in the logprobs array
+    censored: bool = False      # opposing digit absent; mass bounded, not read
+    p_other_max: float = 0.0    # upper bound used for the absent digit's mass
+    interval_width: float = 0.0  # confidence uncertainty implied by that bound
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -244,6 +249,27 @@ def binary_candidate_pool(entry: dict[str, Any]) -> dict[str, float]:
     }
 
 
+def reported_probability_mass(entry: dict[str, Any]) -> float:
+    """Total probability the API accounted for at this token position.
+
+    Every unmasked candidate it listed, chosen token included, clamped to 1.
+    Some models return logprobs a hair above 0 (observed +1.5e-5 on luna,
+    i.e. p = 1.000015) from reduced-precision normalization, which would
+    otherwise push the total past 1 and make the residual negative.
+    """
+    pool: dict[str, float] = {
+        str(candidate["token"]): float(candidate["logprob"])
+        for candidate in entry.get("top_logprobs") or []
+    }
+    pool.setdefault(str(entry["token"]), float(entry["logprob"]))
+    total = sum(
+        min(math.exp(logprob), 1.0)
+        for logprob in pool.values()
+        if logprob != MASKED_SENTINEL_LOGPROB
+    )
+    return min(total, 1.0)
+
+
 def _binary_entropy_bits(p: float) -> float:
     if p <= 0.0 or p >= 1.0:
         return 0.0
@@ -273,14 +299,35 @@ def extract_binary_confidence(response: dict[str, Any]) -> BinaryConfidence:
     for token, logprob in pool.items():
         mass[candidate_value(token)] += math.exp(logprob)  # type: ignore[index]
 
-    # Both legal digits must carry evidence. A one-sided pool (API returned
-    # only the chosen digit, or the opposing digit was grammar-masked) would
-    # renormalize to fake p=0 or p=1 and poison calibration. Mark unavailable.
-    if mass[0] <= 0.0 or mass[1] <= 0.0:
+    if mass[chosen] <= 0.0:
+        # Every legal candidate was grammar-masked, so the row carries no
+        # usable evidence. Unavailable (skippable), not malformed: extract_run
+        # re-raises plain LogprobExtractionError and would abort the whole run.
         raise BinaryConfidenceUnavailable(
-            "binary confidence unavailable: need unmasked evidence for both "
-            "{0,1} at the decision token (opposing digit missing from pool)"
+            f"decision token {entry['token']!r} carries no unmasked "
+            "probability mass"
         )
+
+    censored, p_other_max, width = False, 0.0, 0.0
+    other = 1 - chosen
+    if mass[other] <= 0.0:
+        # One-sided pool: the opposing digit was truncated, not observed at
+        # zero. Its mass cannot exceed what the API left unaccounted for, so
+        # bound it by the residual and take the midpoint of [0, bound]. This
+        # assumes only that probabilities sum to at most 1. Renormalizing
+        # against a hard zero instead would fabricate p = 1 exactly.
+        censored = True
+        p_other_max = max(0.0, 1.0 - reported_probability_mass(entry))
+        p_chosen = min(mass[chosen], 1.0)
+        width = p_other_max / (p_chosen + p_other_max)
+        if width > cfg.MAX_CENSORED_INTERVAL_WIDTH:
+            raise BinaryConfidenceUnavailable(
+                f"binary confidence unavailable: opposing digit absent and the "
+                f"unreported residual ({p_other_max:.4f}) only bounds it to "
+                f"±{width:.4f}, wider than the "
+                f"{cfg.MAX_CENSORED_INTERVAL_WIDTH} limit"
+            )
+        mass[other] = p_other_max / 2.0
 
     valid_mass = mass[0] + mass[1]
     p_one = mass[1] / valid_mass
@@ -294,6 +341,9 @@ def extract_binary_confidence(response: dict[str, Any]) -> BinaryConfidence:
         valid_mass=valid_mass,
         decision_token=str(entry["token"]),
         decision_token_index=index,
+        censored=censored,
+        p_other_max=p_other_max,
+        interval_width=width,
     )
 
 
@@ -357,9 +407,10 @@ def run_confidence(raw_dir: Path) -> dict[str, float]:
             )
         raise LogprobExtractionError(
             f"raw responses under {raw_dir} exist ({len(raw_files)} file(s)) "
-            "but none yielded binary confidence: every decision token was "
-            "missing unmasked evidence for both {{0,1}} in top_logprobs. "
-            "Re-bank Pass A with a higher PASS_A_TOP_LOGPROBS, or pass "
-            "--allow-partial-confidence only for deliberate incomplete scoring."
+            "but none yielded binary confidence: every decision token lacked "
+            "the opposing digit and left too wide a residual to bound it "
+            f"(limit {cfg.MAX_CENSORED_INTERVAL_WIDTH}). Raising "
+            "PASS_A_TOP_LOGPROBS does not help models that truncate "
+            "candidates at a probability floor."
         )
     return {row["custom_id"]: chosen_confidence(row) for row in rows}

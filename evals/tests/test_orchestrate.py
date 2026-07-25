@@ -132,6 +132,9 @@ def test_build_status_table_renders_statuses():
 
 def test_seed_skipped_marks_scored_cells(tmp_path, monkeypatch):
     monkeypatch.setattr(orch, "run_scored_path", lambda rid: tmp_path / "scored" / f"{rid}.json")
+    # Also redirect config.json: a real run dir of the same id on disk would
+    # otherwise supply an n_rows that fails the exact-match check.
+    monkeypatch.setattr(orch, "run_config_path", lambda rid: tmp_path / "conf" / f"{rid}.json")
     monkeypatch.setattr(
         orch, "bank_already_complete", lambda model, cids: False
     )

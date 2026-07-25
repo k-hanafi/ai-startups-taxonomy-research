@@ -27,6 +27,34 @@
         "git_commit": null
       },
       "rebuilt_utc": "2026-07-24T22:22:39.644659+00:00"
+    },
+    {
+      "n": 2,
+      "archived_utc": "2026-07-25T18:12:13.881230+00:00",
+      "file": "eval_instance_02.html",
+      "identity": "4307b13e7f0e",
+      "synthetic": false,
+      "n_configs": 9,
+      "source": "9 runs under evals/runs/",
+      "run": {
+        "synthetic": false,
+        "n_runs": 9,
+        "started_first": "2026-07-25T17:53:41.360290+00:00",
+        "started_last": "2026-07-25T17:53:41.417038+00:00",
+        "models": [
+          "gpt-5.4-nano",
+          "gpt-5.4-mini",
+          "gpt-5.6-luna"
+        ],
+        "model_groups": [
+          "nano",
+          "mini",
+          "luna"
+        ],
+        "n_gold": 100,
+        "git_commit": "d96db8d"
+      },
+      "rebuilt_utc": "2026-07-25T23:39:06.505224+00:00"
     }
   ]
 }

@@ -67,14 +67,33 @@ COHORT_BOUNDARY: tuple[int, int] = (2023, 3)
 # Pass A is a binary {0,1} digit decision. Request depth 5 so the opposing
 # digit can still appear when the model is near-certain (with depth 2 the
 # second slot is often whitespace, which makes confidence unavailable and
-# blocks score --confidence-from-raw). Extraction still requires both {0,1}
-# in the pool; it never invents mass for a missing digit. Legacy
-# TOP_LOGPROBS=15 was a single-pass subclass leftover and must not drive
-# Pass A or parity success criteria.
+# blocks score --confidence-from-raw). Legacy TOP_LOGPROBS=15 was a
+# single-pass subclass leftover and must not drive Pass A or parity success
+# criteria.
+#
+# Depth is not sufficient on its own: gpt-5.4-mini and gpt-5.6-luna only
+# return candidates holding roughly 1% probability or more (measured floor
+# 2.3e-2 and 1.3e-1 against nano's 3.7e-44), so a near-certain row omits the
+# opposing digit at any requested depth. Extraction handles that by bounding
+# the missing digit with the unreported residual rather than inventing mass.
 PASS_A_TOP_LOGPROBS: int = 5
 # Kept for legacy single-pass runner / older banked runs only.
 TOP_LOGPROBS: int = 15
 LOGPROB_INCLUDE: list[str] = ["message.output_text.logprobs"]
+
+# Widest confidence interval accepted from a censored (one-sided) candidate
+# pool. The residual bound is only useful while it is narrow: validated
+# against nano ground truth on 77 simulated-censored rows the midpoint sat
+# within 0.005 of exact, and observed widths peak at 0.018 on mini. Beyond
+# this the row carries too little information to report, so it is marked
+# unavailable instead.
+MAX_CENSORED_INTERVAL_WIDTH: float = 0.05
+
+# Minimum share of probability a Pass A decision token must place on the two
+# legal answers. Below this, most of the mass went to tokens that are not a
+# verdict at all (whitespace, punctuation), so the renormalized confidence
+# rests on a thin slice of the distribution and is worth flagging.
+VALID_MASS_THRESHOLD: float = 0.90
 
 # Rough Pass B output+reasoning token guesses for dry-run budget preflight.
 # Input-only char/4 estimates understate high-effort spend; these are order-of-
