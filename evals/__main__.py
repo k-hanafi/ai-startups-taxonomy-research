@@ -14,10 +14,60 @@ def main() -> None:
         prog="python -m evals",
         description=(
             "Golden-set evaluation harness for the startup classifier. "
-            "Paid screen path: run-classification / matrix."
+            "Paid screen path: cost-preview → run-evals → open-dashboard "
+            "(or the lower-level run-classification / matrix / score)."
         ),
     )
     subs = parser.add_subparsers(dest="command", required=True)
+
+    p_cost = subs.add_parser(
+        "cost-preview",
+        help=(
+            "Print estimated cost for every locked matrix config and the "
+            "grand total (Pass A counted once per model). No API calls."
+        ),
+    )
+    p_cost.add_argument(
+        "--limit", type=int, default=None,
+        help="Cap rows for a cheaper smoke estimate (default: full golden set)",
+    )
+    p_run_evals = subs.add_parser(
+        "run-evals",
+        help=(
+            "Run the full locked matrix end to end: bank Pass A (3 models "
+            "in parallel), run 9 Pass B cells in parallel, score each, "
+            "build the dashboard. Live checklist in the terminal."
+        ),
+    )
+    p_run_evals.add_argument(
+        "--yes", "-y", action="store_true",
+        help="Skip the interactive cost confirm gate",
+    )
+    p_run_evals.add_argument(
+        "--limit", type=int, default=None,
+        help="Cap rows for a cheap end-to-end smoke (applied to every cell)",
+    )
+    subs.add_parser(
+        "open-dashboard",
+        help=(
+            "Open the eval instance archive index in your browser "
+            "(eval_instances/index.html, newest run at the top)"
+        ),
+    )
+    p_bank = subs.add_parser(
+        "bank-pass-a",
+        help=(
+            "Bank Pass A only for one model (used by run-evals phase 1; "
+            "idempotent resume)"
+        ),
+    )
+    p_bank.add_argument("--model", required=True, help="Model name to bank")
+    p_bank.add_argument(
+        "--limit", type=int, default=None, help="Cap rows (smoke test)",
+    )
+    p_bank.add_argument(
+        "--dry-run", action="store_true", help="Print cost only, no API call",
+    )
 
     subs.add_parser("sample", help="Draw the stratified golden set (Stage 1)")
     subs.add_parser(
@@ -213,6 +263,32 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    if args.command == "cost-preview":
+        from evals.cost_preview import print_matrix_preview
+        from evals.runner import load_golden_rows
+
+        rows = load_golden_rows()
+        if args.limit is not None:
+            if args.limit < 1:
+                sys.exit(f"--limit must be a positive row cap, got {args.limit}")
+            rows = rows[: args.limit]
+        print_matrix_preview(rows)
+        return
+    if args.command == "run-evals":
+        from evals.orchestrate import run_evals
+
+        raise SystemExit(run_evals(yes=args.yes, limit=args.limit))
+    if args.command == "open-dashboard":
+        from evals.orchestrate import open_dashboard_index
+
+        open_dashboard_index()
+        return
+    if args.command == "bank-pass-a":
+        from evals.classification import bank_pass_a
+
+        bank_pass_a(model=args.model, limit=args.limit, dry_run=args.dry_run)
+        return
 
     if args.command == "sample":
         from evals.sampling import build_golden_set
