@@ -7,11 +7,10 @@ written as a numbered page (`eval_instance_01.html`, `02`, ...) under
 archived only when explicitly asked for, otherwise development rebuilds would
 bury the real runs.
 
-An instance is identified by the runs behind it, not by when the page was
-rendered. Rebuilding the same runs after a styling fix overwrites that
-instance instead of allocating a new number. Runs that never recorded a start
-time cannot be identified, so those always take a fresh number rather than
-risk overwriting a different sweep.
+Real scored builds are append-only: each archive takes the next number so every
+finished run stays clickable on the index. Synthetic ``--save-instance``
+previews still replace the previous mock of the same source, so a styling loop
+does not fill the index with identical placeholders.
 """
 
 from __future__ import annotations
@@ -163,30 +162,21 @@ def next_instance_number(directory: Path, entries: list[dict[str, Any]]) -> int:
 
 
 def _identity(metrics: dict[str, Any]) -> str | None:
-    """Stable fingerprint of the runs behind a page, None when unidentifiable.
+    """Fingerprint used only to replace synthetic mock previews.
 
-    Synthetic/mock builds key on their source path so ``--save-instance`` can
-    replace the preview instead of minting a new number every rebuild. Real
-    runs without a recorded start time stay unidentifiable (fresh number)
-    rather than risk overwriting a different sweep.
+    Real scored builds always mint a new number (append-only). Synthetic
+    ``--save-instance`` builds key on their source path so a styling loop can
+    replace the previous mock instead of filling the index.
     """
-    if metrics.get("synthetic") or (metrics.get("run_instance") or {}).get("synthetic"):
-        source = str(metrics.get("source") or "fixture")
-        parts = [
-            "synthetic",
-            source,
-            "|".join(sorted(str(c) for c in (metrics.get("config_ids") or []))),
-        ]
-        return hashlib.sha1("\x1f".join(parts).encode("utf-8")).hexdigest()[:12]
-
-    run = metrics.get("run_instance") or {}
-    first, last = run.get("started_first"), run.get("started_last")
-    if not first or not last:
+    if not (
+        metrics.get("synthetic")
+        or (metrics.get("run_instance") or {}).get("synthetic")
+    ):
         return None
+    source = str(metrics.get("source") or "fixture")
     parts = [
-        first,
-        last,
-        str(run.get("n_runs") or 0),
+        "synthetic",
+        source,
         "|".join(sorted(str(c) for c in (metrics.get("config_ids") or []))),
     ]
     return hashlib.sha1("\x1f".join(parts).encode("utf-8")).hexdigest()[:12]
@@ -209,7 +199,11 @@ def archive_instance(
     directory: Path = EVAL_INSTANCES_DIR,
     now: datetime.datetime | None = None,
 ) -> ArchivedInstance:
-    """Write the page as a numbered instance and refresh the index."""
+    """Write the page as a numbered instance and refresh the index.
+
+    Real scored builds always append. Only a synthetic mock with a matching
+    identity may replace its previous page.
+    """
     directory.mkdir(parents=True, exist_ok=True)
     stamp = (now or datetime.datetime.now(datetime.timezone.utc)).isoformat()
     entries = load_registry(directory)
@@ -369,8 +363,8 @@ def render_index(entries: list[dict[str, Any]]) -> str:
   <div class="appbar-meta">{len(entries)} archived</div>
 </header>
 <main>
-  <p class="lede">Each row is one saved build of the eval suite, kept so a scored
-  run stays viewable after later builds. The working page
+  <p class="lede">Each row is one saved build of the eval suite. Every real scored
+  archive gets a new number so older instances stay clickable. The working page
   (<a href="../eval_dashboard.html">eval_dashboard.html</a>) is overwritten every
   time the dashboard is rebuilt.</p>{body}
   <footer>Index rewritten {today}. Times shown in this machine's local timezone.</footer>

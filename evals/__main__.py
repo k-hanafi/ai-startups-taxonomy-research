@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 
@@ -416,14 +417,25 @@ def main() -> None:
         from evals.scoring import load_confidence_file, score_cli
 
         confidence = None
+        robustness: dict | None = None
         if args.confidence:
             confidence = load_confidence_file(args.confidence)
         elif args.confidence_from_raw:
-            from evals.logprob_extract import LogprobExtractionError, run_confidence
-            from evals.paths import run_raw_dir
+            from evals.batch_parity import load_parity_summary_for_model
+            from evals.logprob_extract import (
+                LogprobExtractionError,
+                chosen_confidence,
+                extract_confidence_rows,
+                valid_mass_summary,
+            )
+            from evals.paths import run_config_path, run_raw_dir
 
             try:
-                confidence = run_confidence(run_raw_dir(args.run_id))
+                conf_rows = extract_confidence_rows(run_raw_dir(args.run_id))
+                confidence = {
+                    row["custom_id"]: chosen_confidence(row) for row in conf_rows
+                }
+                robustness = {"valid_mass": valid_mass_summary(conf_rows)}
             except LogprobExtractionError as exc:
                 if args.allow_missing_confidence:
                     logging.warning(
@@ -435,12 +447,26 @@ def main() -> None:
                     confidence = None
                 else:
                     sys.exit(f"--confidence-from-raw failed: {exc}")
+            model = None
+            cfg_path = run_config_path(args.run_id)
+            if cfg_path.exists():
+                try:
+                    model = json.loads(cfg_path.read_text(encoding="utf-8")).get(
+                        "model"
+                    )
+                except (OSError, ValueError):
+                    model = None
+            if model:
+                parity = load_parity_summary_for_model(str(model))
+                if parity:
+                    robustness = {**(robustness or {}), "batch_parity": parity}
         score_cli(
             args.run_id,
             args.baseline,
             confidence,
             allow_partial=args.allow_partial,
             allow_partial_confidence=args.allow_partial_confidence,
+            robustness=robustness,
         )
         return
     if args.command == "batch-parity":

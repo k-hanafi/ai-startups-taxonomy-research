@@ -389,6 +389,46 @@ def chosen_confidence(row: dict[str, Any]) -> float:
     return row["p_one"] if row["ai_native"] == 1 else 1.0 - row["p_one"]
 
 
+def valid_mass_summary(
+    rows: list[dict[str, Any]],
+    *,
+    threshold: float | None = None,
+    max_below_share: float | None = None,
+) -> dict[str, Any]:
+    """Aggregate per-row valid_mass for the dashboard robustness panel."""
+    cut = float(cfg.VALID_MASS_THRESHOLD if threshold is None else threshold)
+    allow = float(
+        cfg.VALID_MASS_MAX_BELOW_SHARE
+        if max_below_share is None
+        else max_below_share
+    )
+    masses = [float(r["valid_mass"]) for r in rows if r.get("valid_mass") is not None]
+    if not masses:
+        return {
+            "n": 0,
+            "min": None,
+            "p50": None,
+            "mean": None,
+            "threshold": cut,
+            "max_below_share": allow,
+            "n_below_threshold": 0,
+            "below_share": 0.0,
+        }
+    ordered = sorted(masses)
+    n = len(ordered)
+    n_below = sum(1 for m in ordered if m < cut)
+    return {
+        "n": n,
+        "min": ordered[0],
+        "p50": ordered[n // 2],
+        "mean": sum(ordered) / n,
+        "threshold": cut,
+        "max_below_share": allow,
+        "n_below_threshold": n_below,
+        "below_share": n_below / n,
+    }
+
+
 def run_confidence(raw_dir: Path) -> dict[str, float]:
     """custom_id -> chosen-digit confidence for every raw response in a run.
 
@@ -397,20 +437,30 @@ def run_confidence(raw_dir: Path) -> dict[str, float]:
     raw responses at all, so an explicit --confidence-from-raw request never
     silently degrades into a calibration-free score.
     """
+    rows = extract_confidence_rows(raw_dir)
+    return {row["custom_id"]: chosen_confidence(row) for row in rows}
+
+
+def extract_confidence_rows(raw_dir: Path) -> list[dict[str, Any]]:
+    """Like ``extract_run``, but refuses when nothing is extractable.
+
+    Shared by score ``--confidence-from-raw`` so confidence and valid_mass
+    come from one pass over the banked raw responses.
+    """
     raw_files = sorted(raw_dir.glob("*_a.json")) or sorted(raw_dir.glob("*.json"))
     rows = extract_run(raw_dir)
-    if not rows:
-        if not raw_dir.exists() or not raw_files:
-            raise LogprobExtractionError(
-                f"no raw response files under {raw_dir}; this run cannot supply "
-                "logprob confidence (raw/ is git-ignored and machine-local)"
-            )
+    if rows:
+        return rows
+    if not raw_dir.exists() or not raw_files:
         raise LogprobExtractionError(
-            f"raw responses under {raw_dir} exist ({len(raw_files)} file(s)) "
-            "but none yielded binary confidence: every decision token lacked "
-            "the opposing digit and left too wide a residual to bound it "
-            f"(limit {cfg.MAX_CENSORED_INTERVAL_WIDTH}). Raising "
-            "PASS_A_TOP_LOGPROBS does not help models that truncate "
-            "candidates at a probability floor."
+            f"no raw response files under {raw_dir}; this run cannot supply "
+            "logprob confidence (raw/ is git-ignored and machine-local)"
         )
-    return {row["custom_id"]: chosen_confidence(row) for row in rows}
+    raise LogprobExtractionError(
+        f"raw responses under {raw_dir} exist ({len(raw_files)} file(s)) "
+        "but none yielded binary confidence: every decision token lacked "
+        "the opposing digit and left too wide a residual to bound it "
+        f"(limit {cfg.MAX_CENSORED_INTERVAL_WIDTH}). Raising "
+        "PASS_A_TOP_LOGPROBS does not help models that truncate "
+        "candidates at a probability floor."
+    )

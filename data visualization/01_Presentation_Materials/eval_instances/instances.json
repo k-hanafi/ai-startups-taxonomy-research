@@ -54,7 +54,142 @@
         "n_gold": 100,
         "git_commit": "d96db8d"
       },
-      "rebuilt_utc": "2026-07-25T23:39:06.505224+00:00"
+      "rebuilt_utc": "2026-07-25T23:50:07.685008+00:00"
+    },
+    {
+      "n": 3,
+      "archived_utc": "2026-07-26T01:45:07.073742+00:00",
+      "file": "eval_instance_03.html",
+      "identity": null,
+      "synthetic": false,
+      "n_configs": 9,
+      "source": "9 runs under evals/runs/",
+      "run": {
+        "synthetic": false,
+        "n_runs": 9,
+        "started_first": "2026-07-25T17:53:41.360290+00:00",
+        "started_last": "2026-07-25T17:53:41.417038+00:00",
+        "models": [
+          "gpt-5.4-nano",
+          "gpt-5.4-mini",
+          "gpt-5.6-luna"
+        ],
+        "model_groups": [
+          "nano",
+          "mini",
+          "luna"
+        ],
+        "n_gold": 100,
+        "git_commit": "d96db8d"
+      }
+    },
+    {
+      "n": 4,
+      "archived_utc": "2026-07-26T01:58:51.280002+00:00",
+      "file": "eval_instance_04.html",
+      "identity": null,
+      "synthetic": false,
+      "n_configs": 9,
+      "source": "9 runs under evals/runs/",
+      "run": {
+        "synthetic": false,
+        "n_runs": 9,
+        "started_first": "2026-07-25T17:53:41.360290+00:00",
+        "started_last": "2026-07-25T17:53:41.417038+00:00",
+        "models": [
+          "gpt-5.4-nano",
+          "gpt-5.4-mini",
+          "gpt-5.6-luna"
+        ],
+        "model_groups": [
+          "nano",
+          "mini",
+          "luna"
+        ],
+        "n_gold": 100,
+        "git_commit": "d96db8d"
+      }
+    },
+    {
+      "n": 5,
+      "archived_utc": "2026-07-26T02:09:59.314527+00:00",
+      "file": "eval_instance_05.html",
+      "identity": null,
+      "synthetic": false,
+      "n_configs": 9,
+      "source": "9 runs under evals/runs/",
+      "run": {
+        "synthetic": false,
+        "n_runs": 9,
+        "started_first": "2026-07-25T17:53:41.360290+00:00",
+        "started_last": "2026-07-25T17:53:41.417038+00:00",
+        "models": [
+          "gpt-5.4-nano",
+          "gpt-5.4-mini",
+          "gpt-5.6-luna"
+        ],
+        "model_groups": [
+          "nano",
+          "mini",
+          "luna"
+        ],
+        "n_gold": 100,
+        "git_commit": "d96db8d"
+      }
+    },
+    {
+      "n": 6,
+      "archived_utc": "2026-07-26T02:16:15.515092+00:00",
+      "file": "eval_instance_06.html",
+      "identity": null,
+      "synthetic": false,
+      "n_configs": 9,
+      "source": "9 runs under evals/runs/",
+      "run": {
+        "synthetic": false,
+        "n_runs": 9,
+        "started_first": "2026-07-25T17:53:41.360290+00:00",
+        "started_last": "2026-07-25T17:53:41.417038+00:00",
+        "models": [
+          "gpt-5.4-nano",
+          "gpt-5.4-mini",
+          "gpt-5.6-luna"
+        ],
+        "model_groups": [
+          "nano",
+          "mini",
+          "luna"
+        ],
+        "n_gold": 100,
+        "git_commit": "d96db8d"
+      }
+    },
+    {
+      "n": 7,
+      "archived_utc": "2026-07-26T15:52:06.885908+00:00",
+      "file": "eval_instance_07.html",
+      "identity": null,
+      "synthetic": false,
+      "n_configs": 9,
+      "source": "9 runs under evals/runs/",
+      "run": {
+        "synthetic": false,
+        "n_runs": 9,
+        "started_first": "2026-07-25T17:53:41.360290+00:00",
+        "started_last": "2026-07-25T17:53:41.417038+00:00",
+        "models": [
+          "gpt-5.4-nano",
+          "gpt-5.4-mini",
+          "gpt-5.6-luna"
+        ],
+        "model_groups": [
+          "nano",
+          "mini",
+          "luna"
+        ],
+        "n_gold": 100,
+        "git_commit": "d96db8d"
+      }
     }
   ]
 }

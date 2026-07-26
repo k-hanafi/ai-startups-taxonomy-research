@@ -162,13 +162,33 @@ def test_parity_fails_when_batch_drops_logprobs():
     assert "sync_logprobs_present" not in failed
 
 
-def test_parity_fails_when_decision_token_missing_opposing_digit():
+def test_parity_accepts_one_sided_pool_when_residual_is_narrow():
+    """mini/luna truncate the opposing digit; a narrow residual still passes."""
     batch_body = _response_body()
-    # Strip opposing digit from the decision token's top_logprobs.
     entries = batch_body["output"][1]["content"][0]["logprobs"]
     decision = next(e for e in entries if e["token"] in ("0", "1"))
+    decision["logprob"] = -0.01  # p ≈ 0.99
     decision["top_logprobs"] = [
         t for t in decision["top_logprobs"] if t["token"] == decision["token"]
+    ]
+    checks = batch_parity.parity_checks(
+        _request_body(), _response_body(), batch_body
+    )
+    failed = {c["name"] for c in checks if not c["ok"]}
+    assert "batch_binary_candidates_present" not in failed
+
+
+def test_parity_fails_when_one_sided_residual_is_too_wide():
+    batch_body = _response_body()
+    entries = batch_body["output"][1]["content"][0]["logprobs"]
+    decision = next(e for e in entries if e["token"] in ("0", "1"))
+    # Chosen at p=0.5 with no opposing digit → residual too wide to bound.
+    import math
+    decision["logprob"] = math.log(0.5)
+    decision["top_logprobs"] = [
+        {"token": decision["token"], "bytes": decision["bytes"],
+         "logprob": math.log(0.5)},
+        {"token": " ", "bytes": [32], "logprob": math.log(0.1)},
     ]
     checks = batch_parity.parity_checks(
         _request_body(), _response_body(), batch_body

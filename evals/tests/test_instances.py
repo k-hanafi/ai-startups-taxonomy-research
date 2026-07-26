@@ -85,21 +85,24 @@ def test_distinct_runs_get_consecutive_numbers(tmp_path):
     }
 
 
-def test_rebuilding_the_same_runs_replaces_that_instance(tmp_path):
-    """A styling fix must not mint a second instance for one sweep."""
-    _archive(tmp_path, _metrics())
+def test_rebuilding_the_same_runs_appends_a_new_instance(tmp_path):
+    """Real scored archives are append-only so every finished run stays clickable."""
+    first = _archive(tmp_path, _metrics())
     again = _archive(tmp_path, _metrics(), minute=40)
 
-    assert again.number == 1
-    assert again.replaced is True
+    assert first.number == 1
+    assert again.number == 2
+    assert again.replaced is False
     entries = load_registry(tmp_path)
-    assert len(entries) == 1
-    assert entries[0]["archived_utc"].startswith("2026-07-24T20:00")
-    assert entries[0]["rebuilt_utc"].startswith("2026-07-24T20:40")
+    assert [e["n"] for e in entries] == [1, 2]
+    assert {p.name for p in tmp_path.glob("eval_instance_*.html")} == {
+        "eval_instance_01.html",
+        "eval_instance_02.html",
+    }
 
 
 def test_same_start_time_but_different_cells_is_a_new_instance(tmp_path):
-    """Identity includes which configs were loaded, not just when they ran."""
+    """Different cells still mint consecutive numbers under append-only."""
     _archive(tmp_path, _metrics(config_ids=["nano/low"]))
     other = _archive(tmp_path, _metrics(config_ids=["nano/low", "mini/low"]), minute=5)
 
@@ -108,7 +111,7 @@ def test_same_start_time_but_different_cells_is_a_new_instance(tmp_path):
 
 
 def test_undated_runs_never_overwrite_each_other(tmp_path):
-    """Without a recorded start we cannot tell two sweeps apart, so keep both."""
+    """Real scored builds with no start time still append, never replace."""
     first = _archive(tmp_path, _metrics(None))
     second = _archive(tmp_path, _metrics(None), minute=5)
 

@@ -594,6 +594,7 @@ def score_run(
     write: bool = True,
     allow_partial: bool = False,
     allow_partial_confidence: bool = False,
+    robustness: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Score one run against gold; optionally compare to a baseline run.
 
@@ -607,6 +608,9 @@ def score_run(
 
     When confidence is supplied, incomplete coverage refuses unless
     ``allow_partial_confidence=True``.
+
+    ``robustness`` is the optional dashboard block (valid_mass / batch_parity)
+    written by ``score --confidence-from-raw`` / run-evals.
     """
     gold = load_gold()
     records = load_predictions(run_id)
@@ -692,6 +696,8 @@ def score_run(
         ),
         "vs_baseline": None,
     }
+    if robustness:
+        report["robustness"] = robustness
     if kind == "classification" or "effort_b" in run_config:
         report["effort_b"] = run_config.get("effort_b")
         if run_config.get("pass_a_bank_run_id"):
@@ -762,6 +768,7 @@ def score_cli(
     confidence: Optional[dict[str, float]],
     allow_partial: bool = False,
     allow_partial_confidence: bool = False,
+    robustness: Optional[dict[str, Any]] = None,
 ) -> None:
     report = score_run(
         run_id,
@@ -769,6 +776,7 @@ def score_cli(
         confidence=confidence,
         allow_partial=allow_partial,
         allow_partial_confidence=allow_partial_confidence,
+        robustness=robustness,
     )
     for axis in AXES:
         ax = report["axes"][axis]

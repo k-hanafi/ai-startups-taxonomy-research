@@ -31,6 +31,7 @@ def test_build_job_plan_shape():
     jobs = orch.build_job_plan(n_rows=100, date="2026-07-25")
     kinds = [j.kind for j in jobs]
     assert kinds.count("pass_a") == 3
+    assert kinds.count("parity") == 3
     assert kinds.count("cell") == 9
     assert kinds.count("dashboard") == 1
     cells = [j for j in jobs if j.kind == "cell"]
@@ -39,14 +40,24 @@ def test_build_job_plan_shape():
     )
 
 
-def test_phase1_complete_requires_all_banks_green():
+def test_build_job_plan_can_omit_parity():
+    jobs = orch.build_job_plan(2, date="2026-07-25", include_parity=False)
+    assert all(j.kind != "parity" for j in jobs)
+    assert [j.kind for j in jobs].count("pass_a") == 3
+
+
+def test_phase1_complete_requires_banks_and_parity():
     jobs = orch.build_job_plan(2, date="2026-07-25")
     assert not orch.phase1_complete(jobs)
     for j in jobs:
         if j.kind == "pass_a":
             j.status = "done"
+    assert not orch.phase1_complete(jobs)
+    for j in jobs:
+        if j.kind == "parity":
+            j.status = "done"
     assert orch.phase1_complete(jobs)
-    jobs[0].status = "failed"
+    next(j for j in jobs if j.kind == "parity").status = "failed"
     assert not orch.phase1_complete(jobs)
     assert orch.phase1_failed(jobs)
 
@@ -54,7 +65,7 @@ def test_phase1_complete_requires_all_banks_green():
 def test_should_block_dashboard_on_failed_cell():
     jobs = orch.build_job_plan(2, date="2026-07-25")
     for j in jobs:
-        if j.kind in ("pass_a", "cell"):
+        if j.kind in ("pass_a", "parity", "cell"):
             j.status = "done"
     assert not orch.should_block_dashboard(jobs)
     cells = [j for j in jobs if j.kind == "cell"]
@@ -110,6 +121,62 @@ def test_cell_already_scored_requires_exact_row_count(tmp_path, monkeypatch):
     assert not orch.cell_already_scored("missing", 10)
 
 
+def test_cell_needs_robustness_refresh_when_parity_newer(tmp_path, monkeypatch):
+    monkeypatch.setattr(orch, "run_scored_path", lambda rid: tmp_path / rid / "scored.json")
+    run = tmp_path / "cell1"
+    run.mkdir()
+    (run / "scored.json").write_text(
+        json.dumps({
+            "robustness": {
+                "valid_mass": {"n": 2, "threshold": 0.9, "n_below_threshold": 0},
+            }
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "evals.batch_parity.load_parity_summary_for_model",
+        lambda model: {"verdict": "PASS", "n_rows": 10, "n_checks": 20, "n_failed": 0},
+    )
+    assert orch.cell_needs_robustness_refresh("cell1", "gpt-5.4-nano") is True
+    (run / "scored.json").write_text(
+        json.dumps({
+            "robustness": {
+                "valid_mass": {"n": 2, "threshold": 0.9, "n_below_threshold": 0},
+                "batch_parity": {
+                    "verdict": "PASS", "n_rows": 10, "n_checks": 20, "n_failed": 0,
+                },
+            }
+        }),
+        encoding="utf-8",
+    )
+    assert orch.cell_needs_robustness_refresh("cell1", "gpt-5.4-nano") is False
+
+
+def test_parity_fail_verdict_still_marks_job_done(tmp_path, monkeypatch):
+    """batch-parity exits 1 on FAIL; the report is still a finished check."""
+    model = cfg.EVAL_MODELS[0]
+    run_id = f"2026-07-25_parity_{model}"
+    run = tmp_path / run_id
+    run.mkdir()
+    (run / "parity_report.json").write_text(
+        json.dumps({"verdict": "FAIL", "n_rows": 10, "rows": {}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(orch, "parity_report_path", lambda rid: tmp_path / rid / "parity_report.json")
+    job = orch.Job(
+        key=f"parity:{model}",
+        label="Batch parity",
+        kind="parity",
+        model=model,
+        run_id=run_id,
+        rows_total=10,
+        status="running",
+    )
+    orch._handle_finished(job, rc=1)
+    assert job.status == "done"
+    assert job.rows_done == 10
+
+
 def test_build_status_table_renders_statuses():
     jobs = orch.build_job_plan(5, date="2026-07-25")
     jobs[0].status = "done"
@@ -137,6 +204,9 @@ def test_seed_skipped_marks_scored_cells(tmp_path, monkeypatch):
     monkeypatch.setattr(orch, "run_config_path", lambda rid: tmp_path / "conf" / f"{rid}.json")
     monkeypatch.setattr(
         orch, "bank_already_complete", lambda model, cids: False
+    )
+    monkeypatch.setattr(
+        "evals.batch_parity.parity_already_complete", lambda model, n=None: False
     )
     jobs = orch.build_job_plan(2, date="2026-07-25")
     cell = next(j for j in jobs if j.kind == "cell")

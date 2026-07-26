@@ -279,11 +279,13 @@ def test_robustness_valid_mass_and_parity_fail_paths():
     stub = _axes_stub(robustness={
         "valid_mass": {
             "n": 100,
-            "min": 0.91,
+            "min": 0.44,
             "p50": 0.998,
-            "mean": 0.995,
-            "threshold": 0.98,
-            "n_below_threshold": 3,
+            "mean": 0.97,
+            "threshold": 0.90,
+            "max_below_share": 0.05,
+            "n_below_threshold": 11,
+            "below_share": 0.11,
         },
         "batch_parity": {
             "verdict": "FAIL",
@@ -297,6 +299,28 @@ def test_robustness_valid_mass_and_parity_fail_paths():
     assert by_id["probability_mass"]["status"] == "fail"
     assert by_id["batch_parity"]["status"] == "fail"
     assert by_id["tokenization_pinned"]["status"] == "pending"
+
+
+def test_robustness_valid_mass_tolerates_one_thin_outlier():
+    """1/100 below the floor must not fail when the mean stays healthy."""
+    stub = _axes_stub(robustness={
+        "valid_mass": {
+            "n": 100,
+            "min": 0.80,
+            "p50": 0.995,
+            "mean": 0.986,
+            "threshold": 0.90,
+            "max_below_share": 0.05,
+            "n_below_threshold": 1,
+            "below_share": 0.01,
+        },
+    })
+    metrics = build_metrics([stub], synthetic=False, source="test")
+    mass = next(
+        c for c in metrics["robustness"]["checks"] if c["id"] == "probability_mass"
+    )
+    assert mass["status"] == "pass"
+    assert mass["per_model"][0]["status"] == "pass"
 
 
 def test_robustness_parity_empty_verdict_is_pending():

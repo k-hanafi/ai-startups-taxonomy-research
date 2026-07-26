@@ -264,6 +264,21 @@ def test_uncensored_pool_is_not_flagged_censored():
     assert result.p_one == pytest.approx(0.7)
 
 
+def test_valid_mass_summary_counts_rows_below_threshold():
+    rows = [
+        {"valid_mass": 0.99},
+        {"valid_mass": 0.80},
+        {"valid_mass": 0.95},
+    ]
+    summary = lpx.valid_mass_summary(rows, threshold=0.90, max_below_share=0.05)
+    assert summary["n"] == 3
+    assert summary["min"] == pytest.approx(0.80)
+    assert summary["n_below_threshold"] == 1
+    assert summary["below_share"] == pytest.approx(1 / 3)
+    assert summary["threshold"] == pytest.approx(0.90)
+    assert summary["max_below_share"] == pytest.approx(0.05)
+
+
 # ---------------------------------------------------------------------------
 # Metrics
 # ---------------------------------------------------------------------------

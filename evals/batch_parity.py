@@ -19,6 +19,7 @@ import datetime
 import json
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 from openai import OpenAI
@@ -113,26 +114,28 @@ def _logprob_shape_checks(
 
 
 def _decision_binary_pool_ok(response_body: dict[str, Any]) -> tuple[bool, str]:
-    """Whether the decision token carries unmasked evidence for both {0,1}."""
+    """Whether confidence is extractable at the decision token.
+
+    Both digits in the pool is ideal. A one-sided pool is still ok when the
+    censored residual bound is narrow enough (mini/luna truncation floor).
+    """
     from evals.logprob_extract import (
+        BinaryConfidenceUnavailable,
         LogprobExtractionError,
-        binary_candidate_pool,
-        candidate_value,
-        find_decision_entry,
-        output_text_content,
+        extract_binary_confidence,
     )
 
     try:
-        content = output_text_content(response_body)
-        text = content["text"]
-        logprobs = content["logprobs"]
-        _, entry = find_decision_entry(text, logprobs)
+        result = extract_binary_confidence(response_body)
+    except BinaryConfidenceUnavailable as exc:
+        return False, str(exc)
     except LogprobExtractionError as exc:
         return False, str(exc)
-    pool = binary_candidate_pool(entry)
-    values = {candidate_value(t) for t in pool}
-    ok = 0 in values and 1 in values
-    return ok, f"pool values={sorted(v for v in values if v is not None)}"
+    if result.censored:
+        return True, (
+            f"censored residual bound width={result.interval_width:.4f}"
+        )
+    return True, f"p_one={result.p_one:.4f}"
 
 
 def parity_checks(
@@ -201,8 +204,9 @@ def parity_checks(
             f"ai_native={verdict}",
         ))
 
-    # When logprobs are present, require {0,1} evidence at the decision token
-    # (calibration availability). Cardinality of top_logprobs is not scored.
+    # When logprobs are present, confidence must be extractable on both sides
+    # (both digits, or a narrow censored residual). Cardinality of
+    # top_logprobs is not scored.
     for side, body in (("sync", sync_body), ("batch", batch_body)):
         entries = extract_logprob_entries(body)
         if not entries:
@@ -212,6 +216,89 @@ def parity_checks(
             f"{side}_binary_candidates_present", ok, detail,
         ))
     return checks
+
+
+def summarize_parity_report(report: dict[str, Any]) -> dict[str, Any]:
+    """Compact block for scored.json ``robustness.batch_parity``."""
+    n_checks = 0
+    n_failed = 0
+    for row in (report.get("rows") or {}).values():
+        for check in row.get("checks") or []:
+            n_checks += 1
+            if not check.get("ok"):
+                n_failed += 1
+    return {
+        "verdict": report.get("verdict"),
+        "n_rows": int(report.get("n_rows") or 0),
+        "n_checks": n_checks,
+        "n_failed": n_failed,
+    }
+
+
+def find_latest_parity_report(model: str) -> Path | None:
+    """Newest ``parity_report.json`` for *model*, or None."""
+    from evals.paths import RUNS_DIR
+
+    candidates: list[tuple[float, Path]] = []
+    for path in RUNS_DIR.glob(f"*_parity_{model}"):
+        report = path / "parity_report.json"
+        if not report.is_file():
+            continue
+        try:
+            mtime = report.stat().st_mtime
+        except OSError:
+            continue
+        candidates.append((mtime, report))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: -item[0])
+    return candidates[0][1]
+
+
+def _parity_report_is_current(report: dict[str, Any], expected_n: int) -> bool:
+    """Whether a saved report can be reused under the current parity gate."""
+    if str(report.get("verdict") or "").strip().upper() not in {"PASS", "FAIL"}:
+        return False
+    if int(report.get("n_rows") or 0) != expected_n:
+        return False
+    # Retired check: cardinality of top_logprobs. Predates censored-residual
+    # confidence and must not paint the dashboard from a stale FAIL/PASS.
+    for row in (report.get("rows") or {}).values():
+        for check in row.get("checks") or []:
+            if "top_logprobs_honored" in str(check.get("name") or ""):
+                return False
+    return True
+
+
+def load_parity_summary_for_model(model: str) -> dict[str, Any] | None:
+    """Dashboard block from the newest current parity report for *model*."""
+    path = find_latest_parity_report(model)
+    if path is None:
+        return None
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(report, dict):
+        return None
+    if not _parity_report_is_current(report, cfg.PARITY_ROWS):
+        return None
+    return summarize_parity_report(report)
+
+
+def parity_already_complete(model: str, expected_n: int | None = None) -> bool:
+    """True when a finished, current parity report for *model* is on disk."""
+    path = find_latest_parity_report(model)
+    if path is None:
+        return False
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(report, dict):
+        return False
+    want = int(expected_n if expected_n is not None else cfg.PARITY_ROWS)
+    return _parity_report_is_current(report, want)
 
 
 def build_parity_report(

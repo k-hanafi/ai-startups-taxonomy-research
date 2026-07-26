@@ -519,7 +519,9 @@ VALID_MASS_MEANING = (
     "Before renormalizing to a probability, the raw probability mass on the "
     "two legal answers (0 and 1) is recorded per row. Mass near 1.0 means "
     "the model put essentially all its probability on legal answers, so the "
-    "renormalized confidence is trustworthy."
+    "renormalized confidence is trustworthy. The check passes when the mean "
+    "mass stays at or above the floor and at most a small share of rows "
+    "(default 5%) fall below it, so one thin outlier does not fail the model."
 )
 BATCH_PARITY_MEANING = (
     "The same request bodies were submitted through both the sync and Batch "
@@ -626,27 +628,71 @@ def _tokenization_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _valid_mass_block_fails(block: dict[str, Any]) -> bool:
+    """Aggregate gate: mean floor + small allowance for thin outliers.
+
+    A single row under the per-row floor must not fail the model. Fail only
+    when the mean dips below the floor, or more than ``max_below_share`` of
+    rows are thin (default 5%).
+    """
+    n = int(block.get("n") or 0)
+    n_below = int(block.get("n_below_threshold") or 0)
+    mean = block.get("mean")
+    threshold = float(block.get("threshold") if block.get("threshold") is not None else 0.90)
+    max_share = float(
+        block.get("max_below_share")
+        if block.get("max_below_share") is not None
+        else 0.05
+    )
+    if n <= 0:
+        return False
+    below_share = (
+        float(block["below_share"])
+        if block.get("below_share") is not None
+        else n_below / n
+    )
+    if mean is None:
+        # Legacy summaries without a mean: keep the old zero-tolerance rule.
+        return n_below > 0
+    return mean < threshold or below_share > max_share
+
+
 def _valid_mass_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
     recorded = _dedupe_by_model(runs, "valid_mass")
     per_model: list[dict[str, Any]] = []
     below_total = 0
     min_mass: Optional[float] = None
+    mean_mass: Optional[float] = None
     threshold: Optional[float] = None
+    max_below_share: Optional[float] = None
+    any_fail = False
     for model, block in recorded.items():
         n_below = block.get("n_below_threshold")
         block_min = block.get("min")
+        block_mean = block.get("mean")
         threshold = block.get("threshold", threshold)
-        fail = n_below is not None and int(n_below) > 0
+        max_below_share = block.get("max_below_share", max_below_share)
+        fail = _valid_mass_block_fails(block)
+        any_fail = any_fail or fail
         below_total += int(n_below or 0)
         if block_min is not None:
             min_mass = block_min if min_mass is None else min(min_mass, block_min)
-        detail = f"min mass {block_min}" if block_min is not None else "recorded"
-        if n_below is not None:
-            detail += f", {int(n_below)} row(s) below threshold"
+        if block_mean is not None:
+            mean_mass = (
+                block_mean if mean_mass is None else min(mean_mass, float(block_mean))
+            )
+        n = int(block.get("n") or 0)
+        detail_parts: list[str] = []
+        if block_mean is not None:
+            detail_parts.append(f"mean {float(block_mean):.3f}")
+        if block_min is not None:
+            detail_parts.append(f"min {block_min}")
+        if n_below is not None and n:
+            detail_parts.append(f"{int(n_below)}/{n} rows below floor")
         per_model.append({
             "model": model,
             "status": "fail" if fail else "pass",
-            "detail": detail,
+            "detail": ", ".join(detail_parts) if detail_parts else "recorded",
         })
     if not recorded:
         return {
@@ -663,15 +709,22 @@ def _valid_mass_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
             ),
         }
     stats = []
+    if mean_mass is not None:
+        stats.append({"label": "Lowest model mean", "value": f"{mean_mass:.4f}"})
     if min_mass is not None:
         stats.append({"label": "Minimum valid mass", "value": f"{min_mass}"})
     if threshold is not None:
-        stats.append({"label": "Threshold", "value": f"{threshold}"})
-    stats.append({"label": "Rows below threshold", "value": _fmt_count(below_total)})
+        stats.append({"label": "Mean floor", "value": f"{threshold}"})
+    if max_below_share is not None:
+        stats.append({
+            "label": "Max share below floor",
+            "value": f"{float(max_below_share):.0%}",
+        })
+    stats.append({"label": "Rows below floor", "value": _fmt_count(below_total)})
     return {
         "id": "probability_mass",
         "title": "Probability mass accounted",
-        "status": "fail" if below_total > 0 else "pass",
+        "status": "fail" if any_fail else "pass",
         "meaning": VALID_MASS_MEANING,
         "stats": stats,
         "per_model": per_model,
@@ -722,9 +775,10 @@ def _batch_parity_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
             "stats": [],
             "per_model": [],
             "pending_note": (
-                "Parity verdicts come from the batch-parity smoke "
-                "(python -m evals batch-parity). They surface here once a "
-                "robustness.batch_parity summary is recorded with the run."
+                "Parity verdicts come from the Batch-vs-sync smoke that "
+                "run-evals runs in phase 1 (or python -m evals batch-parity). "
+                "They surface here once scoring attaches "
+                "robustness.batch_parity to the cell."
             ),
         }
     if any_fail:

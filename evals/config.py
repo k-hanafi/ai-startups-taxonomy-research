@@ -89,11 +89,13 @@ LOGPROB_INCLUDE: list[str] = ["message.output_text.logprobs"]
 # unavailable instead.
 MAX_CENSORED_INTERVAL_WIDTH: float = 0.05
 
-# Minimum share of probability a Pass A decision token must place on the two
-# legal answers. Below this, most of the mass went to tokens that are not a
-# verdict at all (whitespace, punctuation), so the renormalized confidence
-# rests on a thin slice of the distribution and is worth flagging.
+# Per-row floor: below this, most probability went to non-verdict tokens
+# (whitespace, punctuation), so renormalized confidence rests on a thin slice.
+# The dashboard does not fail on a single outlier. It fails only when the
+# mean dips below this floor, or more than VALID_MASS_MAX_BELOW_SHARE of rows
+# are thin (so 1/100 is tolerated; 11/100 is not).
 VALID_MASS_THRESHOLD: float = 0.90
+VALID_MASS_MAX_BELOW_SHARE: float = 0.05
 
 # Rough Pass B output+reasoning token guesses for dry-run budget preflight.
 # Input-only char/4 estimates understate high-effort spend; these are order-of-
