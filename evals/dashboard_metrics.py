@@ -15,7 +15,13 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from evals.paths import PROJECT_ROOT, RUNS_DIR, run_config_path, run_scored_path
+from evals.paths import (
+    PROJECT_ROOT,
+    RUNS_DIR,
+    run_config_path,
+    run_predictions_path,
+    run_scored_path,
+)
 
 DEFAULT_FIXTURE = (
     PROJECT_ROOT
@@ -119,6 +125,51 @@ def _disambiguate_repeat_labels(configs: list[dict[str, Any]]) -> None:
             c["label"] = f"{c['label']} · r{rep}"
 
 
+def attach_fresh_production_cost(
+    scored: dict[str, Any],
+    *,
+    run_id: str | None = None,
+    predictions_path: Path | None = None,
+) -> dict[str, Any]:
+    """Recompute the production $ ladder from this run's predictions.jsonl.
+
+    Dashboard builds always project from the unit cost measured on *this*
+    golden run (token totals in predictions), not a stale ladder baked into
+    an older scored.json. Synthetic fixture stubs without predictions keep
+    their embedded estimate.
+    """
+    from evals.cost_extrapolate import production_cost_from_records
+    from evals.jsonl_io import iter_jsonl
+
+    rid = run_id or scored.get("run_id")
+    path = predictions_path
+    if path is None and rid:
+        path = run_predictions_path(str(rid))
+    if path is None or not Path(path).is_file():
+        return scored
+
+    records = [
+        rec for rec in iter_jsonl(Path(path))
+        if rec.get("status") == "completed"
+    ]
+    if not records:
+        return scored
+
+    model = (
+        scored.get("model")
+        or (scored.get("config") or {}).get("model")
+        or records[0].get("model")
+    )
+    if not model:
+        return scored
+
+    fresh = dict(scored)
+    fresh["production_cost_estimate"] = production_cost_from_records(
+        records, str(model),
+    )
+    return fresh
+
+
 def _projected_usd(scored: dict[str, Any]) -> Optional[float]:
     """Leaderboard $ from the sync cost ladder only (step 3_scale).
 
@@ -138,12 +189,11 @@ def _projected_usd(scored: dict[str, Any]) -> Optional[float]:
 
 
 def _cost_breakdown(scored: dict[str, Any]) -> Optional[dict[str, Any]]:
-    """Popover payload: the recorded arithmetic behind the projected $.
+    """Popover payload: arithmetic behind the projected $ for this config.
 
-    Reads only what scored.json actually recorded (production_cost_estimate
-    ladder + the cost block's token totals / pricing / per-pass split).
-    Missing fields stay None and the UI renders them as "not recorded";
-    nothing is recomputed or invented here.
+    Prefer the (possibly freshly recomputed) production_cost_estimate ladder
+    plus the cost block's token totals / pricing / per-pass split. Missing
+    fields stay None and the UI renders them as "not recorded".
     """
     est = scored.get("production_cost_estimate") or {}
     cost = scored.get("cost") or {}
@@ -978,7 +1028,13 @@ def load_fixture(path: Path | None = None) -> dict[str, Any]:
 
 
 def load_from_run_ids(run_ids: Iterable[str]) -> dict[str, Any]:
-    """Load real scored.json files for the given run ids."""
+    """Load real scored.json files for the given run ids.
+
+    Accuracy / latency / calibration come from each run's scored.json.
+    Production $ is recomputed from that run's predictions.jsonl so every
+    dashboard instance reflects current unit costs and N_prod, not a stale
+    ladder from an earlier score.
+    """
     runs: list[dict[str, Any]] = []
     missing: list[str] = []
     for run_id in run_ids:
@@ -986,9 +1042,12 @@ def load_from_run_ids(run_ids: Iterable[str]) -> dict[str, Any]:
         if not path.exists():
             missing.append(run_id)
             continue
-        runs.append(
-            {**load_scored_json(path), **_run_config_meta(run_config_path(run_id))}
-        )
+        scored = {
+            **load_scored_json(path),
+            **_run_config_meta(run_config_path(run_id)),
+            "run_id": run_id,
+        }
+        runs.append(attach_fresh_production_cost(scored, run_id=run_id))
     if missing:
         raise FileNotFoundError(
             "Missing scored.json for: " + ", ".join(missing)
@@ -1005,8 +1064,18 @@ def load_from_scored_paths(paths: Iterable[Path]) -> dict[str, Any]:
     runs: list[dict[str, Any]] = []
     for raw_path in paths:
         path = Path(raw_path)
+        run_id = path.parent.name
+        scored = {
+            **load_scored_json(path),
+            **_run_config_meta(path.parent / "config.json"),
+            "run_id": run_id,
+        }
         runs.append(
-            {**load_scored_json(path), **_run_config_meta(path.parent / "config.json")}
+            attach_fresh_production_cost(
+                scored,
+                run_id=run_id,
+                predictions_path=path.parent / "predictions.jsonl",
+            )
         )
     return build_metrics(
         runs,

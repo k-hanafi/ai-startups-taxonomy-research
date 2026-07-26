@@ -235,12 +235,32 @@ def summarize_parity_report(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _parity_run_dir_matches_model(dir_name: str, model: str) -> bool:
+    """True for ``{date}_parity_{model}`` or ``{date}_parity_{model}_{n}``.
+
+    ``run-evals`` mints a ``_2``, ``_3``, … suffix when today's base parity
+    id already exists. A bare ``*_parity_{model}`` glob misses those dirs.
+    """
+    import re
+
+    return bool(
+        re.fullmatch(
+            rf".+_parity_{re.escape(model)}(?:_\d+)?",
+            dir_name,
+        )
+    )
+
+
 def find_latest_parity_report(model: str) -> Path | None:
     """Newest ``parity_report.json`` for *model*, or None."""
     from evals.paths import RUNS_DIR
 
+    if not RUNS_DIR.is_dir():
+        return None
     candidates: list[tuple[float, Path]] = []
-    for path in RUNS_DIR.glob(f"*_parity_{model}"):
+    for path in RUNS_DIR.iterdir():
+        if not path.is_dir() or not _parity_run_dir_matches_model(path.name, model):
+            continue
         report = path / "parity_report.json"
         if not report.is_file():
             continue
@@ -417,7 +437,11 @@ def _write_parity_report(
     return report
 
 
-def run_parity(model: str = cfg.EVAL_MODELS[0]) -> dict[str, Any]:
+def run_parity(
+    model: str = cfg.EVAL_MODELS[0],
+    *,
+    run_id: str | None = None,
+) -> dict[str, Any]:
     """Submit PARITY_ROWS Pass A rows sync AND batch; write the parity report."""
     rows = load_golden_rows()[:cfg.PARITY_ROWS]
     prompt_a = load_pass_a_prompt()
@@ -426,7 +450,7 @@ def run_parity(model: str = cfg.EVAL_MODELS[0]) -> dict[str, Any]:
         for row in rows
     }
 
-    run_id = f"{datetime.date.today().isoformat()}_parity_{model}"
+    run_id = run_id or f"{datetime.date.today().isoformat()}_parity_{model}"
     run_dir(run_id).mkdir(parents=True, exist_ok=True)
     raw = run_raw_dir(run_id)
     raw.mkdir(parents=True, exist_ok=True)

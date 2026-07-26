@@ -95,7 +95,7 @@ def extrapolate_production_cost(
     total_cached_tokens: Optional[int],
     cache_field_present: bool,
     n_prod: int = cfg.N_PROD_DEFAULT,
-    n_prod_label: str = "alive_plus_dead",
+    n_prod_label: str = "evidence_universe",
     architecture: str = "classification",
 ) -> dict[str, Any]:
     """Build the sync-priced production cost ladder as a structured dict.
@@ -244,7 +244,7 @@ def production_cost_from_records(
     model: str,
     *,
     n_prod: int = cfg.N_PROD_DEFAULT,
-    n_prod_label: str = "alive_plus_dead",
+    n_prod_label: str = "evidence_universe",
 ) -> dict[str, Any]:
     """Aggregate token totals from scored records, then extrapolate."""
     from evals.usage import token_totals

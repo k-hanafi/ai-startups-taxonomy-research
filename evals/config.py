@@ -97,16 +97,17 @@ MAX_CENSORED_INTERVAL_WIDTH: float = 0.05
 VALID_MASS_THRESHOLD: float = 0.90
 VALID_MASS_MAX_BELOW_SHARE: float = 0.05
 
-# Rough Pass B output+reasoning token guesses for dry-run budget preflight.
-# Input-only char/4 estimates understate high-effort spend; these are order-of-
-# magnitude only (observed single-pass high peaked ~1,450 output tokens).
+# Pass A/B output+reasoning token guesses for dry-run / cost-preview only.
+# Calibrated to the 2026-07-25 two-pass matrix (mean output tokens/row).
+# Preview still ignores prompt-cache savings, so it stays a mild upper bound
+# on matrix spend; the dashboard Projected cost uses measured tokens instead.
 PASS_B_OUTPUT_TOKEN_ESTIMATE: dict[str, int] = {
     "none": 250,
-    "low": 500,
-    "medium": 1_000,
-    "high": 1_600,
+    "low": 350,
+    "medium": 550,
+    "high": 1_000,
 }
-PASS_A_OUTPUT_TOKEN_ESTIMATE: int = 8
+PASS_A_OUTPUT_TOKEN_ESTIMATE: int = 16
 
 # Empirical finding (2026-07-05, gpt-5.4-nano): reasoning models reject the
 # `temperature` parameter with a 400 ("not supported with this model"). They
@@ -206,14 +207,18 @@ def require_model_pricing(model: str) -> dict[str, float]:
 # stays offline-safe without keys.
 CACHE_DISCOUNT: float = 0.50
 
-# Scale-up N: alive non-empty evidence + dead extractable targets (default).
-# Optional named alternatives for later toggles; default is the combo.
+# Scale-up N for production $ projections. Default is the evidence-only
+# universe the V1 alive/dead dashboard reports (~37.7k): survivors with
+# non-empty live evidence plus dead companies recovered with usable
+# archive evidence. Named alternatives stay available for later toggles.
 N_PROD_ALIVE_EVIDENCE: int = 22_032
 N_PROD_DEAD_EXTRACTABLE: int = 19_044
 N_PROD_ALIVE_PLUS_DEAD: int = N_PROD_ALIVE_EVIDENCE + N_PROD_DEAD_EXTRACTABLE
-N_PROD_DEFAULT: int = N_PROD_ALIVE_PLUS_DEAD
+N_PROD_EVIDENCE_UNIVERSE: int = 37_672
+N_PROD_DEFAULT: int = N_PROD_EVIDENCE_UNIVERSE
 
 N_PROD_SCALE_OPTIONS: dict[str, int] = {
+    "evidence_universe": N_PROD_EVIDENCE_UNIVERSE,
     "alive_evidence": N_PROD_ALIVE_EVIDENCE,
     "dead_extractable": N_PROD_DEAD_EXTRACTABLE,
     "alive_plus_dead": N_PROD_ALIVE_PLUS_DEAD,

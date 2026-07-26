@@ -855,12 +855,15 @@ def bank_pass_a(
     model: str,
     limit: int | None = None,
     dry_run: bool = False,
+    *,
+    rerun: bool = False,
 ) -> str:
     """Bank Pass A for *model* only (no Pass B). Returns the bank run_id.
 
-    Idempotent: skips custom_ids already completed in the stable bank so a
-    re-run resumes. Used by ``run-evals`` phase 1 so all three models can
-    bank in parallel before the 9 Pass B cells start.
+    Idempotent by default: skips custom_ids already completed in the stable
+    bank so a re-run resumes. Used by ``run-evals`` phase 1 so all three
+    models can bank in parallel before the 9 Pass B cells start. Pass
+    ``rerun=True`` (CLI ``--rerun``) to delete the bank and rebuild it.
     """
     if limit is not None and limit < 1:
         raise ValueError(f"--limit must be a positive row cap, got {limit}")
@@ -879,11 +882,15 @@ def bank_pass_a(
         est = estimate_pass_a(model, rows)
         logger.info(
             "DRY RUN Pass A bank %s: model=%s rows=%d "
-            "~$%.4f (in ~%d + out ~%d)",
+            "~$%.4f (in ~%d + out ~%d)%s",
             bank_id, model, est.n_rows, est.est_total_cost,
             est.est_input_tokens, est.est_output_tokens,
+            " [would rebuild]" if rerun else "",
         )
         return bank_id
+
+    if rerun:
+        clear_pass_a_bank(model)
 
     run_dir(bank_id).mkdir(parents=True, exist_ok=True)
     run_raw_dir(bank_id).mkdir(parents=True, exist_ok=True)

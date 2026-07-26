@@ -320,3 +320,33 @@ def test_batch_error_forces_fail_even_when_rows_pass(tmp_path, monkeypatch):
     )
     assert all(row["ok"] for row in report["rows"].values())
     assert report["verdict"] == "FAIL"
+
+
+def test_find_latest_parity_report_includes_suffixed_run_dirs(tmp_path, monkeypatch):
+    """run-evals mints ``_2`` when today's base parity id exists; discover it."""
+    monkeypatch.setattr("evals.paths.RUNS_DIR", tmp_path)
+
+    model = "gpt-5.4-nano"
+    old = tmp_path / f"2026-07-25_parity_{model}"
+    new = tmp_path / f"2026-07-25_parity_{model}_2"
+    old.mkdir()
+    new.mkdir()
+    (old / "parity_report.json").write_text(
+        json.dumps({"verdict": "PASS", "n_rows": cfg.PARITY_ROWS, "rows": {}}),
+        encoding="utf-8",
+    )
+    # Newer mtime on the suffixed dir.
+    import time
+    time.sleep(0.02)
+    (new / "parity_report.json").write_text(
+        json.dumps({"verdict": "FAIL", "n_rows": cfg.PARITY_ROWS, "rows": {}}),
+        encoding="utf-8",
+    )
+    found = batch_parity.find_latest_parity_report(model)
+    assert found == new / "parity_report.json"
+    assert batch_parity._parity_run_dir_matches_model(
+        f"2026-07-25_parity_{model}_2", model
+    )
+    assert not batch_parity._parity_run_dir_matches_model(
+        f"2026-07-25_parity_{model}_extra", model
+    )

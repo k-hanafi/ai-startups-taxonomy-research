@@ -35,9 +35,11 @@ def main() -> None:
     p_run_evals = subs.add_parser(
         "run-evals",
         help=(
-            "Run the full locked matrix end to end: bank Pass A (3 models "
-            "in parallel), run 9 Pass B cells in parallel, score each, "
-            "build the dashboard. Live checklist in the terminal."
+            "Run the full locked matrix from scratch every time: rebuild "
+            "Pass A banks (3 models in parallel), re-run Batch parity, run "
+            "9 Pass B cells in parallel, score each, build the dashboard. "
+            "Live checklist in the terminal. Prior scored cells are not "
+            "resumed (re-paying is intentional)."
         ),
     )
     p_run_evals.add_argument(
@@ -58,8 +60,8 @@ def main() -> None:
     p_bank = subs.add_parser(
         "bank-pass-a",
         help=(
-            "Bank Pass A only for one model (used by run-evals phase 1; "
-            "idempotent resume)"
+            "Bank Pass A only for one model (used by run-evals phase 1). "
+            "Resumes incomplete banks by default; pass --rerun to rebuild."
         ),
     )
     p_bank.add_argument("--model", required=True, help="Model name to bank")
@@ -68,6 +70,11 @@ def main() -> None:
     )
     p_bank.add_argument(
         "--dry-run", action="store_true", help="Print cost only, no API call",
+    )
+    p_bank.add_argument(
+        "--rerun",
+        action="store_true",
+        help="Delete the stable per-model Pass A bank and rebuild it",
     )
 
     subs.add_parser("sample", help="Draw the stratified golden set (Stage 1)")
@@ -221,6 +228,11 @@ def main() -> None:
         help="PAID: 10-row Batch-vs-sync parity smoke on Pass A (gate Q4, Stage 7)",
     )
     p_parity.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
+    p_parity.add_argument(
+        "--run-id",
+        default=None,
+        help="Override parity run directory under evals/runs/",
+    )
     p_report = subs.add_parser(
         "report",
         help="Render production-cost extrapolation for a scored run (pivot 8)",
@@ -299,7 +311,12 @@ def main() -> None:
     if args.command == "bank-pass-a":
         from evals.classification import bank_pass_a
 
-        bank_pass_a(model=args.model, limit=args.limit, dry_run=args.dry_run)
+        bank_pass_a(
+            model=args.model,
+            limit=args.limit,
+            dry_run=args.dry_run,
+            rerun=args.rerun,
+        )
         return
 
     if args.command == "sample":
@@ -473,7 +490,10 @@ def main() -> None:
         from evals import config as cfg
         from evals.batch_parity import run_parity
 
-        report = run_parity(model=args.model or cfg.EVAL_MODELS[0])
+        report = run_parity(
+            model=args.model or cfg.EVAL_MODELS[0],
+            run_id=args.run_id,
+        )
         # Nonzero exit on any non-PASS verdict, including batch_error runs
         # (batch timed out / no output file). The report is still written so
         # the paid sync results survive either way.

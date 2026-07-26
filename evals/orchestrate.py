@@ -1,9 +1,9 @@
 """End-to-end paid matrix orchestrator: ``python -m evals run-evals``.
 
-Phase 1 banks Pass A once per model and runs Batch-vs-sync parity once per
-model (6 parallel jobs). Phase 2 runs all 9 Pass B cells in parallel, scores
-each as it finishes (confidence + valid_mass + parity summary), then builds
-the dashboard. Progress is read from disk (predictions.jsonl / scored.json /
+Every invocation runs from scratch: rebuilds Pass A banks, re-runs Batch
+parity (unless ``--limit``), mints new cell run ids, scores, then builds the
+dashboard. Phase 1 = 3 banks + 3 parity in parallel; phase 2 = 9 Pass B cells
+in parallel. Progress is read from disk (predictions.jsonl / scored.json /
 parity_report.json), not scraped from child stdout. Child logs land in each
 run's ``run.log``.
 """
@@ -47,7 +47,6 @@ from evals.paths import (
     run_scored_path,
 )
 from evals.runner import load_golden_rows
-from src.formatter import build_custom_id
 
 logger = logging.getLogger(__name__)
 
@@ -217,74 +216,33 @@ def bank_already_complete(model: str, custom_ids: list[str]) -> bool:
     return pass_a_bank_covers(bank_id, custom_ids)
 
 
-def find_parity_run_id(model: str, *, date: str | None = None) -> str:
-    """Reuse an existing parity run dir for *model*, or mint a dated id."""
-    from evals.batch_parity import find_latest_parity_report
-
-    path = find_latest_parity_report(model)
-    if path is not None:
-        return path.parent.name
+def mint_parity_run_id(model: str, *, date: str | None = None) -> str:
+    """Mint an unused parity run dir id for *model* (never reuses prior work)."""
     day = date or _dt.date.today().isoformat()
-    return f"{day}_parity_{model}"
+    base = f"{day}_parity_{model}"
+    if not (RUNS_DIR / base).exists():
+        return base
+    n = 2
+    while (RUNS_DIR / f"{base}_{n}").exists():
+        n += 1
+    return f"{base}_{n}"
 
 
-def find_cell_run_id(
+def mint_cell_run_id(
     model: str,
     effort_b: str,
-    expected_n: int,
     *,
     repeat: int = 1,
     date: str | None = None,
 ) -> str:
-    """Pick a run_id that resumes prior work, or mint a fresh dated id.
-
-    Scans ``evals/runs/`` for ``*_classification_{model}_{effort}_r{repeat}``
-    dirs whose config ``n_rows`` matches *expected_n*. Prefers a fully scored
-    run, then the newest partial, so a resume on a later calendar day does not
-    re-pay finished cells. When *date* is set (tests), skip discovery and use
-    that day for a fresh id only if nothing matching exists.
-    """
-    suffix = f"_classification_{model}_{effort_b}_r{repeat}"
-    candidates: list[tuple[bool, float, str]] = []
-    if RUNS_DIR.exists():
-        for path in RUNS_DIR.iterdir():
-            if not path.is_dir() or not path.name.endswith(suffix):
-                continue
-            cfg_path = path / "config.json"
-            if not cfg_path.exists():
-                continue
-            try:
-                conf = json.loads(cfg_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                continue
-            if conf.get("model") != model or conf.get("effort_b") != effort_b:
-                continue
-            if int(conf.get("n_rows") or 0) != expected_n:
-                continue
-            complete = False
-            scored_path = path / "scored.json"
-            if scored_path.exists():
-                try:
-                    n_scored = int(
-                        json.loads(scored_path.read_text(encoding="utf-8")).get(
-                            "n_scored"
-                        )
-                        or 0
-                    )
-                    complete = n_scored == expected_n
-                except (json.JSONDecodeError, TypeError, ValueError):
-                    complete = False
-            try:
-                mtime = path.stat().st_mtime
-            except OSError:
-                mtime = 0.0
-            candidates.append((complete, mtime, path.name))
-    if candidates:
-        # Fully scored first, then newest mtime.
-        candidates.sort(key=lambda t: (not t[0], -t[1]))
-        return candidates[0][2]
+    """Mint an unused classification run_id (never reuses a prior cell dir)."""
     day = date or _dt.date.today().isoformat()
-    return f"{day}_classification_{model}_{effort_b}_r{repeat}"
+    r = repeat
+    while True:
+        run_id = f"{day}_classification_{model}_{effort_b}_r{r}"
+        if not (RUNS_DIR / run_id).exists():
+            return run_id
+        r += 1
 
 
 def build_job_plan(
@@ -294,7 +252,11 @@ def build_job_plan(
     repeat: int = 1,
     include_parity: bool = True,
 ) -> list[Job]:
-    """Build the checklist rows (3 Pass A + 3 parity + 9 cells + dashboard)."""
+    """Build the checklist rows (3 Pass A + 3 parity + 9 cells + dashboard).
+
+    Every call mints fresh cell/parity run ids so ``run-evals`` always pays for
+    a new matrix instead of resuming scored dirs from a prior invocation.
+    """
     jobs: list[Job] = []
     for model in cfg.EVAL_MODELS:
         short = model.split("-")[-1]
@@ -317,14 +279,14 @@ def build_job_plan(
                     label=f"Batch parity ({short})",
                     kind="parity",
                     model=model,
-                    run_id=find_parity_run_id(model, date=date),
+                    run_id=mint_parity_run_id(model, date=date),
                     rows_total=cfg.PARITY_ROWS,
                 )
             )
     for model, effort in matrix_cells():
         short = model.split("-")[-1]
-        run_id = find_cell_run_id(
-            model, effort, n_rows, repeat=repeat, date=date,
+        run_id = mint_cell_run_id(
+            model, effort, repeat=repeat, date=date,
         )
         jobs.append(
             Job(
@@ -516,7 +478,9 @@ def _mark_skipped(job: Job) -> None:
 
 def _start_pass_a(job: Job, limit: int | None) -> None:
     assert job.model is not None and job.run_id is not None
-    cmd = _python_cmd() + ["bank-pass-a", "--model", job.model]
+    # Always rebuild the stable bank: run-evals is a full paid matrix, not a
+    # resume of yesterday's Pass A.
+    cmd = _python_cmd() + ["bank-pass-a", "--model", job.model, "--rerun"]
     if limit is not None:
         cmd += ["--limit", str(limit)]
     log_path = run_dir(job.run_id) / "run.log"
@@ -526,22 +490,26 @@ def _start_pass_a(job: Job, limit: int | None) -> None:
 
 def _start_parity(job: Job) -> None:
     assert job.model is not None and job.run_id is not None
-    cmd = _python_cmd() + ["batch-parity", "--model", job.model]
+    cmd = _python_cmd() + [
+        "batch-parity", "--model", job.model, "--run-id", job.run_id,
+    ]
     log_path = run_dir(job.run_id) / "run.log"
     _mark_running(job)
     job.process, job.log_handle = _spawn(cmd, log_path)
 
 
 def _parity_report_ready(job: Job) -> bool:
-    """True when the parity subprocess left a PASS/FAIL report on disk."""
+    """True when *this* parity job's run dir has a PASS/FAIL report.
+
+    Do not fall back to any older report for the same model: run-evals mints
+    a fresh parity run_id each time, and a crashed smoke must not inherit a
+    prior PASS/FAIL as if it finished.
+    """
     if not job.run_id:
         return False
     path = parity_report_path(job.run_id)
     if not path.is_file():
-        # Resume may have pointed at a dated id; accept any report for model.
-        from evals.batch_parity import parity_already_complete
-
-        return bool(job.model and parity_already_complete(job.model))
+        return False
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError, json.JSONDecodeError):
@@ -686,27 +654,6 @@ def _handle_finished(job: Job, rc: int) -> None:
     _handle_finished_ok(job)
 
 
-def _seed_skipped(
-    jobs: list[Job],
-    custom_ids: list[str],
-    *,
-    skip_parity: bool = False,
-) -> None:
-    """Mark already-complete banks/parity/cells as skipped before launching."""
-    from evals.batch_parity import parity_already_complete
-
-    for job in jobs:
-        if job.kind == "pass_a" and job.model:
-            if bank_already_complete(job.model, custom_ids):
-                _mark_skipped(job)
-        elif job.kind == "parity" and job.model:
-            if skip_parity or parity_already_complete(job.model):
-                _mark_skipped(job)
-        elif job.kind == "cell" and job.run_id:
-            if cell_already_scored(job.run_id, job.rows_total):
-                _mark_skipped(job)
-
-
 def run_evals(
     *,
     yes: bool = False,
@@ -715,7 +662,12 @@ def run_evals(
     confirm_fn: Callable[[str], str] | None = None,
     poll_seconds: float = 1.0,
 ) -> int:
-    """Run the full paid matrix. Returns process exit code (0 = success)."""
+    """Run the full paid matrix from scratch. Returns process exit code.
+
+    Every invocation rebuilds Pass A banks, re-runs parity (unless ``--limit``),
+    and mints new cell run ids so prior scored dirs are never reused. Re-paying
+    is intentional: the command is a full matrix, not a resume helper.
+    """
     require_openai_key()
 
     rows = load_golden_rows()
@@ -724,7 +676,6 @@ def run_evals(
             raise SystemExit(f"--limit must be a positive row cap, got {limit}")
         rows = rows[:limit]
     n_rows = len(rows)
-    custom_ids = [build_custom_id(r["org_uuid"]) for r in rows]
 
     estimate = print_matrix_preview(rows)
     print()
@@ -737,10 +688,9 @@ def run_evals(
             print("Aborted. No API calls made.")
             return 1
 
-    # --limit smokes skip the paid parity smoke (10 rows x 3 models x 2 APIs).
+    # --limit smokes omit the paid parity smoke (10 rows x 3 models x 2 APIs).
     include_parity = limit is None
     jobs = build_job_plan(n_rows, include_parity=include_parity)
-    _seed_skipped(jobs, custom_ids, skip_parity=not include_parity)
 
     con = console or Console()
     # Launch phase-1 banks + parity that still need work.
@@ -829,8 +779,8 @@ def run_evals(
         exit_code = 1
         con.print(
             "[red]Eval matrix unfinished.[/red] "
-            "Re-run [bold]python -m evals run-evals[/bold] to resume "
-            "(completed cells are skipped)."
+            "Re-run [bold]python -m evals run-evals[/bold] to start a "
+            "fresh full matrix (prior cells are not resumed)."
         )
         failed = [j for j in jobs if j.status == "failed"]
         for j in failed:

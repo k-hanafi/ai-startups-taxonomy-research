@@ -240,18 +240,6 @@ code {
   font-weight: 600;
   letter-spacing: -0.01em;
 }
-.badge {
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  padding: 3px 9px;
-  border: 1px solid;
-}
-.badge.pass { color: var(--pass); border-color: var(--pass); background: var(--pass-bg); }
-.badge.fail { color: var(--fail); border-color: var(--fail); background: var(--fail-bg); }
-.badge.pending { color: var(--pending); border-color: var(--border-strong); background: var(--pending-bg); }
 .check-body { padding: 14px 18px 16px; }
 .check-meaning {
   font-size: 13px;
@@ -455,6 +443,7 @@ th.gloss {
 }
 .chart { width: 100%; height: 300px; }
 .chart.short { height: 250px; }
+.chart.tall { height: 440px; }
 .empty {
   padding: 44px 20px;
   text-align: center;
@@ -628,6 +617,7 @@ footer {
   .toolbar-right { width: 100%; margin-left: 0; }
   .search { width: 100%; }
   .chart, .chart.short { height: 240px; }
+  .chart.tall { height: 320px; }
 }
 """
 
@@ -756,7 +746,8 @@ function costBreakdownHtml(c) {
   html += '</table>';
 
   const notes = [];
-  if (b.n_prod_label) notes.push('N = ' + tok(b.n_prod) + ' (' + b.n_prod_label + ').');
+  if (b.n_prod_label) notes.push('N = ' + tok(b.n_prod) + ' (' + b.n_prod_label.replaceAll('_', ' ') + ').');
+  notes.push('Unit costs come from this run\'s measured API tokens on the golden set, then scale linearly.');
   notes.push('Sync Responses API pricing; production runs sync, so no Batch API discount is assumed.');
   notes.push('Reasoning tokens are billed inside output.');
   if (b.cache_source) notes.push('Cache rate: ' + b.cache_source.replaceAll('_', ' ') + '.');
@@ -1068,6 +1059,9 @@ function calibrationGroups() {
 }
 
 function renderReliability() {
+  // Unit-square axes on purpose: bins can land anywhere on [0, 1], including
+  // accuracy 0. Cropping to ~0.35+ hid sparse low-confidence bins and made
+  // lines look like they disappeared under the plot.
   const host = document.getElementById('chart-reliability');
   if (!host) return;
   const groups = calibrationGroups();
@@ -1089,23 +1083,56 @@ function renderReliability() {
     hoverinfo: 'skip',
   }];
   for (const c of groups) {
-    const bins = c.reliability_bins.filter(b => b.count > 0 && b.mean_confidence != null);
+    const bins = c.reliability_bins.filter(
+      b => b.count > 0 && b.mean_confidence != null && b.accuracy != null
+    );
+    const binLabel = b => {
+      if (!b.range || b.range.length < 2) return '';
+      return b.range[0].toFixed(1) + '-' + b.range[1].toFixed(1);
+    };
     traces.push({
       type: 'scatter',
       mode: 'markers+lines',
       name: c.model_group,
       x: bins.map(b => b.mean_confidence),
       y: bins.map(b => b.accuracy),
-      marker: {size: bins.map(b => 5 + Math.sqrt(b.count)), color: colorFor(c)},
+      // Keep high-n markers (near conf=1 / acc=0) fully visible at the edges.
+      cliponaxis: false,
+      marker: {
+        size: bins.map(b => 6 + 2 * Math.sqrt(b.count)),
+        color: colorFor(c),
+        line: {width: 1, color: '#0b0d10'},
+      },
       line: {color: colorFor(c), width: 1.5},
-      text: bins.map(b => 'n=' + b.count),
-      hovertemplate: c.model_group + '<br>conf %{x:.2f}<br>acc %{y:.2f}<br>%{text}<extra></extra>',
+      customdata: bins.map(b => [b.count, binLabel(b)]),
+      hovertemplate:
+        c.model_group +
+        '<br>bin %{customdata[1]}' +
+        '<br>mean conf %{x:.2f}' +
+        '<br>accuracy %{y:.2f}' +
+        '<br>n=%{customdata[0]}<extra></extra>',
     });
   }
   Plotly.newPlot('chart-reliability', traces, layout({
-    xaxis: {title: {text: 'Mean confidence in bin', font: axisFont}, range: [0.35, 1.02], gridcolor: '#222222', tickfont: numFont},
-    yaxis: {title: {text: 'Observed accuracy', font: axisFont}, range: [0.35, 1.02], gridcolor: '#222222', tickfont: numFont},
-    margin: {l: 54, r: 12, t: 28, b: 48},
+    xaxis: {
+      title: {text: 'Mean confidence in bin', font: axisFont},
+      range: [-0.05, 1.05],
+      tickvals: [0, 0.2, 0.4, 0.6, 0.8, 1.0],
+      gridcolor: '#222222',
+      tickfont: numFont,
+      zeroline: false,
+      automargin: true,
+    },
+    yaxis: {
+      title: {text: 'Observed accuracy', font: axisFont},
+      range: [-0.05, 1.05],
+      tickvals: [0, 0.2, 0.4, 0.6, 0.8, 1.0],
+      gridcolor: '#222222',
+      tickfont: numFont,
+      zeroline: false,
+      automargin: true,
+    },
+    margin: {l: 58, r: 28, t: 36, b: 56},
     showlegend: true,
   }), cfg);
 }
@@ -1283,13 +1310,12 @@ def _filter_toolbar_html(metrics: dict) -> str:
 
 
 def _robustness_panel_html(metrics: dict) -> str:
-    """Server-rendered checks panel: badge + meaning + numbers per check."""
+    """Server-rendered checks panel: title + meaning + per-model status."""
     checks = (metrics.get("robustness") or {}).get("checks") or []
     if not checks:
         return '<div class="empty">No robustness data available for this load.</div>'
     parts = []
     for check in checks:
-        status = html.escape(str(check.get("status") or "pending"))
         title = html.escape(str(check.get("title") or check.get("id") or ""))
         meaning = html.escape(str(check.get("meaning") or ""))
         stats_html = ""
@@ -1338,7 +1364,6 @@ def _robustness_panel_html(metrics: dict) -> str:
         parts.append(f"""
 <div class="check" id="check-{html.escape(str(check.get('id') or ''))}">
   <div class="check-head">
-    <span class="badge {status}">{status}</span>
     <h3>{title}</h3>
   </div>
   <div class="check-body">
@@ -1480,9 +1505,11 @@ def build_html(metrics: dict) -> str:
     <div class="tab-lead">
       <h2>Which model should production use?</h2>
       <p>The locked model &times; effort matrix compared on accuracy,
-      confidence quality, projected cost, and latency. Latency is a
-      production-practice metric (sync API wall-clock), not a model-quality
-      score.</p>
+      confidence quality, projected production cost, and latency. Projected
+      cost is measured golden-set spend for that run (API tokens, with cache)
+      scaled to the evidence-only production universe (37,672 companies), not
+      the pre-run cost-preview guess. Latency is a production-practice metric
+      (sync API wall-clock), not a model-quality score.</p>
     </div>
     <div class="table-wrap">
       <table class="grid" id="leaderboard">
@@ -1494,7 +1521,7 @@ def build_html(metrics: dict) -> str:
             <th class="num">AI-native</th>
             <th class="num gloss" title="Resource-Adjusted AI Dependency: how dependent the company is on foundation-model providers">RAD</th>
             <th class="num">Mean confidence</th>
-            <th class="num">Projected cost</th>
+            <th class="num" title="Measured golden-set unit cost × (37,672 / n_golden)">Projected cost @ 37.7k</th>
             <th class="num">Latency p50</th>
           </tr>
         </thead>
@@ -1504,9 +1531,9 @@ def build_html(metrics: dict) -> str:
     <div class="card">
       <div class="card-title">Cost against subclass accuracy</div>
       <div class="card-desc">Each point is one configuration; whiskers are the
-      95% CI on subclass accuracy. The cost axis is the projected production
-      spend from the per-row cost ladder (open any cost value in the table
-      above for the full arithmetic).</div>
+      95% CI on subclass accuracy. The cost axis is that run's measured
+      golden-set spend scaled to 37,672 companies (open any cost value in the
+      table above for the full arithmetic).</div>
       <div id="chart-pareto" class="chart"></div>
     </div>
     <div class="card">
@@ -1530,11 +1557,12 @@ def build_html(metrics: dict) -> str:
     </div>
     <div class="card">
       <div class="card-title">Reliability diagram</div>
-      <div class="card-desc">Rows are grouped into confidence bins; each
-      marker plots the bin's mean confidence against its observed accuracy
-      (marker size tracks bin population). A well-calibrated model hugs the
-      dashed diagonal.</div>
-      <div id="chart-reliability" class="chart"></div>
+      <div class="card-desc">Rows are grouped into ten equal-width confidence
+      bins on [0, 1]. Each marker is a non-empty bin: mean confidence vs
+      observed accuracy (marker size tracks how many golden rows landed
+      there; hover shows the bin range and n). Empty bins are omitted. A
+      well-calibrated model hugs the dashed diagonal.</div>
+      <div id="chart-reliability" class="chart tall"></div>
     </div>
     <div class="card">
       <div class="card-title">Expected calibration error</div>

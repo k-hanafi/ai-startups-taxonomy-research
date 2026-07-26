@@ -52,8 +52,8 @@
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 41076,
-          "n_prod_label": "alive_plus_dead",
+          "n_prod": 37672,
+          "n_prod_label": "evidence_universe",
           "n_golden": 100,
           "model": "gpt-5.4-nano",
           "architecture": "classification",
@@ -86,20 +86,20 @@
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 41076,
-            "n_prod_label": "alive_plus_dead",
-            "scale_factor": 410.76,
-            "estimated_production_usd": 189.97650000000002,
+            "n_prod": 37672,
+            "n_prod_label": "evidence_universe",
+            "scale_factor": 376.72,
+            "estimated_production_usd": 174.23300000000003,
             "estimated_usd_per_company": 0.004625000000000001,
-            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 0.5575,
           "golden_after_cache_usd": 0.4625,
-          "estimated_production_usd": 189.97650000000002,
+          "estimated_production_usd": 174.23300000000003,
           "cache_hit_rate": 0.76,
-          "n_prod": 41076
+          "n_prod": 37672
         }
       },
       "latency": {
@@ -364,8 +364,8 @@
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 41076,
-          "n_prod_label": "alive_plus_dead",
+          "n_prod": 37672,
+          "n_prod_label": "evidence_universe",
           "n_golden": 100,
           "model": "gpt-5.4-nano",
           "architecture": "classification",
@@ -398,20 +398,20 @@
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 41076,
-            "n_prod_label": "alive_plus_dead",
-            "scale_factor": 410.76,
-            "estimated_production_usd": 236.187,
-            "estimated_usd_per_company": 0.00575,
-            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "n_prod": 37672,
+            "n_prod_label": "evidence_universe",
+            "scale_factor": 376.72,
+            "estimated_production_usd": 216.61400000000003,
+            "estimated_usd_per_company": 0.005750000000000001,
+            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 0.67,
           "golden_after_cache_usd": 0.5750000000000001,
-          "estimated_production_usd": 236.187,
+          "estimated_production_usd": 216.61400000000003,
           "cache_hit_rate": 0.76,
-          "n_prod": 41076
+          "n_prod": 37672
         }
       },
       "latency": {
@@ -676,8 +676,8 @@
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 41076,
-          "n_prod_label": "alive_plus_dead",
+          "n_prod": 37672,
+          "n_prod_label": "evidence_universe",
           "n_golden": 100,
           "model": "gpt-5.4-nano",
           "architecture": "classification",
@@ -710,20 +710,20 @@
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 41076,
-            "n_prod_label": "alive_plus_dead",
-            "scale_factor": 410.76,
-            "estimated_production_usd": 350.1729,
+            "n_prod": 37672,
+            "n_prod_label": "evidence_universe",
+            "scale_factor": 376.72,
+            "estimated_production_usd": 321.15380000000005,
             "estimated_usd_per_company": 0.008525000000000001,
-            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 0.9475,
           "golden_after_cache_usd": 0.8525,
-          "estimated_production_usd": 350.1729,
+          "estimated_production_usd": 321.15380000000005,
           "cache_hit_rate": 0.76,
-          "n_prod": 41076
+          "n_prod": 37672
         }
       },
       "latency": {
@@ -988,8 +988,8 @@
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 41076,
-          "n_prod_label": "alive_plus_dead",
+          "n_prod": 37672,
+          "n_prod_label": "evidence_universe",
           "n_golden": 100,
           "model": "gpt-5.4-mini",
           "architecture": "classification",
@@ -1022,20 +1022,20 @@
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 41076,
-            "n_prod_label": "alive_plus_dead",
-            "scale_factor": 410.76,
-            "estimated_production_usd": 578.86353,
+            "n_prod": 37672,
+            "n_prod_label": "evidence_universe",
+            "scale_factor": 376.72,
+            "estimated_production_usd": 530.89266,
             "estimated_usd_per_company": 0.014092499999999999,
-            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 1.7654999999999998,
           "golden_after_cache_usd": 1.40925,
-          "estimated_production_usd": 578.86353,
+          "estimated_production_usd": 530.89266,
           "cache_hit_rate": 0.76,
-          "n_prod": 41076
+          "n_prod": 37672
         }
       },
       "latency": {
@@ -1300,8 +1300,8 @@
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 41076,
-          "n_prod_label": "alive_plus_dead",
+          "n_prod": 37672,
+          "n_prod_label": "evidence_universe",
           "n_golden": 100,
           "model": "gpt-5.4-mini",
           "architecture": "classification",
@@ -1334,20 +1334,20 @@
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 41076,
-            "n_prod_label": "alive_plus_dead",
-            "scale_factor": 410.76,
-            "estimated_production_usd": 824.70339,
-            "estimated_usd_per_company": 0.0200775,
-            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "n_prod": 37672,
+            "n_prod_label": "evidence_universe",
+            "scale_factor": 376.72,
+            "estimated_production_usd": 756.3595800000002,
+            "estimated_usd_per_company": 0.020077500000000005,
+            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 2.364,
           "golden_after_cache_usd": 2.00775,
-          "estimated_production_usd": 824.70339,
+          "estimated_production_usd": 756.3595800000002,
           "cache_hit_rate": 0.76,
-          "n_prod": 41076
+          "n_prod": 37672
         }
       },
       "latency": {
@@ -1612,8 +1612,8 @@
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 41076,
-          "n_prod_label": "alive_plus_dead",
+          "n_prod": 37672,
+          "n_prod_label": "evidence_universe",
           "n_golden": 100,
           "model": "gpt-5.4-mini",
           "architecture": "classification",
@@ -1646,20 +1646,20 @@
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 41076,
-            "n_prod_label": "alive_plus_dead",
-            "scale_factor": 410.76,
-            "estimated_production_usd": 1159.26741,
-            "estimated_usd_per_company": 0.028222499999999998,
-            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "n_prod": 37672,
+            "n_prod_label": "evidence_universe",
+            "scale_factor": 376.72,
+            "estimated_production_usd": 1063.19802,
+            "estimated_usd_per_company": 0.0282225,
+            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 3.1785,
           "golden_after_cache_usd": 2.82225,
-          "estimated_production_usd": 1159.26741,
+          "estimated_production_usd": 1063.19802,
           "cache_hit_rate": 0.76,
-          "n_prod": 41076
+          "n_prod": 37672
         }
       },
       "latency": {
@@ -1924,8 +1924,8 @@
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 41076,
-          "n_prod_label": "alive_plus_dead",
+          "n_prod": 37672,
+          "n_prod_label": "evidence_universe",
           "n_golden": 100,
           "model": "gpt-5.6-luna",
           "architecture": "classification",
@@ -1958,20 +1958,20 @@
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 41076,
-            "n_prod_label": "alive_plus_dead",
-            "scale_factor": 410.76,
-            "estimated_production_usd": 1959.7359600000002,
-            "estimated_usd_per_company": 0.04771,
-            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "n_prod": 37672,
+            "n_prod_label": "evidence_universe",
+            "scale_factor": 376.72,
+            "estimated_production_usd": 1797.3311200000005,
+            "estimated_usd_per_company": 0.047710000000000016,
+            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 5.246,
           "golden_after_cache_usd": 4.771000000000001,
-          "estimated_production_usd": 1959.7359600000002,
+          "estimated_production_usd": 1797.3311200000005,
           "cache_hit_rate": 0.76,
-          "n_prod": 41076
+          "n_prod": 37672
         }
       },
       "latency": {
@@ -2236,8 +2236,8 @@
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 41076,
-          "n_prod_label": "alive_plus_dead",
+          "n_prod": 37672,
+          "n_prod_label": "evidence_universe",
           "n_golden": 100,
           "model": "gpt-5.6-luna",
           "architecture": "classification",
@@ -2270,20 +2270,20 @@
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 41076,
-            "n_prod_label": "alive_plus_dead",
-            "scale_factor": 410.76,
-            "estimated_production_usd": 2898.7333200000003,
+            "n_prod": 37672,
+            "n_prod_label": "evidence_universe",
+            "scale_factor": 376.72,
+            "estimated_production_usd": 2658.5130400000003,
             "estimated_usd_per_company": 0.07057000000000001,
-            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 7.532,
           "golden_after_cache_usd": 7.057,
-          "estimated_production_usd": 2898.7333200000003,
+          "estimated_production_usd": 2658.5130400000003,
           "cache_hit_rate": 0.76,
-          "n_prod": 41076
+          "n_prod": 37672
         }
       },
       "latency": {
@@ -2548,8 +2548,8 @@
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 41076,
-          "n_prod_label": "alive_plus_dead",
+          "n_prod": 37672,
+          "n_prod_label": "evidence_universe",
           "n_golden": 100,
           "model": "gpt-5.6-luna",
           "architecture": "classification",
@@ -2582,20 +2582,20 @@
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 41076,
-            "n_prod_label": "alive_plus_dead",
-            "scale_factor": 410.76,
-            "estimated_production_usd": 4200.021,
+            "n_prod": 37672,
+            "n_prod_label": "evidence_universe",
+            "scale_factor": 376.72,
+            "estimated_production_usd": 3851.962,
             "estimated_usd_per_company": 0.10225,
-            "note": "Linear scale × (41076 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 10.7,
           "golden_after_cache_usd": 10.225,
-          "estimated_production_usd": 4200.021,
+          "estimated_production_usd": 3851.962,
           "cache_hit_rate": 0.76,
-          "n_prod": 41076
+          "n_prod": 37672
         }
       },
       "latency": {
