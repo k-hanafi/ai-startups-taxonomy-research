@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-26 · Active branch: `eval/cli-redesign` (paid eval CLI: `cost-preview` / `run-evals` / `open-dashboard`; production $ = measured golden unit cost × 37,672)
+Last updated: 2026-07-26 · Active branch: `fix/eval-instance-duplicate-titles` (eval archive: same scored sweep replaces its instance so the index does not repeat one title)
 
 ---
 
@@ -180,7 +180,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 |------|---------|
 | `dashboard_metrics.py` | Eval dashboard metrics: scored.json/fixture → chart metrics (ECE, reliability bins, selective curves, vs_baseline, Pass B isolating fields, finalist mean±range aggregates, per-config `cost_breakdown` for the cost popover). Real loads recompute production $ from each run's `predictions.jsonl` (measured golden unit cost × evidence-universe N=37,672), so instances stay tied to that run set. Also `build_robustness` + `build_run_instance`. No OpenAI import. |
 | `tests/fixtures/dashboard/dashboard_mock_runs.json` | Synthetic locked matrix; Pass A metrics identical across efforts within each model (bank-once design); calibration blocks derive from one set of 100 synthetic rows per model (nano seeds the ECE ~0.077 early signal); per-run robustness blocks |
-| `instances.py` | Numbered dashboard archive: writes `eval_instance_NN.html` + `index.html` + `instances.json` under `01_Presentation_Materials/eval_instances/`; real scored builds are append-only (every archive gets a new number so old instances stay clickable); synthetic `--save-instance` previews still replace the prior mock. Also owns the run-headline / run-meta text shared with the suite header card. |
+| `instances.py` | Numbered dashboard archive: writes `eval_instance_NN.html` + `index.html` + `instances.json` under `01_Presentation_Materials/eval_instances/`; an instance is identified by the scored runs behind it (same sweep replaces its page; a later sweep still gets a new number); synthetic `--save-instance` previews replace the prior mock. Also owns the run-headline / run-meta text shared with the suite header card. |
 | `config.py` | Locked matrix `EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`; `PASS_A_TOP_LOGPROBS=5` (binary; raising depth does not help mini/luna, which truncate at a probability floor, see `MAX_CENSORED_INTERVAL_WIDTH`); legacy `TOP_LOGPROBS` for old single-pass only |
 | `classification.py` | Pass A/B classification runner + `bank_pass_a` (Pass-A-only); Pass A auto-banks under `evals/runs/pass_a_banks/<model>/` (reuse by default; `--rerun-pass-a` / `--pass-a-from` escapes) |
 | `cost_preview.py` | Offline matrix cost estimates (Pass A once per model + 9 Pass B cells + grand total); shared formula with classification `--dry-run` |

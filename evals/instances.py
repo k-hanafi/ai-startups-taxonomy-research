@@ -7,10 +7,13 @@ written as a numbered page (`eval_instance_01.html`, `02`, ...) under
 archived only when explicitly asked for, otherwise development rebuilds would
 bury the real runs.
 
-Real scored builds are append-only: each archive takes the next number so every
-finished run stays clickable on the index. Synthetic ``--save-instance``
-previews still replace the previous mock of the same source, so a styling loop
-does not fill the index with identical placeholders.
+An instance is identified by the runs behind it, not by when the page was
+rendered. Rebuilding the same sweep after a styling fix replaces that instance
+instead of minting a second copy with the same title. A later sweep with a
+different start time still gets a new number, so older runs stay clickable.
+Synthetic ``--save-instance`` previews key on their source path the same way.
+Runs that never recorded a start time stay unidentifiable and always take a
+fresh number rather than risk overwriting a different sweep.
 """
 
 from __future__ import annotations
@@ -120,11 +123,66 @@ def _write_registry(directory: Path, entries: list[dict[str, Any]]) -> None:
     )
 
 
+def _run_span_key(run: dict[str, Any]) -> tuple[str, str, int] | None:
+    """(started_first, started_last, n_runs) when both ends are recorded."""
+    first, last = run.get("started_first"), run.get("started_last")
+    if not first or not last:
+        return None
+    return (str(first), str(last), int(run.get("n_runs") or 0))
+
+
+def _drop_stale_pages(
+    directory: Path, entries: list[dict[str, Any]], keep: dict[str, Any]
+) -> None:
+    """Delete HTML for duplicate entries; leave ``keep``'s page alone."""
+    for stale in entries:
+        if stale is keep:
+            continue
+        name = str(stale.get("file") or instance_filename(int(stale["n"])))
+        path = directory / name
+        if path.is_file():
+            path.unlink()
+
+
+def _collapse_duplicate_runs(
+    directory: Path, entries: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """One row per index title (run span) / synthetic identity; keep the newest.
+
+    Heals the append-only era that minted many pages for the same scored
+    sweep, each with an identical index title. Real rows collapse on run
+    span because that is what ``format_run_headline`` shows.
+    """
+    by_key: dict[str, list[dict[str, Any]]] = {}
+    passthrough: list[dict[str, Any]] = []
+    for entry in entries:
+        if entry.get("synthetic"):
+            ident = entry.get("identity")
+            key = f"synth:{ident}" if ident else None
+        else:
+            span = _run_span_key(entry.get("run") or {})
+            key = f"run:{span[0]}\x1f{span[1]}\x1f{span[2]}" if span else None
+        if key is None:
+            passthrough.append(entry)
+            continue
+        by_key.setdefault(key, []).append(entry)
+
+    kept: list[dict[str, Any]] = list(passthrough)
+    for group in by_key.values():
+        group.sort(key=lambda e: int(e["n"]))
+        winner = group[-1]
+        if len(group) > 1:
+            _drop_stale_pages(directory, group, winner)
+        kept.append(winner)
+    return sorted(kept, key=lambda e: int(e["n"]))
+
+
 def sync_index(directory: Path = EVAL_INSTANCES_DIR) -> Path:
     """Rewrite index.html from the registry, dropping entries whose HTML is gone.
 
-    Stops ``open-dashboard`` from showing a stale row after a smoke page was
-    deleted (browser tabs can also keep an old index open). Returns the
+    Also collapses duplicate real-run rows left by the append-only era so the
+    index does not list the same title many times. Stops ``open-dashboard``
+    from showing a stale row after a smoke page was deleted. Returns the
     index path.
     """
     directory.mkdir(parents=True, exist_ok=True)
@@ -138,10 +196,11 @@ def sync_index(directory: Path = EVAL_INSTANCES_DIR) -> Path:
             kept.append(entry)
         else:
             dropped.append(name)
-    if dropped:
-        _write_registry(directory, kept)
+    collapsed = _collapse_duplicate_runs(directory, kept)
+    if dropped or collapsed != kept:
+        _write_registry(directory, collapsed)
     index_path = directory / INDEX_NAME
-    index_path.write_text(render_index(kept), encoding="utf-8")
+    index_path.write_text(render_index(collapsed), encoding="utf-8")
     return index_path
 
 
@@ -162,24 +221,67 @@ def next_instance_number(directory: Path, entries: list[dict[str, Any]]) -> int:
 
 
 def _identity(metrics: dict[str, Any]) -> str | None:
-    """Fingerprint used only to replace synthetic mock previews.
+    """Stable fingerprint of the runs behind a page, None when unidentifiable.
 
-    Real scored builds always mint a new number (append-only). Synthetic
-    ``--save-instance`` builds key on their source path so a styling loop can
-    replace the previous mock instead of filling the index.
+    Synthetic/mock builds key on their source path so ``--save-instance`` can
+    replace the preview instead of minting a new number every rebuild. Real
+    runs without a recorded start time stay unidentifiable (fresh number)
+    rather than risk overwriting a different sweep.
     """
-    if not (
-        metrics.get("synthetic")
-        or (metrics.get("run_instance") or {}).get("synthetic")
-    ):
+    if metrics.get("synthetic") or (metrics.get("run_instance") or {}).get("synthetic"):
+        source = str(metrics.get("source") or "fixture")
+        parts = [
+            "synthetic",
+            source,
+            "|".join(sorted(str(c) for c in (metrics.get("config_ids") or []))),
+        ]
+        return hashlib.sha1("\x1f".join(parts).encode("utf-8")).hexdigest()[:12]
+
+    run = metrics.get("run_instance") or {}
+    span = _run_span_key(run)
+    if span is None:
         return None
-    source = str(metrics.get("source") or "fixture")
     parts = [
-        "synthetic",
-        source,
+        span[0],
+        span[1],
+        str(span[2]),
         "|".join(sorted(str(c) for c in (metrics.get("config_ids") or []))),
     ]
     return hashlib.sha1("\x1f".join(parts).encode("utf-8")).hexdigest()[:12]
+
+
+def _matching_entries(
+    entries: list[dict[str, Any]],
+    *,
+    identity: str | None,
+    metrics: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Entries that represent the same sweep as ``metrics`` (may be duplicates)."""
+    matches: list[dict[str, Any]] = []
+    seen: set[int] = set()
+
+    def _add(entry: dict[str, Any]) -> None:
+        if id(entry) not in seen:
+            seen.add(id(entry))
+            matches.append(entry)
+
+    if identity:
+        for entry in entries:
+            if entry.get("identity") == identity:
+                _add(entry)
+    if metrics.get("synthetic") or (metrics.get("run_instance") or {}).get("synthetic"):
+        return matches
+    # Same index title = same run span. Absorb identity=None clones and any
+    # prior fingerprint of this span so rebuilds leave one row.
+    span = _run_span_key(metrics.get("run_instance") or {})
+    if span is None:
+        return matches
+    for entry in entries:
+        if entry.get("synthetic"):
+            continue
+        if _run_span_key(entry.get("run") or {}) == span:
+            _add(entry)
+    return matches
 
 
 @dataclass(frozen=True)
@@ -201,26 +303,30 @@ def archive_instance(
 ) -> ArchivedInstance:
     """Write the page as a numbered instance and refresh the index.
 
-    Real scored builds always append. Only a synthetic mock with a matching
-    identity may replace its previous page.
+    Same scored sweep replaces its prior page (and any duplicate copies).
+    Only an unidentifiable real build, or a brand-new sweep, mints a number.
     """
     directory.mkdir(parents=True, exist_ok=True)
     stamp = (now or datetime.datetime.now(datetime.timezone.utc)).isoformat()
     entries = load_registry(directory)
     identity = _identity(metrics)
 
-    existing = next(
-        (e for e in entries if identity and e.get("identity") == identity), None
-    )
-    if existing is None:
+    matches = _matching_entries(entries, identity=identity, metrics=metrics)
+    if not matches:
         entry: dict[str, Any] = {
             "n": next_instance_number(directory, entries),
             "archived_utc": stamp,
         }
         entries.append(entry)
+        replaced = False
     else:
-        entry = existing
+        matches.sort(key=lambda e: int(e["n"]))
+        entry = matches[-1]
+        _drop_stale_pages(directory, matches, entry)
+        drop_ids = {id(e) for e in matches if e is not entry}
+        entries = [e for e in entries if id(e) not in drop_ids]
         entry["rebuilt_utc"] = stamp
+        replaced = True
 
     entry.update(
         {
@@ -228,6 +334,7 @@ def archive_instance(
             "identity": identity,
             "synthetic": bool(metrics.get("synthetic")),
             "n_configs": int(metrics.get("n_configs") or 0),
+            "config_ids": [str(c) for c in (metrics.get("config_ids") or [])],
             "source": str(metrics.get("source") or ""),
             "run": metrics.get("run_instance") or {},
         }
@@ -242,7 +349,7 @@ def archive_instance(
         path=path,
         index_path=index_path,
         number=int(entry["n"]),
-        replaced=existing is not None,
+        replaced=replaced,
     )
 
 
@@ -363,8 +470,9 @@ def render_index(entries: list[dict[str, Any]]) -> str:
   <div class="appbar-meta">{len(entries)} archived</div>
 </header>
 <main>
-  <p class="lede">Each row is one saved build of the eval suite. Every real scored
-  archive gets a new number so older instances stay clickable. The working page
+  <p class="lede">Each row is one saved build of the eval suite, kept so a scored
+  run stays viewable after later builds. Rebuilding the same sweep replaces that
+  row instead of duplicating its title. The working page
   (<a href="../eval_dashboard.html">eval_dashboard.html</a>) is overwritten every
   time the dashboard is rebuilt.</p>{body}
   <footer>Index rewritten {today}. Times shown in this machine's local timezone.</footer>

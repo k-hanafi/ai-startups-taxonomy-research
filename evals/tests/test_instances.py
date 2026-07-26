@@ -85,38 +85,128 @@ def test_distinct_runs_get_consecutive_numbers(tmp_path):
     }
 
 
-def test_rebuilding_the_same_runs_appends_a_new_instance(tmp_path):
-    """Real scored archives are append-only so every finished run stays clickable."""
+def test_rebuilding_the_same_runs_replaces_the_instance(tmp_path):
+    """Same scored sweep replaces its page so the index does not repeat the title."""
     first = _archive(tmp_path, _metrics())
     again = _archive(tmp_path, _metrics(), minute=40)
 
-    assert first.number == 1
-    assert again.number == 2
-    assert again.replaced is False
+    assert first.number == again.number == 1
+    assert again.replaced is True
     entries = load_registry(tmp_path)
-    assert [e["n"] for e in entries] == [1, 2]
-    assert {p.name for p in tmp_path.glob("eval_instance_*.html")} == {
-        "eval_instance_01.html",
-        "eval_instance_02.html",
-    }
+    assert [e["n"] for e in entries] == [1]
+    assert entries[0]["identity"] is not None
+    assert entries[0]["rebuilt_utc"].startswith("2026-07-24T20:40")
+    assert list(tmp_path.glob("eval_instance_*.html")) == [
+        tmp_path / "eval_instance_01.html"
+    ]
 
 
-def test_same_start_time_but_different_cells_is_a_new_instance(tmp_path):
-    """Different cells still mint consecutive numbers under append-only."""
+def test_same_run_span_replaces_even_when_cell_ids_differ(tmp_path):
+    """Index titles key on the run span, so the same clock window is one row."""
     _archive(tmp_path, _metrics(config_ids=["nano/low"]))
     other = _archive(tmp_path, _metrics(config_ids=["nano/low", "mini/low"]), minute=5)
 
-    assert other.number == 2
-    assert other.replaced is False
+    assert other.number == 1
+    assert other.replaced is True
+    assert [e["n"] for e in load_registry(tmp_path)] == [1]
 
 
 def test_undated_runs_never_overwrite_each_other(tmp_path):
-    """Real scored builds with no start time still append, never replace."""
+    """Without a start time there is no safe identity, so each build appends."""
     first = _archive(tmp_path, _metrics(None))
     second = _archive(tmp_path, _metrics(None), minute=5)
 
     assert (first.number, second.number) == (1, 2)
     assert load_registry(tmp_path)[0]["identity"] is None
+
+
+def test_sync_index_collapses_duplicate_run_titles(tmp_path):
+    """Append-only-era clones of one sweep collapse to the newest page."""
+    run = {
+        "synthetic": False,
+        "n_runs": 9,
+        "started_first": "2026-07-24T18:00:00+00:00",
+        "started_last": "2026-07-24T18:00:00+00:00",
+        "models": ["gpt-5.4-nano"],
+        "model_groups": ["nano"],
+        "n_gold": 100,
+        "git_commit": "acb70ac",
+    }
+    entries = []
+    for n, minute in ((1, 0), (2, 5)):
+        path = tmp_path / f"eval_instance_{n:02d}.html"
+        path.write_text(f"<html>{n}</html>", encoding="utf-8")
+        entries.append(
+            {
+                "n": n,
+                "archived_utc": f"2026-07-24T20:{minute:02d}:00+00:00",
+                "file": path.name,
+                "identity": None,
+                "synthetic": False,
+                "n_configs": 9,
+                "source": "9 runs under evals/runs/",
+                "run": dict(run),
+            }
+        )
+    (tmp_path / "instances.json").write_text(
+        json.dumps({"instances": entries}, indent=2) + "\n", encoding="utf-8"
+    )
+
+    sync_index(tmp_path)
+    kept = load_registry(tmp_path)
+    assert [e["n"] for e in kept] == [2]
+    assert not (tmp_path / "eval_instance_01.html").exists()
+    assert (tmp_path / "eval_instance_02.html").is_file()
+    page = (tmp_path / "index.html").read_text(encoding="utf-8")
+    assert page.count("9 eval runs") == 1
+    assert "eval_instance_02.html" in page
+    assert "eval_instance_01.html" not in page
+
+
+def test_archive_replaces_identity_none_clones_of_the_same_span(tmp_path):
+    """Re-archiving heals append-only-era duplicates that never stored identity."""
+    run_started = "2026-07-24T18:00:00+00:00"
+    for n in (1, 2):
+        path = tmp_path / f"eval_instance_{n:02d}.html"
+        path.write_text(f"<html>old-{n}</html>", encoding="utf-8")
+    (tmp_path / "instances.json").write_text(
+        json.dumps(
+            {
+                "instances": [
+                    {
+                        "n": n,
+                        "archived_utc": f"2026-07-24T20:0{n}:00+00:00",
+                        "file": f"eval_instance_{n:02d}.html",
+                        "identity": None,
+                        "synthetic": False,
+                        "n_configs": 2,
+                        "source": "fixture",
+                        "run": {
+                            "n_runs": 9,
+                            "started_first": run_started,
+                            "started_last": run_started,
+                            "model_groups": ["nano"],
+                            "n_gold": 100,
+                            "git_commit": "acb70ac",
+                        },
+                    }
+                    for n in (1, 2)
+                ]
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    archived = _archive(tmp_path, _metrics(run_started), minute=50)
+    assert archived.replaced is True
+    assert archived.number == 2
+    entries = load_registry(tmp_path)
+    assert [e["n"] for e in entries] == [2]
+    assert entries[0]["identity"] is not None
+    assert not (tmp_path / "eval_instance_01.html").exists()
+    assert archived.path.read_text(encoding="utf-8") == "<html>2</html>"
 
 
 def test_numbering_survives_a_lost_registry(tmp_path):
