@@ -11,7 +11,6 @@ from rich.console import Console
 from evals import config as cfg
 from evals import orchestrate as orch
 from evals.jsonl_io import append_jsonl
-from evals.paths import pass_a_bank_run_id
 
 
 def _fake_rows(n: int = 2) -> list[dict]:
@@ -27,37 +26,28 @@ def _fake_rows(n: int = 2) -> list[dict]:
     ]
 
 
-def test_build_job_plan_shape():
+def test_build_job_plan_shape(tmp_path, monkeypatch):
+    monkeypatch.setattr(orch, "RUNS_DIR", tmp_path)
     jobs = orch.build_job_plan(n_rows=100, date="2026-07-25")
     kinds = [j.kind for j in jobs]
     assert kinds.count("pass_a") == 3
-    assert kinds.count("parity") == 3
     assert kinds.count("cell") == 9
     assert kinds.count("dashboard") == 1
+    assert "parity" not in kinds
     cells = [j for j in jobs if j.kind == "cell"]
     assert cells[0].run_id == (
         f"2026-07-25_classification_{cfg.EVAL_MODELS[0]}_low_r1"
     )
 
 
-def test_build_job_plan_can_omit_parity():
-    jobs = orch.build_job_plan(2, date="2026-07-25", include_parity=False)
-    assert all(j.kind != "parity" for j in jobs)
-    assert [j.kind for j in jobs].count("pass_a") == 3
-
-
-def test_phase1_complete_requires_banks_and_parity():
+def test_phase1_complete_requires_banks_only():
     jobs = orch.build_job_plan(2, date="2026-07-25")
     assert not orch.phase1_complete(jobs)
     for j in jobs:
         if j.kind == "pass_a":
             j.status = "done"
-    assert not orch.phase1_complete(jobs)
-    for j in jobs:
-        if j.kind == "parity":
-            j.status = "done"
     assert orch.phase1_complete(jobs)
-    next(j for j in jobs if j.kind == "parity").status = "failed"
+    next(j for j in jobs if j.kind == "pass_a").status = "failed"
     assert not orch.phase1_complete(jobs)
     assert orch.phase1_failed(jobs)
 
@@ -65,7 +55,7 @@ def test_phase1_complete_requires_banks_and_parity():
 def test_should_block_dashboard_on_failed_cell():
     jobs = orch.build_job_plan(2, date="2026-07-25")
     for j in jobs:
-        if j.kind in ("pass_a", "parity", "cell"):
+        if j.kind in ("pass_a", "cell"):
             j.status = "done"
     assert not orch.should_block_dashboard(jobs)
     cells = [j for j in jobs if j.kind == "cell"]
@@ -121,10 +111,12 @@ def test_cell_already_scored_requires_exact_row_count(tmp_path, monkeypatch):
     assert not orch.cell_already_scored("missing", 10)
 
 
-def test_cell_needs_robustness_refresh_when_parity_newer(tmp_path, monkeypatch):
+def test_cell_needs_robustness_refresh_when_valid_mass_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(orch, "run_scored_path", lambda rid: tmp_path / rid / "scored.json")
     run = tmp_path / "cell1"
     run.mkdir()
+    (run / "scored.json").write_text(json.dumps({}), encoding="utf-8")
+    assert orch.cell_needs_robustness_refresh("cell1") is True
     (run / "scored.json").write_text(
         json.dumps({
             "robustness": {
@@ -133,48 +125,7 @@ def test_cell_needs_robustness_refresh_when_parity_newer(tmp_path, monkeypatch):
         }),
         encoding="utf-8",
     )
-    monkeypatch.setattr(
-        "evals.batch_parity.load_parity_summary_for_model",
-        lambda model: {"verdict": "PASS", "n_rows": 10, "n_checks": 20, "n_failed": 0},
-    )
-    assert orch.cell_needs_robustness_refresh("cell1", "gpt-5.4-nano") is True
-    (run / "scored.json").write_text(
-        json.dumps({
-            "robustness": {
-                "valid_mass": {"n": 2, "threshold": 0.9, "n_below_threshold": 0},
-                "batch_parity": {
-                    "verdict": "PASS", "n_rows": 10, "n_checks": 20, "n_failed": 0,
-                },
-            }
-        }),
-        encoding="utf-8",
-    )
-    assert orch.cell_needs_robustness_refresh("cell1", "gpt-5.4-nano") is False
-
-
-def test_parity_fail_verdict_still_marks_job_done(tmp_path, monkeypatch):
-    """batch-parity exits 1 on FAIL; the report is still a finished check."""
-    model = cfg.EVAL_MODELS[0]
-    run_id = f"2026-07-25_parity_{model}"
-    run = tmp_path / run_id
-    run.mkdir()
-    (run / "parity_report.json").write_text(
-        json.dumps({"verdict": "FAIL", "n_rows": 10, "rows": {}}),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(orch, "parity_report_path", lambda rid: tmp_path / rid / "parity_report.json")
-    job = orch.Job(
-        key=f"parity:{model}",
-        label="Batch parity",
-        kind="parity",
-        model=model,
-        run_id=run_id,
-        rows_total=10,
-        status="running",
-    )
-    orch._handle_finished(job, rc=1)
-    assert job.status == "done"
-    assert job.rows_done == 10
+    assert orch.cell_needs_robustness_refresh("cell1") is False
 
 
 def test_build_status_table_renders_statuses():
@@ -195,51 +146,34 @@ def test_build_status_table_renders_statuses():
     text = con.export_text()
     assert "Pass A bank" in text
     assert "done" in text
+    assert "Batch parity" not in text
 
 
-def test_seed_skipped_marks_scored_cells(tmp_path, monkeypatch):
-    monkeypatch.setattr(orch, "run_scored_path", lambda rid: tmp_path / "scored" / f"{rid}.json")
-    # Also redirect config.json: a real run dir of the same id on disk would
-    # otherwise supply an n_rows that fails the exact-match check.
-    monkeypatch.setattr(orch, "run_config_path", lambda rid: tmp_path / "conf" / f"{rid}.json")
-    monkeypatch.setattr(
-        orch, "bank_already_complete", lambda model, cids: False
-    )
-    monkeypatch.setattr(
-        "evals.batch_parity.parity_already_complete", lambda model, n=None: False
-    )
-    jobs = orch.build_job_plan(2, date="2026-07-25")
-    cell = next(j for j in jobs if j.kind == "cell")
-    scored_dir = tmp_path / "scored"
-    scored_dir.mkdir()
-    (scored_dir / f"{cell.run_id}.json").write_text(
-        json.dumps({"n_scored": 2}), encoding="utf-8"
-    )
-    orch._seed_skipped(jobs, ["startup-u0", "startup-u1"])
-    assert cell.status == "skipped"
-    pending_cells = [j for j in jobs if j.kind == "cell" and j.status == "pending"]
-    assert len(pending_cells) == 8
-
-
-def test_find_cell_run_id_resumes_prior_day(tmp_path, monkeypatch):
+def test_mint_cell_run_id_never_reuses_existing_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(orch, "RUNS_DIR", tmp_path)
     model = cfg.EVAL_MODELS[0]
     effort = "low"
-    old_id = f"2026-07-20_classification_{model}_{effort}_r1"
-    run = tmp_path / old_id
-    run.mkdir()
-    (run / "config.json").write_text(
-        json.dumps({"model": model, "effort_b": effort, "n_rows": 100}),
-        encoding="utf-8",
-    )
-    (run / "scored.json").write_text(
-        json.dumps({"n_scored": 100}), encoding="utf-8",
-    )
-    found = orch.find_cell_run_id(model, effort, 100, date="2026-07-25")
-    assert found == old_id
-    # Different row count must mint a fresh id for the requested day.
-    fresh = orch.find_cell_run_id(model, effort, 1, date="2026-07-25")
-    assert fresh == f"2026-07-25_classification_{model}_{effort}_r1"
+    taken = f"2026-07-25_classification_{model}_{effort}_r1"
+    (tmp_path / taken).mkdir()
+    minted = orch.mint_cell_run_id(model, effort, date="2026-07-25")
+    assert minted == f"2026-07-25_classification_{model}_{effort}_r2"
+    (tmp_path / minted).mkdir()
+    assert orch.mint_cell_run_id(model, effort, date="2026-07-25").endswith("_r3")
+
+
+def test_build_job_plan_mints_fresh_ids_when_prior_cells_exist(tmp_path, monkeypatch):
+    monkeypatch.setattr(orch, "RUNS_DIR", tmp_path)
+    model = cfg.EVAL_MODELS[0]
+    for effort in ("low", "medium", "high"):
+        old = f"2026-07-25_classification_{model}_{effort}_r1"
+        (tmp_path / old).mkdir()
+        (tmp_path / old / "scored.json").write_text(
+            json.dumps({"n_scored": 100}), encoding="utf-8",
+        )
+    jobs = orch.build_job_plan(100, date="2026-07-25")
+    cell_ids = [j.run_id for j in jobs if j.kind == "cell" and j.model == model]
+    assert all(rid.endswith("_r2") for rid in cell_ids)
+    assert all(j.status == "pending" for j in jobs if j.kind != "dashboard")
 
 
 def test_open_dashboard_index_missing(tmp_path, monkeypatch):
@@ -312,8 +246,6 @@ def test_run_evals_phase2_waits_for_banks(tmp_path, monkeypatch):
     monkeypatch.setattr(orch, "load_golden_rows", lambda: rows)
     monkeypatch.setattr(orch, "require_openai_key", lambda: None)
     monkeypatch.setattr(orch, "print_matrix_preview", lambda r: MagicMock(total_cost=1.23))
-    monkeypatch.setattr(orch, "bank_already_complete", lambda m, c: False)
-    monkeypatch.setattr(orch, "cell_already_scored", lambda r, n: False)
     monkeypatch.setattr(orch, "count_completed_predictions", lambda r: 0)
     monkeypatch.setattr(orch, "spend_from_predictions", lambda r, m: 0.0)
     monkeypatch.setattr(orch, "refresh_job_progress", lambda j: None)
@@ -323,14 +255,14 @@ def test_run_evals_phase2_waits_for_banks(tmp_path, monkeypatch):
         orch, "run_dir", lambda rid: tmp_path / "runs" / rid.replace("/", "_")
     )
     monkeypatch.setattr(orch, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(orch, "RUNS_DIR", tmp_path / "runs")
 
-    spawn_log: list[str] = []
+    spawn_log: list[list[str]] = []
     bank_ticks = {"n": 2}  # banks take 2 poll cycles
 
     def fake_spawn(cmd, log_path):
         # cmd = [python, "-m", "evals", <subcommand>, ...]
-        sub = cmd[3] if len(cmd) > 3 else "?"
-        spawn_log.append(sub)
+        spawn_log.append(cmd)
         # bank-pass-a finishes after a couple polls; cells finish immediately
         if "bank-pass-a" in cmd:
             proc = _FakeProc(ticks=bank_ticks["n"], rc=0)
@@ -384,9 +316,12 @@ def test_run_evals_phase2_waits_for_banks(tmp_path, monkeypatch):
     assert all(phase1_was_complete), (
         "a Pass B cell launched before all Pass A banks were green"
     )
-    assert spawn_log.count("bank-pass-a") == 3
-    assert spawn_log.count("run-classification") == 9
-    assert spawn_log.count("score") == 9
+    bank_cmds = [c for c in spawn_log if "bank-pass-a" in c]
+    assert len(bank_cmds) == 3
+    assert all("--rerun" in c for c in bank_cmds)
+    assert sum(1 for c in spawn_log if "run-classification" in c) == 9
+    assert sum(1 for c in spawn_log if "score" in c) == 9
+    assert not any("batch-parity" in c for c in spawn_log)
 
 
 def test_run_evals_failed_cell_blocks_dashboard(tmp_path, monkeypatch):
@@ -394,8 +329,6 @@ def test_run_evals_failed_cell_blocks_dashboard(tmp_path, monkeypatch):
     monkeypatch.setattr(orch, "load_golden_rows", lambda: rows)
     monkeypatch.setattr(orch, "require_openai_key", lambda: None)
     monkeypatch.setattr(orch, "print_matrix_preview", lambda r: MagicMock(total_cost=0.5))
-    monkeypatch.setattr(orch, "bank_already_complete", lambda m, c: True)
-    monkeypatch.setattr(orch, "cell_already_scored", lambda r, n: False)
     monkeypatch.setattr(orch, "count_completed_predictions", lambda r: 0)
     monkeypatch.setattr(orch, "spend_from_predictions", lambda r, m: 0.0)
     monkeypatch.setattr(orch, "refresh_job_progress", lambda j: None)
@@ -403,6 +336,7 @@ def test_run_evals_failed_cell_blocks_dashboard(tmp_path, monkeypatch):
         orch, "run_dir", lambda rid: tmp_path / "runs" / rid.replace("/", "_")
     )
     monkeypatch.setattr(orch, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(orch, "RUNS_DIR", tmp_path / "runs")
 
     fail_once = {"done": False}
 

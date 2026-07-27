@@ -29,10 +29,10 @@
       "rebuilt_utc": "2026-07-24T22:22:39.644659+00:00"
     },
     {
-      "n": 2,
-      "archived_utc": "2026-07-25T18:12:13.881230+00:00",
-      "file": "eval_instance_02.html",
-      "identity": "4307b13e7f0e",
+      "n": 12,
+      "archived_utc": "2026-07-26T16:51:26.423662+00:00",
+      "file": "eval_instance_12.html",
+      "identity": null,
       "synthetic": false,
       "n_configs": 9,
       "source": "9 runs under evals/runs/",
@@ -53,143 +53,84 @@
         ],
         "n_gold": 100,
         "git_commit": "d96db8d"
+      }
+    },
+    {
+      "n": 13,
+      "archived_utc": "2026-07-26T18:07:57.014306+00:00",
+      "file": "eval_instance_13.html",
+      "identity": "1e2062a38053",
+      "synthetic": false,
+      "n_configs": 9,
+      "config_ids": [
+        "2026-07-26_classification_gpt-5.4-nano_low_r1",
+        "2026-07-26_classification_gpt-5.4-nano_medium_r1",
+        "2026-07-26_classification_gpt-5.4-nano_high_r1",
+        "2026-07-26_classification_gpt-5.4-mini_low_r1",
+        "2026-07-26_classification_gpt-5.4-mini_medium_r1",
+        "2026-07-26_classification_gpt-5.4-mini_high_r1",
+        "2026-07-26_classification_gpt-5.6-luna_low_r1",
+        "2026-07-26_classification_gpt-5.6-luna_medium_r1",
+        "2026-07-26_classification_gpt-5.6-luna_high_r1"
+      ],
+      "source": "9 runs under evals/runs/",
+      "run": {
+        "synthetic": false,
+        "n_runs": 9,
+        "started_first": "2026-07-26T17:48:09.761785+00:00",
+        "started_last": "2026-07-26T17:48:09.808396+00:00",
+        "models": [
+          "gpt-5.4-nano",
+          "gpt-5.4-mini",
+          "gpt-5.6-luna"
+        ],
+        "model_groups": [
+          "nano",
+          "mini",
+          "luna"
+        ],
+        "n_gold": 100,
+        "git_commit": "c094f2b"
+      }
+    },
+    {
+      "n": 14,
+      "archived_utc": "2026-07-27T18:38:02.314195+00:00",
+      "file": "eval_instance_14.html",
+      "identity": "f0146503e9d5",
+      "synthetic": false,
+      "n_configs": 9,
+      "config_ids": [
+        "2026-07-27_classification_gpt-5.4-nano_low_r1",
+        "2026-07-27_classification_gpt-5.4-nano_medium_r1",
+        "2026-07-27_classification_gpt-5.4-nano_high_r1",
+        "2026-07-27_classification_gpt-5.4-mini_low_r1",
+        "2026-07-27_classification_gpt-5.4-mini_medium_r1",
+        "2026-07-27_classification_gpt-5.4-mini_high_r1",
+        "2026-07-27_classification_gpt-5.6-luna_low_r1",
+        "2026-07-27_classification_gpt-5.6-luna_medium_r1",
+        "2026-07-27_classification_gpt-5.6-luna_high_r1"
+      ],
+      "source": "9 runs under evals/runs/",
+      "run": {
+        "synthetic": false,
+        "n_runs": 9,
+        "started_first": "2026-07-27T18:10:07.155480+00:00",
+        "started_last": "2026-07-27T18:10:07.239645+00:00",
+        "models": [
+          "gpt-5.4-nano",
+          "gpt-5.4-mini",
+          "gpt-5.6-luna"
+        ],
+        "model_groups": [
+          "nano",
+          "mini",
+          "luna"
+        ],
+        "n_gold": 100,
+        "git_commit": "bdff0bd"
       },
-      "rebuilt_utc": "2026-07-25T23:50:07.685008+00:00"
-    },
-    {
-      "n": 3,
-      "archived_utc": "2026-07-26T01:45:07.073742+00:00",
-      "file": "eval_instance_03.html",
-      "identity": null,
-      "synthetic": false,
-      "n_configs": 9,
-      "source": "9 runs under evals/runs/",
-      "run": {
-        "synthetic": false,
-        "n_runs": 9,
-        "started_first": "2026-07-25T17:53:41.360290+00:00",
-        "started_last": "2026-07-25T17:53:41.417038+00:00",
-        "models": [
-          "gpt-5.4-nano",
-          "gpt-5.4-mini",
-          "gpt-5.6-luna"
-        ],
-        "model_groups": [
-          "nano",
-          "mini",
-          "luna"
-        ],
-        "n_gold": 100,
-        "git_commit": "d96db8d"
-      }
-    },
-    {
-      "n": 4,
-      "archived_utc": "2026-07-26T01:58:51.280002+00:00",
-      "file": "eval_instance_04.html",
-      "identity": null,
-      "synthetic": false,
-      "n_configs": 9,
-      "source": "9 runs under evals/runs/",
-      "run": {
-        "synthetic": false,
-        "n_runs": 9,
-        "started_first": "2026-07-25T17:53:41.360290+00:00",
-        "started_last": "2026-07-25T17:53:41.417038+00:00",
-        "models": [
-          "gpt-5.4-nano",
-          "gpt-5.4-mini",
-          "gpt-5.6-luna"
-        ],
-        "model_groups": [
-          "nano",
-          "mini",
-          "luna"
-        ],
-        "n_gold": 100,
-        "git_commit": "d96db8d"
-      }
-    },
-    {
-      "n": 5,
-      "archived_utc": "2026-07-26T02:09:59.314527+00:00",
-      "file": "eval_instance_05.html",
-      "identity": null,
-      "synthetic": false,
-      "n_configs": 9,
-      "source": "9 runs under evals/runs/",
-      "run": {
-        "synthetic": false,
-        "n_runs": 9,
-        "started_first": "2026-07-25T17:53:41.360290+00:00",
-        "started_last": "2026-07-25T17:53:41.417038+00:00",
-        "models": [
-          "gpt-5.4-nano",
-          "gpt-5.4-mini",
-          "gpt-5.6-luna"
-        ],
-        "model_groups": [
-          "nano",
-          "mini",
-          "luna"
-        ],
-        "n_gold": 100,
-        "git_commit": "d96db8d"
-      }
-    },
-    {
-      "n": 6,
-      "archived_utc": "2026-07-26T02:16:15.515092+00:00",
-      "file": "eval_instance_06.html",
-      "identity": null,
-      "synthetic": false,
-      "n_configs": 9,
-      "source": "9 runs under evals/runs/",
-      "run": {
-        "synthetic": false,
-        "n_runs": 9,
-        "started_first": "2026-07-25T17:53:41.360290+00:00",
-        "started_last": "2026-07-25T17:53:41.417038+00:00",
-        "models": [
-          "gpt-5.4-nano",
-          "gpt-5.4-mini",
-          "gpt-5.6-luna"
-        ],
-        "model_groups": [
-          "nano",
-          "mini",
-          "luna"
-        ],
-        "n_gold": 100,
-        "git_commit": "d96db8d"
-      }
-    },
-    {
-      "n": 7,
-      "archived_utc": "2026-07-26T15:52:06.885908+00:00",
-      "file": "eval_instance_07.html",
-      "identity": null,
-      "synthetic": false,
-      "n_configs": 9,
-      "source": "9 runs under evals/runs/",
-      "run": {
-        "synthetic": false,
-        "n_runs": 9,
-        "started_first": "2026-07-25T17:53:41.360290+00:00",
-        "started_last": "2026-07-25T17:53:41.417038+00:00",
-        "models": [
-          "gpt-5.4-nano",
-          "gpt-5.4-mini",
-          "gpt-5.6-luna"
-        ],
-        "model_groups": [
-          "nano",
-          "mini",
-          "luna"
-        ],
-        "n_gold": 100,
-        "git_commit": "d96db8d"
-      }
+      "rebuilt_utc": "2026-07-27T18:38:40.574530+00:00"
     }
   ]
 }

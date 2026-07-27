@@ -68,8 +68,7 @@ COHORT_BOUNDARY: tuple[int, int] = (2023, 3)
 # digit can still appear when the model is near-certain (with depth 2 the
 # second slot is often whitespace, which makes confidence unavailable and
 # blocks score --confidence-from-raw). Legacy TOP_LOGPROBS=15 was a
-# single-pass subclass leftover and must not drive Pass A or parity success
-# criteria.
+# single-pass subclass leftover and must not drive Pass A success criteria.
 #
 # Depth is not sufficient on its own: gpt-5.4-mini and gpt-5.6-luna only
 # return candidates holding roughly 1% probability or more (measured floor
@@ -97,16 +96,17 @@ MAX_CENSORED_INTERVAL_WIDTH: float = 0.05
 VALID_MASS_THRESHOLD: float = 0.90
 VALID_MASS_MAX_BELOW_SHARE: float = 0.05
 
-# Rough Pass B output+reasoning token guesses for dry-run budget preflight.
-# Input-only char/4 estimates understate high-effort spend; these are order-of-
-# magnitude only (observed single-pass high peaked ~1,450 output tokens).
+# Pass A/B output+reasoning token guesses for dry-run / cost-preview only.
+# Calibrated to the 2026-07-25 two-pass matrix (mean output tokens/row).
+# Preview still ignores prompt-cache savings, so it stays a mild upper bound
+# on matrix spend; the dashboard Projected cost uses measured tokens instead.
 PASS_B_OUTPUT_TOKEN_ESTIMATE: dict[str, int] = {
     "none": 250,
-    "low": 500,
-    "medium": 1_000,
-    "high": 1_600,
+    "low": 350,
+    "medium": 550,
+    "high": 1_000,
 }
-PASS_A_OUTPUT_TOKEN_ESTIMATE: int = 8
+PASS_A_OUTPUT_TOKEN_ESTIMATE: int = 16
 
 # Empirical finding (2026-07-05, gpt-5.4-nano): reasoning models reject the
 # `temperature` parameter with a 400 ("not supported with this model"). They
@@ -158,17 +158,6 @@ CALIBRATION_BINS: int = 10
 SELECTIVE_COVERAGE_GRID: list[float] = [round(0.1 * k, 1) for k in range(1, 11)]
 
 # ---------------------------------------------------------------------------
-# Batch API parity smoke (gate Q4)
-# ---------------------------------------------------------------------------
-
-PARITY_ROWS: int = 10
-PARITY_POLL_SECONDS: int = 30
-# 10 nano rows normally finish in minutes; bail out (with the batch id saved
-# for resume) rather than blocking a terminal for the full 24h window.
-PARITY_MAX_WAIT_SECONDS: int = 7_200
-PARITY_COMPLETION_WINDOW: str = "24h"
-
-# ---------------------------------------------------------------------------
 # Pricing ($ per 1M tokens, sync API) — verified 2026-07-05 against the
 # OpenAI pricing page. src/tokens.py MODEL_PRICING is stale; the harness
 # carries its own table so cost numbers in eval reports are trustworthy.
@@ -206,14 +195,18 @@ def require_model_pricing(model: str) -> dict[str, float]:
 # stays offline-safe without keys.
 CACHE_DISCOUNT: float = 0.50
 
-# Scale-up N: alive non-empty evidence + dead extractable targets (default).
-# Optional named alternatives for later toggles; default is the combo.
+# Scale-up N for production $ projections. Default is the evidence-only
+# universe the V1 alive/dead dashboard reports (~37.7k): survivors with
+# non-empty live evidence plus dead companies recovered with usable
+# archive evidence. Named alternatives stay available for later toggles.
 N_PROD_ALIVE_EVIDENCE: int = 22_032
 N_PROD_DEAD_EXTRACTABLE: int = 19_044
 N_PROD_ALIVE_PLUS_DEAD: int = N_PROD_ALIVE_EVIDENCE + N_PROD_DEAD_EXTRACTABLE
-N_PROD_DEFAULT: int = N_PROD_ALIVE_PLUS_DEAD
+N_PROD_EVIDENCE_UNIVERSE: int = 37_672
+N_PROD_DEFAULT: int = N_PROD_EVIDENCE_UNIVERSE
 
 N_PROD_SCALE_OPTIONS: dict[str, int] = {
+    "evidence_universe": N_PROD_EVIDENCE_UNIVERSE,
     "alive_evidence": N_PROD_ALIVE_EVIDENCE,
     "dead_extractable": N_PROD_DEAD_EXTRACTABLE,
     "alive_plus_dead": N_PROD_ALIVE_PLUS_DEAD,

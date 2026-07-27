@@ -16,7 +16,7 @@ def test_ladder_known_answer_classification_with_cache():
     # 1M input (500k cached) + 1M output on nano: sync in=$0.20, out=$1.25.
     # After cache: uncached 0.5M @ 0.20 = $0.10, cached 0.5M @ 0.10 = $0.05
     # → $0.15 + $1.25 = $1.40. Production runs the sync Responses API, so
-    # no batch discount: scale × 41076 (n_golden=1) → $1.40 * 41076.
+    # no batch discount: scale × N_PROD_DEFAULT (n_golden=1) → $1.40 * N.
     records = [{
         "a_input_tokens": 400_000, "a_output_tokens": 100_000,
         "a_cached_tokens": 200_000, "a_reasoning_tokens": 0,
@@ -27,6 +27,7 @@ def test_ladder_known_answer_classification_with_cache():
     assert est["available"] is True
     assert est["assumptions"]["architecture"] == "classification"
     assert est["assumptions"]["n_prod"] == cfg.N_PROD_DEFAULT
+    assert est["assumptions"]["n_prod_label"] == "evidence_universe"
     assert est["assumptions"]["cache_source"] == "measured_from_run"
 
     s1 = est["steps"]["1_golden_sync"]
@@ -42,8 +43,10 @@ def test_ladder_known_answer_classification_with_cache():
 
     assert "3_batch" not in est["steps"]
     s3 = est["steps"]["3_scale"]
-    assert s3["n_prod"] == 41_076
-    assert s3["estimated_production_usd"] == pytest.approx(1.40 * 41_076)
+    assert s3["n_prod"] == cfg.N_PROD_EVIDENCE_UNIVERSE
+    assert s3["estimated_production_usd"] == pytest.approx(
+        1.40 * cfg.N_PROD_EVIDENCE_UNIVERSE
+    )
 
 
 def test_legacy_run_without_cached_field_marks_cache_unavailable():
@@ -121,7 +124,7 @@ def test_format_cost_ladder_mentions_assumptions():
     text = ce.format_cost_ladder(ce.production_cost_from_records(records, "gpt-5.4-nano"))
     assert "PRODUCTION COST EXTRAPOLATION" in text
     assert "Cache source" in text
-    assert "41076" in text or "41,076" in text
+    assert str(cfg.N_PROD_DEFAULT) in text or f"{cfg.N_PROD_DEFAULT:,}" in text
 
 
 def test_score_run_includes_production_cost_estimate(mini_run_factory):

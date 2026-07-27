@@ -14,6 +14,7 @@ import pytest
 from evals.dashboard_metrics import (
     DEFAULT_FIXTURE,
     MODEL_GROUP_ORDER,
+    attach_fresh_production_cost,
     build_metrics,
     config_row_from_scored,
     load_fixture,
@@ -67,9 +68,9 @@ def test_fixture_rows_carry_chart_fields():
     assert row["kind"] == "classification"
     assert 0.8 < row["subclass_acc"] < 0.9
     # Fixture ladders are generated with the real extrapolation formula, so
-    # the projected $ is the exact scale-step output (displays as $825:
-    # sync Responses API pricing, no batch discount).
-    assert row["projected_usd"] == pytest.approx(824.7034, abs=1e-3)
+    # the projected $ is the exact scale-step output (sync Responses API
+    # pricing, evidence-universe N_prod, no batch discount).
+    assert row["projected_usd"] == pytest.approx(756.35958, abs=1e-3)
     assert row["latency_p50"] == 4.6
     assert row["share_above_90"] == 0.61
     assert row["ece"] == pytest.approx(0.046185)
@@ -154,7 +155,6 @@ def test_fixture_robustness_checks_all_pass():
     assert [c["id"] for c in checks] == [
         "tokenization_pinned",
         "probability_mass",
-        "batch_parity",
     ]
     for check in checks:
         assert check["status"] == "pass", check["id"]
@@ -275,7 +275,7 @@ def test_robustness_tokenization_dedupe_does_not_hide_gap():
     assert stats["Companies with confidence recovered"] == "297 of 300"
 
 
-def test_robustness_valid_mass_and_parity_fail_paths():
+def test_robustness_valid_mass_fail_path():
     stub = _axes_stub(robustness={
         "valid_mass": {
             "n": 100,
@@ -287,17 +287,11 @@ def test_robustness_valid_mass_and_parity_fail_paths():
             "n_below_threshold": 11,
             "below_share": 0.11,
         },
-        "batch_parity": {
-            "verdict": "FAIL",
-            "n_rows": 10,
-            "n_checks": 190,
-            "n_failed": 2,
-        },
     })
     metrics = build_metrics([stub], synthetic=False, source="test")
     by_id = {c["id"]: c for c in metrics["robustness"]["checks"]}
     assert by_id["probability_mass"]["status"] == "fail"
-    assert by_id["batch_parity"]["status"] == "fail"
+    assert "batch_parity" not in by_id
     assert by_id["tokenization_pinned"]["status"] == "pending"
 
 
@@ -321,37 +315,6 @@ def test_robustness_valid_mass_tolerates_one_thin_outlier():
     )
     assert mass["status"] == "pass"
     assert mass["per_model"][0]["status"] == "pass"
-
-
-def test_robustness_parity_empty_verdict_is_pending():
-    """Incomplete batch_parity summaries must not paint a false fail."""
-    stub = _axes_stub(robustness={
-        "batch_parity": {
-            "verdict": "",
-            "n_rows": 10,
-            "n_checks": 0,
-            "n_failed": 0,
-        },
-    })
-    metrics = build_metrics([stub], synthetic=False, source="test")
-    parity = next(
-        c for c in metrics["robustness"]["checks"] if c["id"] == "batch_parity"
-    )
-    assert parity["status"] == "pending"
-    assert parity["pending_note"]
-    assert parity["per_model"][0]["status"] == "pending"
-
-
-def test_robustness_parity_missing_verdict_is_pending():
-    stub = _axes_stub(robustness={
-        "batch_parity": {"n_rows": 10, "n_checks": 5, "n_failed": 0},
-    })
-    metrics = build_metrics([stub], synthetic=False, source="test")
-    parity = next(
-        c for c in metrics["robustness"]["checks"] if c["id"] == "batch_parity"
-    )
-    assert parity["status"] == "pending"
-    assert parity["per_model"][0]["status"] == "pending"
 
 
 def test_fixture_cost_breakdowns_recompute_to_displayed_total():
@@ -458,8 +421,8 @@ def test_cost_breakdown_marks_unavailable_ladder_without_fabricating():
             "available": False,
             "reason": "cached_tokens_unavailable",
             "assumptions": {
-                "n_prod": 41_076,
-                "n_prod_label": "alive_plus_dead",
+                "n_prod": 37_672,
+                "n_prod_label": "evidence_universe",
                 "n_golden": 100,
                 "model": "gpt-5.4-nano",
                 "cache_discount": 0.5,
@@ -650,6 +613,97 @@ def test_committed_html_keeps_pareto_axis_in_sync():
     assert "range: [0.6, 0.95]" not in html
     assert "yRange" in html
     assert "effortCaption" in html
+
+
+def test_attach_fresh_production_cost_uses_predictions_not_stale_ladder(
+    tmp_path, monkeypatch,
+):
+    """Dashboard builds must re-project from this run's measured tokens."""
+    from evals import config as cfg
+    from evals.jsonl_io import append_jsonl
+
+    run_id = "fresh_cost_cell"
+    run = tmp_path / "runs" / run_id
+    run.mkdir(parents=True)
+    # One completed row: 1M input (500k cached) + 0 output on nano → after
+    # cache $0.15; scale × N_prod.
+    append_jsonl(run / "predictions.jsonl", {
+        "custom_id": "startup-u0",
+        "status": "completed",
+        "model": "gpt-5.4-nano",
+        "a_input_tokens": 400_000,
+        "a_output_tokens": 0,
+        "a_cached_tokens": 200_000,
+        "b_input_tokens": 600_000,
+        "b_output_tokens": 0,
+        "b_cached_tokens": 300_000,
+    })
+    monkeypatch.setattr(
+        "evals.dashboard_metrics.run_predictions_path",
+        lambda rid: tmp_path / "runs" / rid / "predictions.jsonl",
+    )
+    stale = {
+        "run_id": run_id,
+        "model": "gpt-5.4-nano",
+        "production_cost_estimate": {
+            "available": True,
+            "steps": {
+                "3_scale": {
+                    "available": True,
+                    "estimated_production_usd": 9999.0,
+                    "n_prod": 41_076,
+                }
+            },
+        },
+    }
+    fresh = attach_fresh_production_cost(stale, run_id=run_id)
+    assert fresh["production_cost_estimate"]["assumptions"]["n_prod"] == (
+        cfg.N_PROD_EVIDENCE_UNIVERSE
+    )
+    assert fresh["production_cost_estimate"]["summary"][
+        "estimated_production_usd"
+    ] == pytest.approx(0.15 * cfg.N_PROD_EVIDENCE_UNIVERSE)
+    assert config_row_from_scored(fresh)["projected_usd"] == pytest.approx(
+        0.15 * cfg.N_PROD_EVIDENCE_UNIVERSE
+    )
+
+
+def test_attach_fresh_production_cost_tolerates_truncated_final_line(
+    tmp_path, monkeypatch,
+):
+    """A truncated last predictions line must not crash dashboard cost recompute."""
+    from evals import config as cfg
+
+    run_id = "truncated_cost_cell"
+    run = tmp_path / "runs" / run_id
+    run.mkdir(parents=True)
+    path = run / "predictions.jsonl"
+    path.write_text(
+        json.dumps({
+            "custom_id": "startup-u0",
+            "status": "completed",
+            "model": "gpt-5.4-nano",
+            "a_input_tokens": 1_000_000,
+            "a_output_tokens": 0,
+            "a_cached_tokens": 0,
+            "b_input_tokens": 0,
+            "b_output_tokens": 0,
+            "b_cached_tokens": 0,
+        })
+        + "\n{\"custom_id\": \"startup-u1\", \"status\": \"comple",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "evals.dashboard_metrics.run_predictions_path",
+        lambda rid: tmp_path / "runs" / rid / "predictions.jsonl",
+    )
+    fresh = attach_fresh_production_cost(
+        {"run_id": run_id, "model": "gpt-5.4-nano"},
+        run_id=run_id,
+    )
+    assert fresh["production_cost_estimate"]["summary"][
+        "estimated_production_usd"
+    ] == pytest.approx(0.20 * cfg.N_PROD_EVIDENCE_UNIVERSE)
 
 
 def test_projected_usd_none_when_cost_unavailable():
@@ -856,11 +910,12 @@ def test_build_html_is_three_tab_suite():
     assert "baseline-table" not in page
     # No design-inspiration or meta references leak into the product.
     assert "langsmith" not in page.lower()
-    # Robustness panel renders server-side with badges.
+    # Robustness panel renders server-side; pass/fail only on per-model rows.
     assert 'id="check-tokenization_pinned"' in page
     assert 'id="check-probability_mass"' in page
-    assert 'id="check-batch_parity"' in page
-    assert '<span class="badge pass">pass</span>' in page
+    assert 'id="check-batch_parity"' not in page
+    assert 'class="badge' not in page
+    assert '<span class="mini-status pass">pass</span>' in page
     # Confidence tab charts.
     assert "chart-reliability" in page
     assert "chart-ece" in page
@@ -888,10 +943,12 @@ def test_build_html_visual_qa_followups():
     bench = page.split('id="panel-benchmarks"', 1)[1].split('id="panel-confidence"', 1)[0]
     assert 'id="config-filter"' not in bench
 
-    # Sync production story: parity stays, "Batch at scale" billing language goes.
+    # Sync production story; retired Batch-parity / Batch-at-scale copy is gone.
     assert "Batch API used at scale" not in page
-    assert "request shapes stay equivalent" in page
-    assert "parity check is about request equivalence, not pricing" in page
+    assert "request shapes stay equivalent" not in page
+    assert "parity check is about request equivalence, not pricing" not in page
+    assert "Production classification runs on the" in page
+    assert "sync API." in page
 
     # Cleared filters must not pretend calibration is missing.
     assert "No configurations selected. Use the filters above" in page
@@ -900,6 +957,13 @@ def test_build_html_visual_qa_followups():
     # ECE is one bar per model (bank-once Pass A), not nine effort cells.
     assert "one bar per model" in page
     assert "seen.has(c.model_group)" in page
+
+    # Reliability diagram must keep the unit square so low-accuracy bins
+    # (common on real runs) are not clipped under the plot.
+    assert "range: [-0.05, 1.05]" in page
+    assert "range: [0.35, 1.02]" not in page
+    assert "cliponaxis: false" in page
+    assert 'chart-reliability" class="chart tall"' in page
 
     # RAD gloss for non-CS readers; softer footer on synthetic.
     assert "Resource-Adjusted AI Dependency" in page
@@ -956,7 +1020,8 @@ def test_committed_html_is_the_suite():
     assert "Classifier Eval Suite" in page
     assert page.count('data-tab="') == 3
     assert "langsmith" not in page.lower()
-    assert 'id="check-batch_parity"' in page
+    assert 'id="check-batch_parity"' not in page
+    assert 'id="check-probability_mass"' in page
     assert 'src="https://cdn.plot.ly' not in page
     assert "plotly.js v2.35.2" in page
 
