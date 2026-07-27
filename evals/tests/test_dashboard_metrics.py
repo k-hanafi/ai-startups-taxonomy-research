@@ -155,7 +155,6 @@ def test_fixture_robustness_checks_all_pass():
     assert [c["id"] for c in checks] == [
         "tokenization_pinned",
         "probability_mass",
-        "batch_parity",
     ]
     for check in checks:
         assert check["status"] == "pass", check["id"]
@@ -276,7 +275,7 @@ def test_robustness_tokenization_dedupe_does_not_hide_gap():
     assert stats["Companies with confidence recovered"] == "297 of 300"
 
 
-def test_robustness_valid_mass_and_parity_fail_paths():
+def test_robustness_valid_mass_fail_path():
     stub = _axes_stub(robustness={
         "valid_mass": {
             "n": 100,
@@ -288,17 +287,11 @@ def test_robustness_valid_mass_and_parity_fail_paths():
             "n_below_threshold": 11,
             "below_share": 0.11,
         },
-        "batch_parity": {
-            "verdict": "FAIL",
-            "n_rows": 10,
-            "n_checks": 190,
-            "n_failed": 2,
-        },
     })
     metrics = build_metrics([stub], synthetic=False, source="test")
     by_id = {c["id"]: c for c in metrics["robustness"]["checks"]}
     assert by_id["probability_mass"]["status"] == "fail"
-    assert by_id["batch_parity"]["status"] == "fail"
+    assert "batch_parity" not in by_id
     assert by_id["tokenization_pinned"]["status"] == "pending"
 
 
@@ -322,37 +315,6 @@ def test_robustness_valid_mass_tolerates_one_thin_outlier():
     )
     assert mass["status"] == "pass"
     assert mass["per_model"][0]["status"] == "pass"
-
-
-def test_robustness_parity_empty_verdict_is_pending():
-    """Incomplete batch_parity summaries must not paint a false fail."""
-    stub = _axes_stub(robustness={
-        "batch_parity": {
-            "verdict": "",
-            "n_rows": 10,
-            "n_checks": 0,
-            "n_failed": 0,
-        },
-    })
-    metrics = build_metrics([stub], synthetic=False, source="test")
-    parity = next(
-        c for c in metrics["robustness"]["checks"] if c["id"] == "batch_parity"
-    )
-    assert parity["status"] == "pending"
-    assert parity["pending_note"]
-    assert parity["per_model"][0]["status"] == "pending"
-
-
-def test_robustness_parity_missing_verdict_is_pending():
-    stub = _axes_stub(robustness={
-        "batch_parity": {"n_rows": 10, "n_checks": 5, "n_failed": 0},
-    })
-    metrics = build_metrics([stub], synthetic=False, source="test")
-    parity = next(
-        c for c in metrics["robustness"]["checks"] if c["id"] == "batch_parity"
-    )
-    assert parity["status"] == "pending"
-    assert parity["per_model"][0]["status"] == "pending"
 
 
 def test_fixture_cost_breakdowns_recompute_to_displayed_total():
@@ -913,7 +875,7 @@ def test_build_html_is_three_tab_suite():
     # Robustness panel renders server-side; pass/fail only on per-model rows.
     assert 'id="check-tokenization_pinned"' in page
     assert 'id="check-probability_mass"' in page
-    assert 'id="check-batch_parity"' in page
+    assert 'id="check-batch_parity"' not in page
     assert 'class="badge' not in page
     assert '<span class="mini-status pass">pass</span>' in page
     # Confidence tab charts.
@@ -943,10 +905,12 @@ def test_build_html_visual_qa_followups():
     bench = page.split('id="panel-benchmarks"', 1)[1].split('id="panel-confidence"', 1)[0]
     assert 'id="config-filter"' not in bench
 
-    # Sync production story: parity stays, "Batch at scale" billing language goes.
+    # Sync production story; retired Batch-parity / Batch-at-scale copy is gone.
     assert "Batch API used at scale" not in page
-    assert "request shapes stay equivalent" in page
-    assert "parity check is about request equivalence, not pricing" in page
+    assert "request shapes stay equivalent" not in page
+    assert "parity check is about request equivalence, not pricing" not in page
+    assert "Production classification runs on the" in page
+    assert "sync API." in page
 
     # Cleared filters must not pretend calibration is missing.
     assert "No configurations selected. Use the filters above" in page
@@ -1018,7 +982,8 @@ def test_committed_html_is_the_suite():
     assert "Classifier Eval Suite" in page
     assert page.count('data-tab="') == 3
     assert "langsmith" not in page.lower()
-    assert 'id="check-batch_parity"' in page
+    assert 'id="check-batch_parity"' not in page
+    assert 'id="check-probability_mass"' in page
     assert 'src="https://cdn.plot.ly' not in page
     assert "plotly.js v2.35.2" in page
 

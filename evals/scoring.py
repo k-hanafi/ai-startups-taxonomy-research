@@ -609,7 +609,7 @@ def score_run(
     When confidence is supplied, incomplete coverage refuses unless
     ``allow_partial_confidence=True``.
 
-    ``robustness`` is the optional dashboard block (valid_mass / batch_parity)
+    ``robustness`` is the optional dashboard block (valid_mass)
     written by ``score --confidence-from-raw`` / run-evals.
     """
     gold = load_gold()

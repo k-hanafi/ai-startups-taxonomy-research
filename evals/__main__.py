@@ -36,10 +36,10 @@ def main() -> None:
         "run-evals",
         help=(
             "Run the full locked matrix from scratch every time: rebuild "
-            "Pass A banks (3 models in parallel), re-run Batch parity, run "
-            "9 Pass B cells in parallel, score each, build the dashboard. "
-            "Live checklist in the terminal. Prior scored cells are not "
-            "resumed (re-paying is intentional)."
+            "Pass A banks (3 models in parallel), run 9 Pass B cells in "
+            "parallel, score each, build the dashboard. Live checklist in "
+            "the terminal. Prior scored cells are not resumed (re-paying "
+            "is intentional)."
         ),
     )
     p_run_evals.add_argument(
@@ -222,16 +222,6 @@ def main() -> None:
             "mini/luna sweeps are not blocked when top_logprobs omit the "
             "opposing digit."
         ),
-    )
-    p_parity = subs.add_parser(
-        "batch-parity",
-        help="PAID: 10-row Batch-vs-sync parity smoke on Pass A (gate Q4, Stage 7)",
-    )
-    p_parity.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
-    p_parity.add_argument(
-        "--run-id",
-        default=None,
-        help="Override parity run directory under evals/runs/",
     )
     p_report = subs.add_parser(
         "report",
@@ -438,14 +428,13 @@ def main() -> None:
         if args.confidence:
             confidence = load_confidence_file(args.confidence)
         elif args.confidence_from_raw:
-            from evals.batch_parity import load_parity_summary_for_model
             from evals.logprob_extract import (
                 LogprobExtractionError,
                 chosen_confidence,
                 extract_confidence_rows,
                 valid_mass_summary,
             )
-            from evals.paths import run_config_path, run_raw_dir
+            from evals.paths import run_raw_dir
 
             try:
                 conf_rows = extract_confidence_rows(run_raw_dir(args.run_id))
@@ -464,19 +453,6 @@ def main() -> None:
                     confidence = None
                 else:
                     sys.exit(f"--confidence-from-raw failed: {exc}")
-            model = None
-            cfg_path = run_config_path(args.run_id)
-            if cfg_path.exists():
-                try:
-                    model = json.loads(cfg_path.read_text(encoding="utf-8")).get(
-                        "model"
-                    )
-                except (OSError, ValueError):
-                    model = None
-            if model:
-                parity = load_parity_summary_for_model(str(model))
-                if parity:
-                    robustness = {**(robustness or {}), "batch_parity": parity}
         score_cli(
             args.run_id,
             args.baseline,
@@ -485,20 +461,6 @@ def main() -> None:
             allow_partial_confidence=args.allow_partial_confidence,
             robustness=robustness,
         )
-        return
-    if args.command == "batch-parity":
-        from evals import config as cfg
-        from evals.batch_parity import run_parity
-
-        report = run_parity(
-            model=args.model or cfg.EVAL_MODELS[0],
-            run_id=args.run_id,
-        )
-        # Nonzero exit on any non-PASS verdict, including batch_error runs
-        # (batch timed out / no output file). The report is still written so
-        # the paid sync results survive either way.
-        if report["verdict"] != "PASS":
-            sys.exit(1)
         return
 
     if args.command == "report":

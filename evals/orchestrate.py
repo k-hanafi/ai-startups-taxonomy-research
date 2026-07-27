@@ -1,11 +1,10 @@
 """End-to-end paid matrix orchestrator: ``python -m evals run-evals``.
 
-Every invocation runs from scratch: rebuilds Pass A banks, re-runs Batch
-parity (unless ``--limit``), mints new cell run ids, scores, then builds the
-dashboard. Phase 1 = 3 banks + 3 parity in parallel; phase 2 = 9 Pass B cells
-in parallel. Progress is read from disk (predictions.jsonl / scored.json /
-parity_report.json), not scraped from child stdout. Child logs land in each
-run's ``run.log``.
+Every invocation runs from scratch: rebuilds Pass A banks, mints new cell
+run ids, scores, then builds the dashboard. Phase 1 = 3 banks in parallel;
+phase 2 = 9 Pass B cells in parallel. Progress is read from disk
+(predictions.jsonl / scored.json), not scraped from child stdout. Child
+logs land in each run's ``run.log``.
 """
 
 from __future__ import annotations
@@ -38,19 +37,17 @@ from evals.paths import (
     EVAL_INSTANCES_DIR,
     PROJECT_ROOT,
     RUNS_DIR,
-    parity_report_path,
     pass_a_bank_run_id,
     run_config_path,
     run_dir,
     run_predictions_path,
-    run_raw_dir,
     run_scored_path,
 )
 from evals.runner import load_golden_rows
 
 logger = logging.getLogger(__name__)
 
-JobKind = Literal["pass_a", "parity", "cell", "dashboard"]
+JobKind = Literal["pass_a", "cell", "dashboard"]
 JobStatus = Literal["pending", "running", "done", "failed", "skipped"]
 
 _STATUS_STYLE = {
@@ -216,18 +213,6 @@ def bank_already_complete(model: str, custom_ids: list[str]) -> bool:
     return pass_a_bank_covers(bank_id, custom_ids)
 
 
-def mint_parity_run_id(model: str, *, date: str | None = None) -> str:
-    """Mint an unused parity run dir id for *model* (never reuses prior work)."""
-    day = date or _dt.date.today().isoformat()
-    base = f"{day}_parity_{model}"
-    if not (RUNS_DIR / base).exists():
-        return base
-    n = 2
-    while (RUNS_DIR / f"{base}_{n}").exists():
-        n += 1
-    return f"{base}_{n}"
-
-
 def mint_cell_run_id(
     model: str,
     effort_b: str,
@@ -250,12 +235,11 @@ def build_job_plan(
     *,
     date: str | None = None,
     repeat: int = 1,
-    include_parity: bool = True,
 ) -> list[Job]:
-    """Build the checklist rows (3 Pass A + 3 parity + 9 cells + dashboard).
+    """Build the checklist rows (3 Pass A + 9 cells + dashboard).
 
-    Every call mints fresh cell/parity run ids so ``run-evals`` always pays for
-    a new matrix instead of resuming scored dirs from a prior invocation.
+    Every call mints fresh cell run ids so ``run-evals`` always pays for a
+    new matrix instead of resuming scored dirs from a prior invocation.
     """
     jobs: list[Job] = []
     for model in cfg.EVAL_MODELS:
@@ -270,19 +254,6 @@ def build_job_plan(
                 rows_total=n_rows,
             )
         )
-    if include_parity:
-        for model in cfg.EVAL_MODELS:
-            short = model.split("-")[-1]
-            jobs.append(
-                Job(
-                    key=f"parity:{model}",
-                    label=f"Batch parity ({short})",
-                    kind="parity",
-                    model=model,
-                    run_id=mint_parity_run_id(model, date=date),
-                    rows_total=cfg.PARITY_ROWS,
-                )
-            )
     for model, effort in matrix_cells():
         short = model.split("-")[-1]
         run_id = mint_cell_run_id(
@@ -315,14 +286,6 @@ def refresh_job_progress(job: Job) -> None:
     if job.kind == "dashboard":
         if job.status == "done":
             job.rows_done = 1
-        return
-    if job.kind == "parity":
-        if job.status in ("done", "skipped"):
-            job.rows_done = job.rows_total
-        elif job.run_id:
-            raw = run_raw_dir(job.run_id)
-            if raw.is_dir():
-                job.rows_done = len(list(raw.glob("*_sync.json")))
         return
     if job.run_id is None or job.model is None:
         return
@@ -387,13 +350,13 @@ def build_status_table(jobs: list[Job], *, now: float | None = None) -> Table:
 
 
 def phase1_complete(jobs: list[Job]) -> bool:
-    """True when every Pass A bank and parity job is done or skipped."""
-    phase1 = [j for j in jobs if j.kind in ("pass_a", "parity")]
+    """True when every Pass A bank is done or skipped."""
+    phase1 = [j for j in jobs if j.kind == "pass_a"]
     return all(j.status in ("done", "skipped") for j in phase1) and bool(phase1)
 
 
 def phase1_failed(jobs: list[Job]) -> bool:
-    return any(j.status == "failed" for j in jobs if j.kind in ("pass_a", "parity"))
+    return any(j.status == "failed" for j in jobs if j.kind == "pass_a")
 
 
 def cells_all_terminal(jobs: list[Job]) -> bool:
@@ -410,7 +373,7 @@ def should_block_dashboard(jobs: list[Job]) -> bool:
     return phase1_failed(jobs) or any_cell_failed(jobs) or not all(
         j.status in ("done", "skipped")
         for j in jobs
-        if j.kind in ("pass_a", "parity", "cell")
+        if j.kind in ("pass_a", "cell")
     )
 
 
@@ -488,35 +451,6 @@ def _start_pass_a(job: Job, limit: int | None) -> None:
     job.process, job.log_handle = _spawn(cmd, log_path)
 
 
-def _start_parity(job: Job) -> None:
-    assert job.model is not None and job.run_id is not None
-    cmd = _python_cmd() + [
-        "batch-parity", "--model", job.model, "--run-id", job.run_id,
-    ]
-    log_path = run_dir(job.run_id) / "run.log"
-    _mark_running(job)
-    job.process, job.log_handle = _spawn(cmd, log_path)
-
-
-def _parity_report_ready(job: Job) -> bool:
-    """True when *this* parity job's run dir has a PASS/FAIL report.
-
-    Do not fall back to any older report for the same model: run-evals mints
-    a fresh parity run_id each time, and a crashed smoke must not inherit a
-    prior PASS/FAIL as if it finished.
-    """
-    if not job.run_id:
-        return False
-    path = parity_report_path(job.run_id)
-    if not path.is_file():
-        return False
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError, json.JSONDecodeError):
-        return False
-    return str(data.get("verdict") or "").strip().upper() in {"PASS", "FAIL"}
-
-
 def _start_cell_classify(job: Job, limit: int | None) -> None:
     assert job.model and job.effort_b and job.run_id
     cmd = _python_cmd() + [
@@ -552,14 +486,12 @@ def _start_cell_score(job: Job) -> None:
     job.process, job.log_handle = _spawn(cmd, log_path)
 
 
-def cell_needs_robustness_refresh(run_id: str, model: str | None) -> bool:
-    """True when scored.json is missing the latest parity / valid_mass block.
+def cell_needs_robustness_refresh(run_id: str) -> bool:
+    """True when scored.json is missing the valid_mass robustness block.
 
-    Cells skipped as already-scored can predate a later parity smoke. Re-score
-    is offline and cheap; without it the dashboard stays PENDING forever.
+    Cells skipped as already-scored can predate a later scoring path that
+    writes ``robustness.valid_mass``. Re-score is offline and cheap.
     """
-    from evals.batch_parity import load_parity_summary_for_model
-
     path = run_scored_path(run_id)
     if not path.exists():
         return False
@@ -568,14 +500,7 @@ def cell_needs_robustness_refresh(run_id: str, model: str | None) -> bool:
     except (OSError, ValueError, json.JSONDecodeError):
         return True
     rob = data.get("robustness") if isinstance(data, dict) else None
-    if not isinstance(rob, dict) or not rob.get("valid_mass"):
-        return True
-    if not model:
-        return False
-    latest = load_parity_summary_for_model(model)
-    if latest is None:
-        return False
-    return rob.get("batch_parity") != latest
+    return not isinstance(rob, dict) or not rob.get("valid_mass")
 
 
 def refresh_cell_scores_for_dashboard(jobs: list[Job]) -> None:
@@ -585,7 +510,7 @@ def refresh_cell_scores_for_dashboard(jobs: list[Job]) -> None:
             continue
         if not job.run_id:
             continue
-        if not cell_needs_robustness_refresh(job.run_id, job.model):
+        if not cell_needs_robustness_refresh(job.run_id):
             continue
         cmd = _python_cmd() + [
             "score", job.run_id,
@@ -620,10 +545,6 @@ def _handle_finished_ok(job: Job) -> None:
     if job.kind == "pass_a":
         _mark_done(job)
         return
-    if job.kind == "parity":
-        _mark_done(job)
-        job.rows_done = job.rows_total
-        return
     if job.kind == "dashboard":
         _mark_done(job)
         job.rows_done = 1
@@ -637,17 +558,6 @@ def _handle_finished_ok(job: Job) -> None:
 
 def _handle_finished(job: Job, rc: int) -> None:
     """Advance or fail a job after its subprocess exits."""
-    if job.kind == "parity":
-        # batch-parity exits 1 on FAIL verdict; that is still a finished check.
-        if _parity_report_ready(job):
-            _mark_done(job)
-            job.rows_done = job.rows_total
-            job.returncode = rc
-            if rc != 0:
-                job.error = "parity verdict FAIL (recorded for dashboard)"
-            return
-        _mark_failed(job, rc, "parity smoke crashed with no report")
-        return
     if rc != 0:
         _mark_failed(job, rc)
         return
@@ -664,9 +574,9 @@ def run_evals(
 ) -> int:
     """Run the full paid matrix from scratch. Returns process exit code.
 
-    Every invocation rebuilds Pass A banks, re-runs parity (unless ``--limit``),
-    and mints new cell run ids so prior scored dirs are never reused. Re-paying
-    is intentional: the command is a full matrix, not a resume helper.
+    Every invocation rebuilds Pass A banks and mints new cell run ids so
+    prior scored dirs are never reused. Re-paying is intentional: the
+    command is a full matrix, not a resume helper.
     """
     require_openai_key()
 
@@ -688,17 +598,13 @@ def run_evals(
             print("Aborted. No API calls made.")
             return 1
 
-    # --limit smokes omit the paid parity smoke (10 rows x 3 models x 2 APIs).
-    include_parity = limit is None
-    jobs = build_job_plan(n_rows, include_parity=include_parity)
+    jobs = build_job_plan(n_rows)
 
     con = console or Console()
-    # Launch phase-1 banks + parity that still need work.
+    # Launch phase-1 banks that still need work.
     for job in jobs:
         if job.kind == "pass_a" and job.status == "pending":
             _start_pass_a(job, limit)
-        elif job.kind == "parity" and job.status == "pending":
-            _start_parity(job)
 
     phase2_started = False
     dashboard_started = False
@@ -723,18 +629,18 @@ def run_evals(
                 _close_log(job)
                 _handle_finished(job, rc)
 
-            # Start phase 2 once all banks + parity are green.
+            # Start phase 2 once all banks are green.
             if not phase2_started and phase1_complete(jobs):
                 phase2_started = True
                 for job in jobs:
                     if job.kind == "cell" and job.status == "pending":
                         _start_cell_classify(job, limit)
             elif not phase2_started and phase1_failed(jobs):
-                # Banks/parity crashed: mark remaining pending cells failed.
+                # Banks crashed: mark remaining pending cells failed.
                 for job in jobs:
                     if job.status == "pending":
                         _mark_failed(
-                            job, 1, "blocked: Pass A bank or parity failed",
+                            job, 1, "blocked: Pass A bank failed",
                         )
                 exit_code = 1
 
@@ -757,8 +663,6 @@ def run_evals(
                         j.run_id for j in jobs
                         if j.kind == "cell" and j.run_id
                     ]
-                    # Parity often finishes after cells were already scored and
-                    # skipped; refresh scored.json before the page is built.
                     refresh_cell_scores_for_dashboard(jobs)
                     dashboard_started = True
                     _start_dashboard(dash, cell_ids)

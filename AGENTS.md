@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-26 · Active branch: `fix/eval-instance-duplicate-titles` (eval archive: same scored sweep replaces its instance so the index does not repeat one title)
+Last updated: 2026-07-27 · Active branch: `evals-remove-batch-parity` (eval harness: Batch-vs-sync parity smoke removed; production is sync-only)
 
 ---
 
@@ -184,7 +184,7 @@ checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `config.py` | Locked matrix `EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`; `PASS_A_TOP_LOGPROBS=5` (binary; raising depth does not help mini/luna, which truncate at a probability floor, see `MAX_CENSORED_INTERVAL_WIDTH`); legacy `TOP_LOGPROBS` for old single-pass only |
 | `classification.py` | Pass A/B classification runner + `bank_pass_a` (Pass-A-only); Pass A auto-banks under `evals/runs/pass_a_banks/<model>/` (reuse by default; `--rerun-pass-a` / `--pass-a-from` escapes) |
 | `cost_preview.py` | Offline matrix cost estimates (Pass A once per model + 9 Pass B cells + grand total); shared formula with classification `--dry-run` |
-| `orchestrate.py` | `run-evals` supervisor: always from scratch (rebuild Pass A banks, re-run parity, mint new cell run ids; re-paying intentional). Phase-1 banks + Batch-vs-sync parity (3+3 parallel), then 9 cells in parallel; each cell scores with `--confidence-from-raw` (writes calibration + `robustness.valid_mass` + attaches latest `robustness.batch_parity`); dashboard; rich live checklist; `open-dashboard` opens the instance index. `--limit` smokes omit the paid parity smoke. |
+| `orchestrate.py` | `run-evals` supervisor: always from scratch (rebuild Pass A banks, mint new cell run ids; re-paying intentional). Phase-1 banks (3 parallel), then 9 cells in parallel; each cell scores with `--confidence-from-raw` (writes calibration + `robustness.valid_mass`); dashboard; rich live checklist; `open-dashboard` opens the instance index. |
 | `logprob_extract.py` | Pass A confidence. mini/luna truncate candidates below ~2% probability, so a confident row omits the opposing digit at any requested depth; the missing digit is bounded by the unreported residual (midpoint) rather than invented, and marked unavailable only when that bound exceeds `MAX_CENSORED_INTERVAL_WIDTH`. Validated against nano ground truth: mean error 0.0025, ECE distortion 0.0013 |
 | `scoring.py` | End-to-end axes + `pass_b_metrics` (family-conditional subclass, AI-native-only RAD, boundary_disagreement); `--baseline` paired deltas; refuses partial confidence unless `--allow-partial-confidence` |
 | `__main__.py` | CLI: `cost-preview` / `run-evals` / `open-dashboard` (paid path); also `bank-pass-a`, `run-classification`, `matrix`, `score`, `dashboard`; legacy `run` warns and is not the matrix path |
@@ -255,7 +255,7 @@ pytest evals/tests -q                       # full eval harness (use OPENAI_API_
 pytest evals/tests/test_dashboard_metrics.py   # dashboard metrics (no OpenAI key)
 # Paid matrix (beginner path). Key loads from keys/openai.env automatically.
 python -m evals cost-preview                    # per-config + total $ estimate (no API calls)
-python -m evals run-evals                       # full matrix from scratch (rebuild banks → parity → 9 cells → score → dashboard)
+python -m evals run-evals                       # full matrix from scratch (rebuild banks → 9 cells → score → dashboard)
 python -m evals open-dashboard                  # open eval_instances/index.html (newest run at top)
 # Lower-level / escape hatches:
 python -m evals matrix                          # list locked 9-cell matrix commands

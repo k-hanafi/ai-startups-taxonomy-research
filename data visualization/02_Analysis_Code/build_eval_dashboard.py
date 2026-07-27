@@ -3,8 +3,8 @@
 
 Tabs, one per evaluation question:
 
-1. Pipeline robustness: do logprob extraction and Batch API parity behave
-   as intended, will this classifier survive production?
+1. Pipeline robustness: do logprob extraction and confidence recovery
+   behave as intended, will this classifier survive production?
 2. Model benchmarks: which GPT-family model should production use?
 3. Confidence correctness correlation: how correlated is logprob confidence
    with actual correctness?
@@ -1493,10 +1493,9 @@ def build_html(metrics: dict) -> str:
     <div class="tab-lead">
       <h2>Will this pipeline survive production?</h2>
       <p>Structural checks on the confidence pipeline: whether a confidence
-      score was recovered for every golden-set company, the probability
-      mass behind each confidence value, and whether sync and Batch API
-      request shapes stay equivalent. Production classification runs on the
-      sync API; the parity check is about request equivalence, not pricing.</p>
+      score was recovered for every golden-set company, and the probability
+      mass behind each confidence value. Production classification runs on the
+      sync API.</p>
     </div>
     {robustness_panel}
   </section>

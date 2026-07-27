@@ -549,7 +549,7 @@ def _aggregate_finalist_repeats(configs: list[dict[str, Any]]) -> list[dict[str,
 # Pipeline-robustness checks (tab 1)
 # ---------------------------------------------------------------------------
 #
-# Three production-readiness checks aggregated over the loaded runs. Each
+# Two production-readiness checks aggregated over the loaded runs. Each
 # check reads only what the runs actually recorded: statuses are "pass",
 # "fail", or "pending" (nothing recorded yet), never invented at render time.
 
@@ -573,14 +573,6 @@ VALID_MASS_MEANING = (
     "mass stays at or above the floor and at most a small share of rows "
     "(default 5%) fall below it, so one thin outlier does not fail the model."
 )
-BATCH_PARITY_MEANING = (
-    "The same request bodies were submitted through both the sync and Batch "
-    "APIs. Identical parameters were echoed back and the same logprob "
-    "payload shape returned, so confidence measured sync transfers to "
-    "Batch-based production runs."
-)
-
-
 def _fmt_count(value: Any) -> str:
     return f"{int(value):,}"
 
@@ -736,7 +728,7 @@ def _valid_mass_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
         if block_mean is not None:
             detail_parts.append(f"mean {float(block_mean):.3f}")
         if block_min is not None:
-            detail_parts.append(f"min {block_min}")
+            detail_parts.append(f"min {float(block_min):.4f}")
         if n_below is not None and n:
             detail_parts.append(f"{int(n_below)}/{n} rows below floor")
         per_model.append({
@@ -762,9 +754,9 @@ def _valid_mass_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
     if mean_mass is not None:
         stats.append({"label": "Lowest model mean", "value": f"{mean_mass:.4f}"})
     if min_mass is not None:
-        stats.append({"label": "Minimum valid mass", "value": f"{min_mass}"})
+        stats.append({"label": "Minimum valid mass", "value": f"{float(min_mass):.4f}"})
     if threshold is not None:
-        stats.append({"label": "Mean floor", "value": f"{threshold}"})
+        stats.append({"label": "Mean floor", "value": f"{float(threshold):.2f}"})
     if max_below_share is not None:
         stats.append({
             "label": "Max share below floor",
@@ -782,91 +774,11 @@ def _valid_mass_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _batch_parity_check(runs: list[dict[str, Any]]) -> dict[str, Any]:
-    recorded = _dedupe_by_model(runs, "batch_parity")
-    per_model: list[dict[str, Any]] = []
-    any_fail = False
-    any_pending = False
-    total_checks = total_failed = 0
-    n_rows: Optional[int] = None
-    for model, block in recorded.items():
-        raw = block.get("verdict")
-        verdict = str(raw).strip().upper() if raw is not None else ""
-        if not verdict:
-            status = "pending"
-            any_pending = True
-            verdict_label = "not recorded yet"
-        elif verdict == "PASS":
-            status = "pass"
-            verdict_label = verdict
-        else:
-            status = "fail"
-            any_fail = True
-            verdict_label = verdict
-        total_checks += int(block.get("n_checks") or 0)
-        total_failed += int(block.get("n_failed") or 0)
-        if block.get("n_rows") is not None:
-            n_rows = int(block["n_rows"])
-        per_model.append({
-            "model": model,
-            "status": status,
-            "detail": (
-                f"verdict {verdict_label}, "
-                f"{int(block.get('n_failed') or 0)} of "
-                f"{int(block.get('n_checks') or 0)} checks failed"
-            ),
-        })
-    if not recorded:
-        return {
-            "id": "batch_parity",
-            "title": "Sync-batch parity verified",
-            "status": "pending",
-            "meaning": BATCH_PARITY_MEANING,
-            "stats": [],
-            "per_model": [],
-            "pending_note": (
-                "Parity verdicts come from the Batch-vs-sync smoke that "
-                "run-evals runs in phase 1 (or python -m evals batch-parity). "
-                "They surface here once scoring attaches "
-                "robustness.batch_parity to the cell."
-            ),
-        }
-    if any_fail:
-        overall = "fail"
-        pending_note = None
-    elif any_pending:
-        overall = "pending"
-        pending_note = (
-            "A batch_parity block is present but the PASS/FAIL verdict is "
-            "still missing. Re-run the batch-parity smoke (or finish "
-            "scoring) before treating this check as settled."
-        )
-    else:
-        overall = "pass"
-        pending_note = None
-    stats = [
-        {"label": "Models verified", "value": _fmt_count(len(recorded))},
-        {"label": "Checks failed", "value": f"{total_failed:,} of {total_checks:,}"},
-    ]
-    if n_rows is not None:
-        stats.append({"label": "Rows per smoke", "value": f"{n_rows} x 2 APIs"})
-    return {
-        "id": "batch_parity",
-        "title": "Sync-batch parity verified",
-        "status": overall,
-        "meaning": BATCH_PARITY_MEANING,
-        "stats": stats,
-        "per_model": per_model,
-        "pending_note": pending_note,
-    }
-
-
 def build_robustness(scored_runs: list[dict[str, Any]]) -> dict[str, Any]:
     """The pipeline-robustness checks panel payload (tab 1)."""
     checks = [
         _tokenization_check(scored_runs),
         _valid_mass_check(scored_runs),
-        _batch_parity_check(scored_runs),
     ]
     return {"checks": checks}
 
