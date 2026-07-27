@@ -668,6 +668,44 @@ def test_attach_fresh_production_cost_uses_predictions_not_stale_ladder(
     )
 
 
+def test_attach_fresh_production_cost_tolerates_truncated_final_line(
+    tmp_path, monkeypatch,
+):
+    """A truncated last predictions line must not crash dashboard cost recompute."""
+    from evals import config as cfg
+
+    run_id = "truncated_cost_cell"
+    run = tmp_path / "runs" / run_id
+    run.mkdir(parents=True)
+    path = run / "predictions.jsonl"
+    path.write_text(
+        json.dumps({
+            "custom_id": "startup-u0",
+            "status": "completed",
+            "model": "gpt-5.4-nano",
+            "a_input_tokens": 1_000_000,
+            "a_output_tokens": 0,
+            "a_cached_tokens": 0,
+            "b_input_tokens": 0,
+            "b_output_tokens": 0,
+            "b_cached_tokens": 0,
+        })
+        + "\n{\"custom_id\": \"startup-u1\", \"status\": \"comple",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "evals.dashboard_metrics.run_predictions_path",
+        lambda rid: tmp_path / "runs" / rid / "predictions.jsonl",
+    )
+    fresh = attach_fresh_production_cost(
+        {"run_id": run_id, "model": "gpt-5.4-nano"},
+        run_id=run_id,
+    )
+    assert fresh["production_cost_estimate"]["summary"][
+        "estimated_production_usd"
+    ] == pytest.approx(0.20 * cfg.N_PROD_EVIDENCE_UNIVERSE)
+
+
 def test_projected_usd_none_when_cost_unavailable():
     """Legacy / blocked cost estimates yield null; Pareto must omit those points."""
     stub = {

@@ -148,8 +148,10 @@ def attach_fresh_production_cost(
     if path is None or not Path(path).is_file():
         return scored
 
+    # Match scoring / orchestrator: a truncated final line from a crash mid
+    # write must not kill the dashboard after the run already scored.
     records = [
-        rec for rec in iter_jsonl(Path(path))
+        rec for rec in iter_jsonl(Path(path), tolerate_truncated_final=True)
         if rec.get("status") == "completed"
     ]
     if not records:
