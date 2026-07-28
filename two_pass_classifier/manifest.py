@@ -353,7 +353,7 @@ def _load_live_snapshot_dates(path: Path) -> dict[str, str]:
             if not raw.get("ok"):
                 continue
             org_uuid = str(raw.get("org_uuid") or "").strip()
-            if not org_uuid or org_uuid in dates:
+            if not org_uuid:
                 continue
             requested_at = raw.get("requested_at")
             if not isinstance(requested_at, str) or not requested_at.strip():
@@ -361,6 +361,8 @@ def _load_live_snapshot_dates(path: Path) -> dict[str, str]:
                     f"live raw_results.jsonl line {line_number} org_uuid "
                     f"{org_uuid!r} has blank requested_at"
                 )
+            # Last successful crawl wins: classifier_input keeps the last
+            # processed row per org_uuid, so the professor date must match.
             dates[org_uuid] = _date_from_requested_at(
                 requested_at,
                 context=(
