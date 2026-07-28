@@ -5,7 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 
-PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
+PROMPTS_DIR = (
+    Path(__file__).resolve().parents[1] / "two_pass_classifier" / "prompts"
+)
 
 
 def test_zero_family_sorting_keeps_counterfactual_guard():
@@ -15,5 +17,4 @@ def test_zero_family_sorting_keeps_counterfactual_guard():
     assert "meaningfully augments the existing software value proposition" in normalized
     assert "traditional software/SaaS companies transitioning into AI-augmented products" in normalized
     assert "Do not use 0B when AI is the product mechanism" in normalized
-    assert "Do not treat 0B as a home for AI-core products" in normalized
-    assert "set boundary_disagreement = true" in normalized
+    assert "The family is fixed" in normalized
