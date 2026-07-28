@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-27 | Active branch: `pr/relocate-classifier-packages` (live classifier and crawler moved into named packages)
+Last updated: 2026-07-28 | Active branch: `pr/land-freeze-contracts-on-main` (land frozen two-pass contracts on main)
 
 ---
 
@@ -104,6 +104,7 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 |------|---------|
 | `single_pass_classifier/` | Legacy V1 one-pass classifier application and `python -m single_pass_classifier` CLI |
 | `tavily_crawler/` | Live liveness and Tavily crawl application and `python -m tavily_crawler` CLI |
+| `two_pass_classifier/` | Production V2 **contracts** package (prompts, schemas, manifest, confidence, professor CSV exporter). Runner/CLI land in later PRs |
 | `README.md` | Public-facing writeup (taxonomy + pipeline narrative + mermaid diagrams) |
 | `pyproject.toml` | Dependencies + pytest config |
 | `AGENTS.md` | This file |
@@ -148,13 +149,21 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `sync_with_remote.sh` | Interactive Git synchronization helper |
 
 
-### `prompts/`
-| File | Purpose |
-|------|---------|
-| `binary_gate_prompt.txt` | Two-pass Pass A binary gate (still at repo root until the V2 package lands) |
-| `family_block_ai_native.txt` | Two-pass Pass B AI-native family block |
-| `family_block_not_ai_native.txt` | Two-pass Pass B not-AI-native family block |
-| `subclass_rad_prompt.txt` | Two-pass subclass + RAD instructions |
+### `two_pass_classifier/` (production V2 contracts)
+| File | Responsibility |
+|------|----------------|
+| `config.py` | Supported models and locked defaults (`gpt-5.6-luna`, Pass A effort `none`, Pass B effort `low`, Pass A `top_logprobs=5`) |
+| `schema.py` | Strict family-specific Pydantic contracts with 100-word reasoning and critique limits |
+| `prompts/` | Single production prompt source for Pass A/B (moved out of root `prompts/`) |
+| `formatter.py` / `request_builder.py` | Pass-specific model messages, strict Responses request bodies, cache routes, token reservations, request fingerprints |
+| `input_contract.py` / `cohort.py` | Stable source/model-visible fields and deterministic PRE-GENAI vs GENAI-ERA assignment |
+| `manifest.py` | Evidence-only live+dead JSONL manifest; joins `company_alive` / `website_snapshot_date` at build time |
+| `confidence.py` | Offline sampled-token confidence (censored-opponent midpoint) |
+| `exporter.py` | Exact 18-column professor CSV (`company_alive` and `website_snapshot_date` after `cohort`) |
+| `costing.py` | Offline production token counts and normal Responses price ranges |
+| `paths.py` | Manifest/run output locations under `outputs/two_pass_classifier/` |
+
+Runner, journal, rate control, status, workflow, and CLI are intentionally omitted from this PR.
 
 ### `wayback_machine/` (historical + survivorship strands)
 | File | Responsibility |
@@ -197,6 +206,7 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 ### `evals/` — golden-set eval harness
 | Path | Purpose |
 |------|---------|
+| `prompts/` | Legacy Pass A/B prompt drafts paired with `evals/classification.py` schemas (kept separate from frozen V2 prompts until eval ownership lands) |
 | `dashboard_metrics.py` | Eval dashboard metrics: scored.json/fixture → chart metrics (ECE, reliability bins, selective curves, vs_baseline, Pass B isolating fields, finalist mean±range aggregates, per-config `cost_breakdown` for the cost popover). Real loads recompute production $ from each run's `predictions.jsonl` and scale by the newest valid production manifest, with an explicit offline fallback of 37,746. Also `build_robustness` + `build_run_instance`. No OpenAI import. |
 | `tests/fixtures/dashboard/dashboard_mock_runs.json` | Synthetic locked matrix; Pass A metrics identical across efforts within each model (bank-once design); calibration blocks derive from one set of 100 synthetic rows per model (nano seeds the ECE ~0.077 early signal); per-run robustness blocks |
 | `instances.py` | Numbered dashboard archive: writes `eval_instance_NN.html` + `index.html` + `instances.json` under `01_Presentation_Materials/eval_instances/`; an instance is identified by the scored runs behind it (same sweep replaces its page; a later sweep still gets a new number); synthetic `--save-instance` previews replace the prior mock. Also owns the run-headline / run-meta text shared with the suite header card. |
@@ -248,6 +258,12 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 `conf_classification` (1–5), `conf_rad` (1–5 or null), `reasons_3_points`,
 `sources_used`, `verification_critique`.
 
+V2 professor artifact (contracts in `two_pass_classifier/exporter.py`) is exactly 18
+analytical columns: `company_id`, `company_name`, `cohort`, `company_alive`,
+`website_snapshot_date`, then classification/confidence/reasoning fields.
+`company_alive` is evidence-strand yes/no (live vs archive/dead), not the HTTP
+probe `website_alive`. Snapshot date is frozen into the immutable manifest at build.
+
 
 ## Development commands
 
@@ -265,6 +281,7 @@ when present; env vars take precedence.
 pip install -e ".[dev]"            # install with dev (pytest) extras
 pytest                             # all offline test suites
 pytest single_pass_classifier/tests tavily_crawler/tests
+pytest two_pass_classifier/tests -q # V2 contract tests (runner/CLI not in this PR)
 pytest wayback_machine/tests       # wayback tests (incl. golden cleaner)
 
 
@@ -302,6 +319,8 @@ python -m evals score <run_id> --confidence-from-raw --allow-missing-confidence 
 ## Conventions & invariants (don't break these)
 
 - **Classifier tunables live in `single_pass_classifier/config.py`; Wayback tunables live in `wayback_machine/config.py`.**
+- **V2 tunables live in `two_pass_classifier/config.py`; its prompts live only in `two_pass_classifier/prompts/`.**
+- **V2 row and cost counts must come from the immutable manifest, never a hardcoded production population constant.**
 - **Identical request prefix** across all requests is what enables prompt caching — keep it byte-stable.
 - **Match results by `custom_id`**, never by position (batch order is not guaranteed).
 - **`wayback_machine/evidence.py` must stay behavior-identical** to `tavily_crawler/website_evidence.py`. If you change the live cleaner, re-vendor and run `pytest wayback_machine/tests`.
