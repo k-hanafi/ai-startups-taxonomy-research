@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-27 | Active branch: `pr/align-evals-to-v2` (evals import production V2 contracts)
+Last updated: 2026-07-28 | Active branch: `pr/align-evals-to-v2` (evals import production V2 contracts)
 
 ---
 

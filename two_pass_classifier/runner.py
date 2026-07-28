@@ -235,7 +235,7 @@ class ProductionRunner:
                 expected_fingerprint=fingerprint,
                 replay_mode="repair",
             )
-            if state.header is not None and self.run_metadata:
+            if state.header is not None:
                 recorded_metadata = state.header.get("run_config") or {}
                 if recorded_metadata != self.run_metadata:
                     raise ResumeMismatchError(
@@ -454,15 +454,22 @@ class ProductionRunner:
         estimated_input = estimate_input_tokens(request)
         output_allowance = int(request["max_output_tokens"])
 
+        # One key per company/stage/input so resume after any attempt still
+        # hits the provider idempotency cache (attempt number is local only).
+        client_request_id = _idempotency_key(
+            company_id=row.company_id,
+            stage=stage,
+            input_hash=row.input_hash,
+        )
         for attempt in range(1, self.settings.max_request_attempts + 1):
             if self.shutdown_event.is_set():
                 raise ShutdownRequested(
                     f"shutdown began before {stage} attempt {attempt}"
                 )
-            client_request_id = str(uuid.uuid4())
             kwargs = dict(request)
             extra_headers = dict(kwargs.get("extra_headers") or {})
             extra_headers["X-Client-Request-Id"] = client_request_id
+            extra_headers["Idempotency-Key"] = client_request_id
             kwargs["extra_headers"] = extra_headers
 
             try:
@@ -481,142 +488,147 @@ class ProductionRunner:
             raw_response: dict[str, Any] | None = None
             headers: dict[str, str] = {}
             try:
-                async with self.concurrency_controller.slot(
-                    self.shutdown_event
-                ):
-                    if self.shutdown_event.is_set():
-                        raise ShutdownRequested(
-                            f"shutdown began before {stage} dispatch"
+                try:
+                    async with self.concurrency_controller.slot(
+                        self.shutdown_event
+                    ):
+                        if self.shutdown_event.is_set():
+                            raise ShutdownRequested(
+                                f"shutdown began before {stage} dispatch"
+                            )
+                        response, headers = await _call_responses_api(
+                            self.client,
+                            kwargs,
                         )
-                    response, headers = await _call_responses_api(
-                        self.client,
-                        kwargs,
+                    latency = self._monotonic() - started_clock
+                    raw_response = _response_to_dict(response)
+                    usage = _usage_dict(raw_response)
+                    await self.rate_controller.reconcile(
+                        reservation,
+                        actual_input_tokens=_usage_token(usage, "input_tokens"),
+                        actual_output_tokens=_usage_token(
+                            usage, "output_tokens"
+                        ),
                     )
-                latency = self._monotonic() - started_clock
-                raw_response = _response_to_dict(response)
-                usage = _usage_dict(raw_response)
-                await self.rate_controller.reconcile(
-                    reservation,
-                    actual_input_tokens=_usage_token(usage, "input_tokens"),
-                    actual_output_tokens=_usage_token(usage, "output_tokens"),
-                )
-                await self.rate_controller.observe_headers(
-                    self.settings.requests.model,
-                    headers,
-                )
-                parsed = parser(response, raw_response)
-                operational = await self._operational_snapshot()
-            except AdmissionStopped as exc:
-                raise ShutdownRequested(str(exc)) from exc
-            except ShutdownRequested:
-                raise
-            except Exception as exc:
-                latency = self._monotonic() - started_clock
-                if not headers:
-                    headers = _exception_headers(exc)
-                if headers:
                     await self.rate_controller.observe_headers(
                         self.settings.requests.model,
                         headers,
                     )
-                disposition = categorize_error(exc)
-                retry_after = _retry_after_seconds(headers)
-                if disposition.category == "rate_limit":
-                    await self.rate_controller.pause_model(
-                        self.settings.requests.model,
-                        retry_after
-                        if retry_after is not None
-                        else config.DEFAULT_429_RETRY_AFTER_SECONDS,
+                    parsed = parser(response, raw_response)
+                    operational = await self._operational_snapshot()
+                except AdmissionStopped as exc:
+                    raise ShutdownRequested(str(exc)) from exc
+                except ShutdownRequested:
+                    raise
+                except Exception as exc:
+                    latency = self._monotonic() - started_clock
+                    if not headers:
+                        headers = _exception_headers(exc)
+                    if headers:
+                        await self.rate_controller.observe_headers(
+                            self.settings.requests.model,
+                            headers,
+                        )
+                    disposition = categorize_error(exc)
+                    retry_after = _retry_after_seconds(headers)
+                    if disposition.category == "rate_limit":
+                        await self.rate_controller.pause_model(
+                            self.settings.requests.model,
+                            retry_after
+                            if retry_after is not None
+                            else config.DEFAULT_429_RETRY_AFTER_SECONDS,
+                        )
+                    await self.concurrency_controller.record_error(
+                        disposition.category
                     )
-                await self.concurrency_controller.record_error(
-                    disposition.category
-                )
-                operational = await self._operational_snapshot()
-                will_retry = (
-                    disposition.retriable
-                    and attempt < self.settings.max_request_attempts
-                    and not self.shutdown_event.is_set()
-                )
-                error_event = {
-                    "event_type": "request_error",
-                    "event_id": uuid.uuid4().hex,
-                    "company_id": row.company_id,
-                    "company_name": row.company_name,
-                    "input_hash": row.input_hash,
-                    "stage": stage,
-                    "attempt": attempt,
-                    "client_request_id": client_request_id,
-                    "openai_request_id": _openai_request_id(
-                        response, headers, exc
+                    operational = await self._operational_snapshot()
+                    will_retry = (
+                        disposition.retriable
+                        and attempt < self.settings.max_request_attempts
+                        and not self.shutdown_event.is_set()
+                    )
+                    error_event = {
+                        "event_type": "request_error",
+                        "event_id": uuid.uuid4().hex,
+                        "company_id": row.company_id,
+                        "company_name": row.company_name,
+                        "input_hash": row.input_hash,
+                        "stage": stage,
+                        "attempt": attempt,
+                        "client_request_id": client_request_id,
+                        "openai_request_id": _openai_request_id(
+                            response, headers, exc
+                        ),
+                        "provider_response_id": _provider_response_id(
+                            response, raw_response
+                        ),
+                        "model": self.settings.requests.model,
+                        "usage": (
+                            _usage_dict(raw_response)
+                            if raw_response is not None
+                            else None
+                        ),
+                        "latency_seconds": round(latency, 6),
+                        "started_at": started_at,
+                        "finished_at": _utc_now(),
+                        "rate_limit_headers": _rate_limit_headers(headers),
+                        **operational,
+                        "category": disposition.category,
+                        "status_code": disposition.status_code,
+                        "error_type": type(exc).__name__,
+                        "message": str(exc),
+                        "retriable": disposition.retriable,
+                        "will_retry": will_retry,
+                        "ambiguous_provider_billing": (
+                            disposition.ambiguous_provider_billing
+                        ),
+                        "retry_after_seconds": retry_after,
+                    }
+                    if raw_response is not None:
+                        error_event["raw_response"] = raw_response
+                    await self._require_writer().submit(error_event)
+
+                    if not will_retry:
+                        if self.shutdown_event.is_set():
+                            raise ShutdownRequested(
+                                f"shutdown stopped {stage} retries"
+                            ) from exc
+                        raise StageFailed(
+                            f"{stage} failed for {row.company_id}: "
+                            f"{disposition.category}: {exc}",
+                            disposition=disposition,
+                        ) from exc
+                    delay = self._retry_delay(attempt)
+                    if retry_after is not None:
+                        delay = max(delay, retry_after)
+                    await self._sleep_before_retry(delay)
+                    continue
+
+                return PhysicalCall(
+                    stage=stage,
+                    attempt=attempt,
+                    client_request_id=client_request_id,
+                    openai_request_id=_openai_request_id(
+                        response, headers, None
                     ),
-                    "provider_response_id": _provider_response_id(
+                    provider_response_id=_provider_response_id(
                         response, raw_response
                     ),
-                    "model": self.settings.requests.model,
-                    "usage": (
-                        _usage_dict(raw_response)
-                        if raw_response is not None
-                        else None
-                    ),
-                    "latency_seconds": round(latency, 6),
-                    "started_at": started_at,
-                    "finished_at": _utc_now(),
-                    "rate_limit_headers": _rate_limit_headers(headers),
-                    **operational,
-                    "category": disposition.category,
-                    "status_code": disposition.status_code,
-                    "error_type": type(exc).__name__,
-                    "message": str(exc),
-                    "retriable": disposition.retriable,
-                    "will_retry": will_retry,
-                    "ambiguous_provider_billing": (
-                        disposition.ambiguous_provider_billing
-                    ),
-                    "retry_after_seconds": retry_after,
-                }
-                if raw_response is not None:
-                    error_event["raw_response"] = raw_response
-                await self._require_writer().submit(error_event)
-
-                if not will_retry:
-                    if self.shutdown_event.is_set():
-                        raise ShutdownRequested(
-                            f"shutdown stopped {stage} retries"
-                        ) from exc
-                    raise StageFailed(
-                        f"{stage} failed for {row.company_id}: "
-                        f"{disposition.category}: {exc}",
-                        disposition=disposition,
-                    ) from exc
-                delay = self._retry_delay(attempt)
-                if retry_after is not None:
-                    delay = max(delay, retry_after)
-                await self._sleep_before_retry(delay)
-                continue
-
-            return PhysicalCall(
-                stage=stage,
-                attempt=attempt,
-                client_request_id=client_request_id,
-                openai_request_id=_openai_request_id(
-                    response, headers, None
-                ),
-                provider_response_id=_provider_response_id(
-                    response, raw_response
-                ),
-                model=self.settings.requests.model,
-                usage=_usage_dict(raw_response),
-                latency_seconds=latency,
-                started_at=started_at,
-                finished_at=_utc_now(),
-                rate_limit_headers=_rate_limit_headers(headers),
-                concurrency_limit=operational["concurrency_limit"],
-                active_concurrency=operational["active_concurrency"],
-                rate_utilization=operational["rate_utilization"],
-                rate_limit_targets=operational["rate_limit_targets"],
-                raw_response=raw_response,
-                parsed=parsed,
-            )
+                    model=self.settings.requests.model,
+                    usage=_usage_dict(raw_response),
+                    latency_seconds=latency,
+                    started_at=started_at,
+                    finished_at=_utc_now(),
+                    rate_limit_headers=_rate_limit_headers(headers),
+                    concurrency_limit=operational["concurrency_limit"],
+                    active_concurrency=operational["active_concurrency"],
+                    rate_utilization=operational["rate_utilization"],
+                    rate_limit_targets=operational["rate_limit_targets"],
+                    raw_response=raw_response,
+                    parsed=parsed,
+                )
+            finally:
+                await self.rate_controller.release(reservation)
 
         raise AssertionError("request attempt loop exited unexpectedly")
 
@@ -730,6 +742,22 @@ class ProductionRunner:
         if self._writer is None:
             raise RuntimeError("runner journal writer is not active")
         return self._writer
+
+
+def _idempotency_key(
+    *,
+    company_id: str,
+    stage: str,
+    input_hash: str,
+) -> str:
+    """Return a stable key for one company stage under a fixed input hash.
+
+    Resume after a crash between provider success and journal fsync reuses the
+    same key so OpenAI can return the cached response instead of re-billing.
+    Attempt number is omitted on purpose: resume cannot recover which attempt
+    was in flight when the process died before the journal write.
+    """
+    return f"{company_id}:{stage}:{input_hash}"
 
 
 def categorize_error(exc: BaseException) -> ErrorDisposition:

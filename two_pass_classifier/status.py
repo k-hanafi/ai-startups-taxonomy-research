@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Mapping
 
 from .costing import actual_usage_cost
@@ -164,9 +164,8 @@ def _elapsed_seconds(context: RunContext) -> float | None:
         for event in context.events
         if (timestamp := _parse_time(event.get("finished_at"))) is not None
     ]
-    if not finished:
-        return 0.0
-    return max(0.0, (max(finished) - created).total_seconds())
+    end = max(finished) if finished else datetime.now(UTC)
+    return max(0.0, (end - created).total_seconds())
 
 
 def _last_operational_event(context: RunContext) -> Mapping[str, Any]:

@@ -4,6 +4,7 @@ import asyncio
 import csv
 import io
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -12,9 +13,13 @@ from rich.console import Console
 
 from two_pass_classifier import cli, request_builder, workflow
 from two_pass_classifier.input_contract import SOURCE_COLUMNS
-from two_pass_classifier.journal import RunLock
+from two_pass_classifier.journal import JOURNAL_VERSION, RunLock
 from two_pass_classifier.manifest import build_manifest, load_manifest, write_manifest
-from two_pass_classifier.request_builder import RequestSettings
+from two_pass_classifier.request_builder import (
+    RequestSettings,
+    request_fingerprint,
+    request_identity,
+)
 from two_pass_classifier.runner import ProductionRunner
 from two_pass_classifier.workflow import (
     build_run_metadata,
@@ -400,6 +405,27 @@ def test_run_refuses_missing_smoke_and_existing_run_id(
     assert smoke_code == 0
     existing = registry["runs"] / "already-there"
     existing.mkdir(parents=True)
+    orphan_code, orphan_output = _invoke(
+        [
+            "run",
+            "--manifest",
+            str(artifact),
+            "--model",
+            "gpt-5.4-nano",
+            "--run-id",
+            "already-there",
+            "--yes",
+        ],
+        client_factory=forbidden_factory,
+    )
+    assert orphan_code != 0
+    assert "no journal yet" in orphan_output.lower()
+    assert "resume already-there" not in orphan_output
+
+    (existing / "events.jsonl").write_text(
+        "{}\n",
+        encoding="utf-8",
+    )
     existing_code, existing_output = _invoke(
         [
             "run",
@@ -416,6 +442,36 @@ def test_run_refuses_missing_smoke_and_existing_run_id(
     assert existing_code != 0
     assert "continue it with" in existing_output.lower()
     assert "resume already-there" in existing_output
+
+
+def test_run_reports_small_manifest_instead_of_missing_smoke(
+    tmp_path: Path,
+    registry: dict[str, Path],
+):
+    del registry
+    artifact, _ = _manifest_artifact(
+        tmp_path / "source",
+        live_count=2,
+        dead_count=1,
+    )
+    code, output = _invoke(
+        [
+            "run",
+            "--manifest",
+            str(artifact),
+            "--model",
+            "gpt-5.4-nano",
+            "--run-id",
+            "too-small",
+            "--yes",
+        ],
+        client_factory=lambda api_key: pytest.fail(
+            "small manifests must fail before client creation"
+        ),
+    )
+    assert code != 0
+    assert "smoke requires 10 companies" in output
+    assert "no successful 10-company smoke matches" not in output
 
 
 def test_run_refuses_stale_smoke_fingerprint(
@@ -461,6 +517,60 @@ def test_run_refuses_stale_smoke_fingerprint(
         ],
         client_factory=lambda api_key: pytest.fail(
             "stale smoke must fail before client creation"
+        ),
+    )
+    assert code != 0
+    assert "no successful 10-company smoke matches" in output
+
+
+def test_run_refuses_smoke_with_wrong_selection_ids(
+    tmp_path: Path,
+    registry: dict[str, Path],
+):
+    artifact, _ = _manifest_artifact(
+        tmp_path / "source",
+        live_count=5,
+        dead_count=5,
+    )
+    smoke_code, _ = _invoke(
+        [
+            "smoke",
+            "--manifest",
+            str(artifact),
+            "--model",
+            "gpt-5.4-nano",
+            "--run-id",
+            "selection-smoke",
+            "--yes",
+        ],
+        client_factory=lambda api_key: _successful_fake_client(),
+    )
+    assert smoke_code == 0
+
+    journal = registry["runs"] / "selection-smoke" / "events.jsonl"
+    lines = journal.read_text(encoding="utf-8").splitlines()
+    header = json.loads(lines[0])
+    recorded = list(header["run_config"]["selection_company_ids"])
+    assert recorded
+    header["run_config"]["selection_company_ids"] = list(reversed(recorded))
+    journal.write_text(
+        "\n".join([json.dumps(header, sort_keys=True), *lines[1:]]) + "\n",
+        encoding="utf-8",
+    )
+
+    code, output = _invoke(
+        [
+            "run",
+            "--manifest",
+            str(artifact),
+            "--model",
+            "gpt-5.4-nano",
+            "--run-id",
+            "blocked-by-selection",
+            "--yes",
+        ],
+        client_factory=lambda api_key: pytest.fail(
+            "wrong smoke selection must fail before client creation"
         ),
     )
     assert code != 0
@@ -680,6 +790,103 @@ def test_retry_appends_events_without_mutating_history(
     context = load_run_context(run_id)
     assert len(context.state.retry_requests) == 1
     assert context.state.latest_errors == {}
+
+
+def test_retry_stage_filter_exits_error_when_other_stage_failures_remain(
+    tmp_path: Path,
+    registry: dict[str, Path],
+):
+    artifact, manifest = _manifest_artifact(
+        tmp_path / "source",
+        live_count=1,
+        dead_count=0,
+    )
+    settings = RequestSettings(model="gpt-5.4-nano", pass_b_effort="low")
+    run_id = "retry-stage-miss"
+    run_path = registry["runs"] / run_id
+    metadata = build_run_metadata(
+        kind="full",
+        run_id=run_id,
+        manifest_path=artifact,
+        manifest=manifest,
+        settings=settings,
+    )
+
+    async def handler(kwargs: dict[str, Any]) -> Any:
+        raise _FakeHTTPError(429, "too many requests", {"retry-after": "0"})
+
+    runner = ProductionRunner(
+        manifest=manifest,
+        run_dir=run_path,
+        client=_FakeClient(handler),
+        settings=_runner_settings(requests=settings, attempts=1),
+        run_metadata=metadata,
+        install_signal_handlers=False,
+    )
+    result = asyncio.run(runner.run())
+    assert result.all_complete is False
+
+    code, output = _invoke(["retry", run_id, "--stage", "pass_b"])
+
+    assert code != 0
+    assert "No active retriable failures matched the requested stage." in output
+    status_code, status_json = _invoke(["status", run_id, "--json"])
+    status_payload = json.loads(status_json)
+    assert status_code == 0
+    assert status_payload["retryable_failures"]["total"] == 1
+    assert status_payload["retryable_failures"]["by_stage_and_reason"] == {
+        "pass_a": {"rate_limit": 1}
+    }
+
+
+def test_status_elapsed_uses_wall_clock_before_first_finish(
+    tmp_path: Path,
+    registry: dict[str, Path],
+):
+    artifact, manifest = _manifest_artifact(
+        tmp_path / "source",
+        live_count=1,
+        dead_count=0,
+    )
+    settings = RequestSettings(model="gpt-5.4-nano", pass_b_effort="low")
+    run_id = "in-flight-elapsed"
+    run_path = registry["runs"] / run_id
+    run_manifest = write_manifest(manifest, run_path / "inputs")
+    metadata = build_run_metadata(
+        kind="full",
+        run_id=run_id,
+        manifest_path=run_manifest,
+        manifest=manifest,
+        settings=settings,
+        parent_manifest_path=artifact,
+        parent_manifest=manifest,
+    )
+    fingerprint = request_fingerprint(settings)
+    created_at = datetime.now(UTC) - timedelta(seconds=45)
+    header = {
+        "event_type": "run_started",
+        "event_id": "header-event",
+        "journal_version": JOURNAL_VERSION,
+        "created_at": created_at.isoformat(),
+        "manifest_sha256": manifest.manifest_sha256,
+        "manifest_rows_sha256": manifest.rows_sha256,
+        "manifest_row_count": manifest.row_count,
+        "request_fingerprint": fingerprint,
+        "request_identity": request_identity(settings),
+        "run_config": metadata,
+    }
+    (run_path / "events.jsonl").write_text(
+        json.dumps(header, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+
+    code, raw = _invoke(["status", run_id, "--json"])
+    payload = json.loads(raw)
+
+    assert code == 0
+    assert payload["elapsed_seconds"] is not None
+    assert payload["elapsed_seconds"] >= 40
+    assert payload["complete"] == 0
 
 
 def test_status_human_and_json_are_offline(

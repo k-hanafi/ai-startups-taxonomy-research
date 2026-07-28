@@ -120,10 +120,17 @@ def new_run_dir(run_id: str) -> Path:
     validated = validate_run_id(run_id)
     path = RUNS_DIR / validated
     if path.exists():
+        journal = path / "events.jsonl"
+        if journal.is_file():
+            raise WorkflowError(
+                f"run ID {validated!r} already exists at {path}.\n"
+                "Continue it with: "
+                f"'python -m two_pass_classifier resume {validated}'"
+            )
         raise WorkflowError(
-            f"run ID {validated!r} already exists at {path}.\n"
-            "Continue it with: "
-            f"'python -m two_pass_classifier resume {validated}'"
+            f"run ID {validated!r} already has a directory at {path}, "
+            "but no journal yet (an earlier attempt stopped before the run "
+            "started). Remove that directory or choose a different --run-id."
         )
     return path
 
@@ -321,6 +328,9 @@ def find_matching_smoke(
 ) -> SmokeGate | None:
     """Find the newest complete smoke with an identical semantic identity."""
     expected_fingerprint = request_fingerprint(settings)
+    expected_selection = [
+        row.company_id for row in select_smoke_manifest(parent_manifest).rows
+    ]
     matches: list[SmokeGate] = []
     if not RUNS_DIR.is_dir():
         return None
@@ -347,6 +357,8 @@ def find_matching_smoke(
                 metadata.get("semantic_request_fingerprint")
                 != expected_fingerprint
             ):
+                continue
+            if metadata.get("selection_company_ids") != expected_selection:
                 continue
             context = load_run_context(candidate.name)
         except Exception:
