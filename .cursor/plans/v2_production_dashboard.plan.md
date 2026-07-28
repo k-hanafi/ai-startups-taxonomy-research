@@ -148,10 +148,12 @@ non-blank `rad_confidence`, analogous to the V1 `conf_rad` chart.
 
 ## Chart consolidation (redundancy cuts)
 
-**Status: PROPOSED, awaiting confirmation.** The inherited WU-5a design carries
-roughly 18 charts. Several state the same fact on a different scale, which makes
-the page longer without making the argument stronger. Each cut below names the
-chart it duplicates and what is kept instead.
+**Status: PROPOSED, awaiting confirmation.** Counted from the shipped
+`build_v1_alive_dead_dashboard.py`, the inherited design renders **31 chart
+boxes** (2 Landscape, 2 RAD, 2 Cohorts, 3 Confidence, 3 Act 1, 9 Act 2, 5 Act 3,
+5 Act 4), not the ~18 the plan prose implies. Several state the same fact on a
+different scale, which makes the page longer without making the argument
+stronger. Each cut below names the chart it duplicates and what is kept instead.
 
 Guiding rule: one fact, one chart, on the most interpretable scale. Prefer
 **mortality rate** (dead / dead + survivor) over ratios of shares, because a
@@ -212,11 +214,27 @@ This resolves former open follow-up 3.
   time-axis chart on the page and carries the frontier-release narrative. Keep,
   with the exploratory caption.
 
+### Additional redundancy found in the shipped build (not in the plan prose)
+
+- **Act 3 Model 3 forest vs 3.3 dependency-trap heatmap.** Model 3 (the
+  `log_funding x rad_score` interaction) shipped, so the same interaction is now
+  drawn twice: once as odds ratios, once as a mortality heatmap. Recommendation:
+  keep the heatmap (a reader can name what each cell means) and drop the Model 3
+  forest, or keep Model 3 and demote the heatmap to a caption number. Do not ship
+  both.
+- **Act 4 "Strict dead definition" chart.** Present in the build but absent from
+  the plan's Act 4 list. It belongs with 4.2 robustness; fold it into the same
+  compact robustness table rather than giving it its own chart box.
+- **Landscape "Subclass Distribution" vs Cohorts "Subclass Distribution by
+  Cohort".** The second is the first split by cohort, so the totals are
+  recoverable from it. Candidate for dropping the unsplit version, though the
+  unsplit bar is the natural establishing shot for the page. Flagged, not cut.
+
 ### Net effect
 
-Roughly 18 charts to roughly 11, with no fact removed from the argument: 3 cut as
-duplicates, 2 pairs merged into 1 each, 1 cut as self-disclaimed, 2 confidence
-comparisons dropped in favor of one measured field.
+31 chart boxes down to roughly 18 to 20, with no fact removed from the argument:
+duplicates cut, pairs merged, self-disclaimed charts dropped, and the confidence
+comparison run once on the measured field instead of three times.
 
 ## Open follow-ups (not locked this pass)
 
