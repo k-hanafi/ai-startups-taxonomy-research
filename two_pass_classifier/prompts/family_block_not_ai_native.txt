@@ -1,0 +1,97 @@
+============================================================
+FIXED FAMILY: NOT AI-NATIVE (PriorBinaryVerdict = 0)
+============================================================
+
+Choose exactly one subclass from 0A through 0C. The family is fixed. Never
+output a 1-series subclass.
+
+RAD does not apply to this family. Explain why RAD-NA follows in
+rad_reasoning. Do not output rad_score, rad_confidence, or rad_critique.
+Assembly assigns RAD-NA and leaves the two non-applicable export fields blank.
+
+------------------------------------------------------------
+SORTING PROCEDURE
+------------------------------------------------------------
+
+Step 1: Does the company sell a software product?
+
+Physical goods, retail, manufacturing, or a human-delivered services business
+with no software product of its own belongs in 0C. A website, online booking,
+or internal use of common software does not make the company a software
+business.
+
+Step 2: If the company sells software, has it shipped a genuine and visible AI
+feature that meaningfully augments the existing software value proposition or
+workflow?
+
+If yes, choose 0B. This captures traditional software/SaaS companies
+transitioning into AI-augmented products by adding assistants, copilots,
+recommendations, automation, or agent features. Marketing slogans alone do not
+count. The AI feature must be real and shipped.
+
+Step 3: Otherwise choose 0A for a software product with no meaningful shipped
+AI feature.
+
+Because the family is fixed, unusual AI-core evidence must still receive the
+closest 0-series subclass. Do not use 0B when AI is the product mechanism
+itself. For a software product in that situation, use 0A and explain the
+evidence limitation in subclass_critique.
+
+0A | Traditional Tech or SaaS
+The company sells software whose core value does not depend on AI. Examples
+include payments infrastructure, logistics platforms, CRMs, ERPs,
+marketplaces, conventional developer tools, and no-code platforms.
+
+Key signal: removing every AI reference leaves the product mechanism and main
+value proposition materially unchanged. Marketing language alone stays in 0A.
+
+0B | AI-Augmented
+The company sells a conventional software product with a genuine, visible AI
+feature that improves it. The non-AI core predates or survives removal of AI,
+and customers still have the main product without the feature.
+
+Key signal: identify both the durable non-AI product and the shipped AI layer.
+An assistant, copilot, recommendation feature, or automation can support 0B
+when it augments that durable core.
+
+0C | Non-Tech
+The company does not sell software. It sells physical products, retail,
+manufacturing, distribution, or human-delivered services such as staffing,
+consulting, wealth management, lending, clinics, education, or agency work.
+
+Key signal: software may support operations, but it is not the customer
+product.
+
+Tie-breakers:
+- Software with no meaningful shipped AI feature: 0A.
+- Conventional software with a real AI feature layered onto a surviving core:
+  0B.
+- Services or physical goods without a software product: 0C.
+- Purely manual data labeling is 0A only when sold as a software platform;
+  human-delivered labeling services with no software product are 0C.
+- AI-assisted annotation can be 0B when a real software platform remains the
+  non-AI core.
+- "AI-powered" language without product evidence is 0A for software or 0C for
+  non-software.
+- If evidence cannot identify what the company sells, use 0A with
+  subclass_confidence 1.
+
+============================================================
+NOT AI-NATIVE OUTPUT CONTRACT
+============================================================
+
+Return one JSON object with exactly these fields in this order:
+
+1. subclass
+   One of 0A, 0B, 0C.
+2. subclass_confidence
+   Integer 1 through 5.
+3. subclass_reasoning
+   Maximum 100 words.
+4. rad_reasoning
+   Maximum 100 words explaining that RAD is RAD-NA because the fixed family is
+   not AI-native.
+5. sources_used
+   Structured source array defined by the main prompt.
+6. subclass_critique
+   Maximum 100 words.

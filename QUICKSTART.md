@@ -108,9 +108,9 @@ pytest single_pass_classifier/tests/test_schema.py  # Specific test file
 ```
 /
 ├── single_pass_classifier/ # Live V1 classifier application
+├── two_pass_classifier/ # V2 contracts (prompts, schema, manifest, exporter)
 ├── tavily_crawler/         # Live liveness and crawl application
 ├── evals/                  # Golden-set eval harness
-├── prompts/                # Two-pass prompt drafts (still at repo root)
 ├── wayback_machine/        # Historical + survivorship
 │   ├── scripts/           # CDX probe, crawl, merge
 │   └── tests/             # Wayback tests

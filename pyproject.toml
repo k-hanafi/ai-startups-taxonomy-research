@@ -35,6 +35,7 @@ analysis = [
 where = ["."]
 include = [
     "single_pass_classifier*",
+    "two_pass_classifier*",
     "tavily_crawler*",
     "evals*",
     "wayback_machine*",
@@ -42,10 +43,12 @@ include = [
 
 [tool.setuptools.package-data]
 single_pass_classifier = ["prompts/*.txt"]
+two_pass_classifier = ["prompts/*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = [
     "single_pass_classifier/tests",
+    "two_pass_classifier/tests",
     "tavily_crawler/tests",
     "evals/tests",
     "wayback_machine/tests",
