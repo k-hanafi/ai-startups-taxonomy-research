@@ -8,9 +8,12 @@ STATUS block after every milestone, decision, or pivot.
 
 ## STATUS
 
-- **State (2026-07-23 eve):** WU-0/1p/4a/5a all DONE. Deliverable 3 fallback
-  is on main. Next: eval suite redesign plan, then the user-run Stage 8
-  sweep, then WU-2/WU-3.
+- **State (2026-07-28):** WU-0/1p/4a/5a all DONE. Deliverable 3 fallback
+  is on main. WU-5b spec drafting started:
+  `.cursor/plans/v2_production_dashboard.plan.md` (Confidence section locked
+  first: three field subsections with measurement explainers). Next for that
+  plan: chart inventory + remaining section overrides. Parallel: Stage 8 /
+  eval path as before.
 - **WU-4a DONE:** dead-cohort V1 classification complete after two recovery
   fixes (download crash resume; batch 1 split for the 200 MiB Batch API
   file cap). 15,714 verdicts; survivorship_corrected.csv written (44,386
@@ -204,8 +207,12 @@ the chosen config. Dry-run cost gate first. Verify: output CSVs complete,
 resume tested, cost within estimate.
 
 ### WU-5b — V2 production dashboard (worker, free)
-WU-5a dashboard re-pointed at V2 outputs; confidence audit section becomes
-logprob calibration. Verify: HTML with V2 numbers, alive-vs-dead section.
+WU-5a dashboard re-pointed at V2 outputs. Spec:
+`.cursor/plans/v2_production_dashboard.plan.md`. Confidence (section 5) is
+three subsections, one per professor field (`ai_native_confidence`,
+`subclass_confidence`, `rad_confidence`), each with a measurement explainer
+before charts: logprob primer for AI-native, prompt 1-5 scale for subclass
+and RAD. Verify: HTML with V2 numbers, alive-vs-dead section.
 
 ### WU-6 — V2 narrative dashboard (worker, free, parallelizable)
 The V1 -> V2 story: why self-reported confidence was weak -> two-pass
