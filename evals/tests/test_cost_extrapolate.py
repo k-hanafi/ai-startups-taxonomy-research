@@ -62,6 +62,23 @@ def test_ladder_known_answer_classification_with_cache():
     )
 
 
+def test_corrupt_manifests_fall_back_like_empty_directory(tmp_path, monkeypatch):
+    manifests = tmp_path / "corrupt_manifests"
+    manifests.mkdir()
+    (manifests / "manifest_bad.jsonl").write_text(
+        "{not valid jsonl\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(ce, "MANIFESTS_DIR", manifests)
+
+    population = ce.resolve_production_population()
+
+    assert population.row_count == cfg.OFFLINE_PRODUCTION_ROW_FALLBACK
+    assert population.source == "offline_fallback"
+    assert population.label == "offline_fallback_37746"
+    assert population.manifest_path is None
+
+
 def test_population_comes_from_manifest_when_present(tmp_path, monkeypatch):
     live = tmp_path / "live.csv"
     dead = tmp_path / "dead.csv"

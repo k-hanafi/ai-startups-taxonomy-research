@@ -50,19 +50,21 @@ def resolve_production_population(
                 source="offline_fallback",
                 manifest_path=None,
             )
-        failures: list[str] = []
         for candidate in candidates:
             try:
-                manifest = load_manifest(candidate)
-            except Exception as exc:
-                failures.append(f"{candidate.name}: {exc}")
+                load_manifest(candidate)
+            except Exception:
                 continue
             path = candidate
             break
         else:
-            raise ValueError(
-                "production manifests are present but none are valid: "
-                + failures[0]
+            # Corrupt or unreadable local manifests must not abort unpaid
+            # preview/scoring: same offline fallback as an empty directory.
+            return ProductionPopulation(
+                row_count=cfg.OFFLINE_PRODUCTION_ROW_FALLBACK,
+                label="offline_fallback_37746",
+                source="offline_fallback",
+                manifest_path=None,
             )
     manifest = load_manifest(path)
     return ProductionPopulation(

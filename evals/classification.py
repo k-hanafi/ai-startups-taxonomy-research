@@ -430,8 +430,20 @@ def load_pass_a_bank(bank_run_id: str) -> dict[str, dict[str, Any]]:
         )
 
     out = _index_banked_pass_a(bank_run_id)
-    missing_raw = [cid for cid in completed_cids if cid not in out]
-    if missing_raw:
+    missing = [cid for cid in completed_cids if cid not in out]
+    if missing:
+        raw_root = run_raw_dir(bank_run_id)
+        invalid = [
+            cid for cid in missing if (raw_root / f"{cid}_a.json").exists()
+        ]
+        missing_raw = [cid for cid in missing if cid not in invalid]
+        if invalid:
+            raise SystemExit(
+                f"Pass A bank {bank_run_id!r} has raw Pass A that no longer "
+                f"validates against production PassAResult for "
+                f"{len(invalid)} row(s), e.g. {invalid[0]}_a.json. "
+                "Re-bank Pass A with --rerun-pass-a."
+            )
         raise SystemExit(
             f"Pass A bank {bank_run_id!r} missing raw Pass A files for "
             f"{len(missing_raw)} row(s), e.g. {missing_raw[0]}_a.json "

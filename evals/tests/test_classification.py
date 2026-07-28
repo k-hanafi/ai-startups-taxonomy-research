@@ -355,6 +355,36 @@ def test_old_run_config_fingerprint_is_rejected(tmp_path, monkeypatch):
         )
 
 
+def test_load_pass_a_bank_reports_invalid_raw_not_missing_file(
+    tmp_path,
+    monkeypatch,
+):
+    bank_id = _write_valid_bank(tmp_path, monkeypatch)
+    raw_path = tmp_path / "runs" / bank_id / "raw" / "startup-u1_a.json"
+    invalid = _response({"ai_native": 1}, chosen_probability=0.8).model_dump()
+    raw_path.write_text(json.dumps(invalid), encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="no longer validates") as exc:
+        classification.load_pass_a_bank(bank_id)
+
+    message = str(exc.value)
+    assert "startup-u1_a.json" in message
+    assert "copy it with the bank run" not in message
+    assert "--rerun-pass-a" in message
+
+
+def test_load_pass_a_bank_still_reports_missing_raw(tmp_path, monkeypatch):
+    bank_id = _write_valid_bank(tmp_path, monkeypatch)
+    (
+        tmp_path / "runs" / bank_id / "raw" / "startup-u1_a.json"
+    ).unlink()
+
+    with pytest.raises(SystemExit, match="missing raw Pass A files") as exc:
+        classification.load_pass_a_bank(bank_id)
+
+    assert "copy it with the bank run" in str(exc.value)
+
+
 def test_old_pass_a_bank_fingerprint_is_rejected(tmp_path, monkeypatch):
     _patch_run_paths(monkeypatch, tmp_path)
     bank_id = pass_a_bank_run_id("gpt-5.4-nano")
