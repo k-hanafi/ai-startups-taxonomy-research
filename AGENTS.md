@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-28 | Active branch: `pr/resumable-async-runner` (V2 async runner + journal resume)
+Last updated: 2026-07-28 | Active branch: `pr/align-evals-to-v2` (evals import production V2 contracts)
 
 ---
 
@@ -52,10 +52,16 @@ Authoritative plans (read when resuming a strand; committed under **`.cursor/pla
 - `.cursor/plans/survivorship_bias_wayback_*.plan.md` — death-anchored CDX probe (active survivorship strand).
 - `.cursor/plans/survivorship_tavily_pipeline_*.plan.md` — post-probe Tavily extract + classify pipeline.
 - `.cursor/plans/logprob_confidence_classifier_*.plan.md` — logprob-based confidence methodology (active).
-- `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; classification committed; #22 dashboard + #24/#25 science on `main`; provisional `draft_*` gold accepted for paid sweep; next = `python -m evals run-evals` for the paid 9-cell matrix).
+- `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; production-aligned contracts built; prior local matrix uses the old fingerprint and stays historical; next = `python -m evals run-evals` for a fresh aligned 9-cell matrix).
 - `.cursor/plans/v1_alive_dead_dashboard.plan.md` — V1 alive-vs-dead dashboard PRD (implemented; evidence-only universe, 4-act survivorship section, coverage checklist for the retired insights dashboard).
 - `.cursor/plans/eval_suite_redesign.plan.md` — Classifier Eval Suite redesign contract + per-tab spec (implemented on `eval/suite-redesign`).
 - `.cursor/plans/eval_cli_redesign.plan.md` — beginner-friendly paid eval CLI (`cost-preview` / `run-evals` / `open-dashboard`) on `eval/cli-redesign`.
+
+Eval alignment: `two_pass_classifier` owns every classifier contract used by
+`evals` (prompts, schemas, request bodies, formatting, cohort, confidence,
+models, defaults, output caps, and normal Responses pricing). The eval package
+keeps golden-data research and orchestration only. Existing local eval results
+that used the prior prompt fingerprint remain historical until a new paid sweep.
 
 Cursor writes new plans to `~/.cursor/plans/` by default; copy or sync them into **`.cursor/plans/`** in this repo so they are version-controlled. Legacy copies may still exist in **`plans/`** at repo root. Repo agent skills (committed): **`portfolio-git-messages`**, **`git-commit-batch-plan`**, **`code-structure`**, **`clean-my-repo`** under **`.cursor/skills/`**. **`.cursor/rules/`** stays local.
 
@@ -210,7 +216,6 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 ### `evals/` — golden-set eval harness
 | Path | Purpose |
 |------|---------|
-| `prompts/` | Legacy Pass A/B prompt drafts paired with `evals/classification.py` schemas (kept separate from frozen V2 prompts until eval ownership lands) |
 | `dashboard_metrics.py` | Eval dashboard metrics: scored.json/fixture → chart metrics (ECE, reliability bins, selective curves, vs_baseline, Pass B isolating fields, finalist mean±range aggregates, per-config `cost_breakdown` for the cost popover). Real loads recompute production $ from each run's `predictions.jsonl` and scale by the newest valid production manifest, with an explicit offline fallback of 37,746. Also `build_robustness` + `build_run_instance`. No OpenAI import. |
 | `tests/fixtures/dashboard/dashboard_mock_runs.json` | Synthetic locked matrix; Pass A metrics identical across efforts within each model (bank-once design); calibration blocks derive from one set of 100 synthetic rows per model (nano seeds the ECE ~0.077 early signal); per-run robustness blocks |
 | `instances.py` | Numbered dashboard archive: writes `eval_instance_NN.html` + `index.html` + `instances.json` under `01_Presentation_Materials/eval_instances/`; an instance is identified by the scored runs behind it (same sweep replaces its page; a later sweep still gets a new number); synthetic `--save-instance` previews replace the prior mock. Also owns the run-headline / run-meta text shared with the suite header card. |
@@ -246,9 +251,11 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 |----------|-----------|
 | `data/master_csv.csv` | 44,387 companies — static Crunchbase metadata + `website_alive`. The base everything joins against. |
 | `outputs/tavilycrawl/processed/classifier_input.csv` | master + live `website_evidence`. **Default input to `single_pass_classifier`.** |
+| `outputs/two_pass_classifier/manifests/manifest_<sha256>.jsonl` | Immutable V2 evidence-only live+dead input; header stores measured source counts and raw source hashes |
+| `outputs/two_pass_classifier/runs/<run>/events.jsonl` | Sole V2 resume authority (attempts, Pass A checkpoints, completed companies, raw responses). Derived CSV/JSON must never decide which requests run |
+| `outputs/two_pass_classifier/runs/<run>/classifications.csv` | Atomic exact 18-column V2 professor artifact, created only when every manifest row is complete |
 | `outputs/production_csvs/production_classifications.csv` | 44,387 classified rows (the live output) |
 | `outputs/batch_data/state.json` | classify resume checkpoint |
-| `outputs/two_pass_classifier/runs/<run>/events.jsonl` | Sole V2 resume authority (attempts, Pass A checkpoints, completed companies, raw responses). Derived CSV/JSON must never decide which requests run |
 | `wayback_machine/data/coverage_full.csv` | Mar-2023 coverage probe over the 22,032 survivors |
 | `wayback_machine/data/not_found_cohort.csv` | ~22,002 companies Tavily couldn't extract (survivorship target) |
 | `wayback_machine/data/death_coverage.csv` | Death-anchored probe output (complete: 22,002 rows, 19,044 `ok`) |
@@ -338,6 +345,7 @@ python -m evals score <run_id> --confidence-from-raw --allow-missing-confidence 
 
 - **Classifier tunables live in `single_pass_classifier/config.py`; Wayback tunables live in `wayback_machine/config.py`.**
 - **V2 tunables live in `two_pass_classifier/config.py`; its prompts live only in `two_pass_classifier/prompts/`.**
+- **`evals` must import production classifier contracts from `two_pass_classifier`; it may own research orchestration and metrics, but never duplicate classifier behavior.**
 - **V2 `events.jsonl` is the sole resume authority.** Derived JSON and CSV files must never decide which requests run.
 - **A V2 full run requires a successful 10-row smoke with the same parent manifest and semantic request fingerprint.** Smoke outputs are never reused as full-run classifications.
 - **V2 row and cost counts must come from the immutable manifest, never a hardcoded production population constant.**
@@ -360,6 +368,8 @@ python -m evals score <run_id> --confidence-from-raw --allow-missing-confidence 
 | Change V1 row → prompt mapping | `single_pass_classifier/formatter.py` |
 | Change V2 execution, resume, retry, or rate control | `two_pass_classifier/runner.py` + `journal.py` + `rate_control.py` + `request_builder.py` |
 | Change V2 CLI, smoke gate, cost preview, or status | `two_pass_classifier/cli.py` + `workflow.py` + `costing.py` + `status.py` |
+| Change V2 prompt/schema contracts | `two_pass_classifier/prompts/` + `two_pass_classifier/schema.py`; rerun V2 and affected eval tests |
+| Change V2 manifest/export contract | `two_pass_classifier/manifest.py` + `two_pass_classifier/exporter.py` |
 | Change evidence cleaning | `tavily_crawler/website_evidence.py` → re-vendor `wayback_machine/evidence.py` → run golden test |
 | Add/modify a V1 classify subcommand | `single_pass_classifier/cli.py` |
 | Live website scraping behavior | `tavily_crawler/crawl.py` |

@@ -1,7 +1,4 @@
-"""Offline tests for Stage 9 dashboard metrics (fixture + filter keys).
-
-No OpenAI key required: dashboard_metrics does not import single_pass_classifier.config.
-"""
+"""Offline tests for Stage 9 dashboard metrics and filter keys."""
 
 from __future__ import annotations
 
@@ -68,9 +65,11 @@ def test_fixture_rows_carry_chart_fields():
     assert row["kind"] == "classification"
     assert 0.8 < row["subclass_acc"] < 0.9
     # Fixture ladders are generated with the real extrapolation formula, so
-    # the projected $ is the exact scale-step output (sync Responses API
-    # pricing, evidence-universe N_prod, no batch discount).
-    assert row["projected_usd"] == pytest.approx(756.35958, abs=1e-3)
+    # the projected $ is the exact scale-step output (normal Responses API
+    # pricing, labeled production N, no Batch discount).
+    assert row["projected_usd"] == pytest.approx(
+        row["cost_breakdown"]["estimated_production_usd"]
+    )
     assert row["latency_p50"] == 4.6
     assert row["share_above_90"] == 0.61
     assert row["ece"] == pytest.approx(0.046185)
@@ -338,7 +337,7 @@ def test_fixture_cost_breakdowns_recompute_to_displayed_total():
         uncached = b["total_input_tokens"] - b["total_cached_tokens"]
         after_cache = (
             uncached / 1e6 * p["input"]
-            + b["total_cached_tokens"] / 1e6 * p["input"] * b["cache_discount"]
+            + b["total_cached_tokens"] / 1e6 * p["cached_input"]
             + b["total_output_tokens"] / 1e6 * p["output"]
         )
         assert after_cache == pytest.approx(b["golden_after_cache_usd"]), c["id"]
@@ -347,7 +346,7 @@ def test_fixture_cost_breakdowns_recompute_to_displayed_total():
         ), c["id"]
 
         # Step 3: scale the cache-adjusted sync total to production N.
-        # No batch discount: production runs the sync Responses API.
+        # Normal Responses pricing is used with no Batch discount.
         assert "batch_discount" not in b, c["id"]
         projected = after_cache * (b["n_prod"] / b["n_golden"])
         assert projected == pytest.approx(b["estimated_production_usd"]), c["id"]
@@ -421,11 +420,12 @@ def test_cost_breakdown_marks_unavailable_ladder_without_fabricating():
             "available": False,
             "reason": "cached_tokens_unavailable",
             "assumptions": {
-                "n_prod": 37_672,
-                "n_prod_label": "evidence_universe",
+                "n_prod": 37_746,
+                "n_prod_label": "offline_fallback_37746",
+                "production_population_source": "offline_fallback",
                 "n_golden": 100,
                 "model": "gpt-5.4-nano",
-                "cache_discount": 0.5,
+                "cached_input_price_per_million": 0.10,
                 "cache_source": "unavailable_legacy_run_missing_cached_tokens",
             },
             "steps": {
@@ -461,6 +461,69 @@ def test_cost_breakdown_marks_unavailable_ladder_without_fabricating():
     assert b["per_pass"] is None
     assert "cached_tokens" in b["cache_step_reason"]
     assert row["projected_usd"] is None
+
+
+def test_legacy_cached_price_uses_backend_fallback_without_undefined():
+    stub = {
+        "run_id": "legacy_gpt-5.4-nano_low_r1",
+        "model": "gpt-5.4-nano",
+        "effort_b": "low",
+        "n_scored": 1,
+        "axes": {
+            "subclass": {"accuracy": 1.0, "macro_f1": 1.0},
+            "ai_native": {"accuracy": 1.0, "macro_f1": 1.0},
+            "rad": {"accuracy": 1.0, "macro_f1": 1.0},
+        },
+        "cost": {
+            "model": "gpt-5.4-nano",
+            "n_rows": 1,
+            "total_input_tokens": 100,
+            "total_output_tokens": 20,
+            "total_cached_tokens": 50,
+            "pricing_per_mtok": {"input": 0.20, "output": 1.25},
+        },
+        "production_cost_estimate": {
+            "available": True,
+            "assumptions": {
+                "n_golden": 1,
+                "n_prod": 1,
+                "cached_input_price_per_million": 0.10,
+            },
+            "steps": {
+                "1_golden_sync": {
+                    "n_rows": 1,
+                    "total_input_tokens": 100,
+                    "total_output_tokens": 20,
+                    "total_usd": 0.000045,
+                },
+                "2_cache": {
+                    "available": True,
+                    "total_cached_tokens": 50,
+                    "cache_hit_rate": 0.5,
+                    "total_usd_after_cache": 0.00004,
+                },
+                "3_scale": {
+                    "available": True,
+                    "n_prod": 1,
+                    "scale_factor": 1.0,
+                    "estimated_production_usd": 0.00004,
+                    "estimated_usd_per_company": 0.00004,
+                },
+            },
+        },
+    }
+    row = config_row_from_scored(stub)
+    assert row["cost_breakdown"]["pricing_per_mtok"] == {
+        "input": 0.20,
+        "output": 1.25,
+    }
+    assert row["cost_breakdown"]["cached_input_price_per_mtok"] == 0.10
+
+    _, mod = _load_eval_dashboard_builder()
+    html = mod.build_html(build_metrics([stub], synthetic=False, source="test"))
+    assert '"cached_input_price_per_mtok": 0.1' in html
+    assert "cachedPriceText" in html
+    assert "/ cached $' + p.cached_input" not in html
 
 
 def test_config_row_prefers_scored_metadata_over_run_id_parse():
@@ -658,13 +721,13 @@ def test_attach_fresh_production_cost_uses_predictions_not_stale_ladder(
     }
     fresh = attach_fresh_production_cost(stale, run_id=run_id)
     assert fresh["production_cost_estimate"]["assumptions"]["n_prod"] == (
-        cfg.N_PROD_EVIDENCE_UNIVERSE
+        cfg.OFFLINE_PRODUCTION_ROW_FALLBACK
     )
     assert fresh["production_cost_estimate"]["summary"][
         "estimated_production_usd"
-    ] == pytest.approx(0.15 * cfg.N_PROD_EVIDENCE_UNIVERSE)
+    ] == pytest.approx(0.15 * cfg.OFFLINE_PRODUCTION_ROW_FALLBACK)
     assert config_row_from_scored(fresh)["projected_usd"] == pytest.approx(
-        0.15 * cfg.N_PROD_EVIDENCE_UNIVERSE
+        0.15 * cfg.OFFLINE_PRODUCTION_ROW_FALLBACK
     )
 
 
@@ -703,7 +766,7 @@ def test_attach_fresh_production_cost_tolerates_truncated_final_line(
     )
     assert fresh["production_cost_estimate"]["summary"][
         "estimated_production_usd"
-    ] == pytest.approx(0.20 * cfg.N_PROD_EVIDENCE_UNIVERSE)
+    ] == pytest.approx(0.20 * cfg.OFFLINE_PRODUCTION_ROW_FALLBACK)
 
 
 def test_projected_usd_none_when_cost_unavailable():
@@ -892,6 +955,8 @@ def test_committed_html_includes_cost_breakdown_popover():
     assert "cost-info" in html
     assert "cost-popover" in html
     assert '"cost_breakdown"' in html
+    assert "cachedPriceText" in html
+    assert "/ cached $' + p.cached_input" not in html
 
 
 def test_build_html_is_three_tab_suite():

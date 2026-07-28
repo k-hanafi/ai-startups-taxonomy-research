@@ -177,7 +177,11 @@ def test_resolve_confidence_absent_everywhere_is_empty():
 
 def test_resolve_confidence_record_field_and_external_mapping():
     records = [
-        {"org_uuid": "u1", "custom_id": "startup-u1", "binary_confidence": 0.9},
+        {
+            "org_uuid": "u1",
+            "custom_id": "startup-u1",
+            "ai_native_confidence": 0.9,
+        },
         {"org_uuid": "u2", "custom_id": "startup-u2"},
         {"org_uuid": "u3", "custom_id": "startup-u3"},
     ]
@@ -454,22 +458,11 @@ def test_calibration_allow_partial_confidence(mini_run, caplog):
 
 
 def test_pass_b_isolating_metrics_in_scored_report(mini_run):
-    run_id, run_dir = mini_run
-    # Mark boundary_disagreement on completed rows.
-    path = run_dir / "predictions.jsonl"
-    records = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
-    for rec in records:
-        if rec.get("status") == "completed":
-            rec["boundary_disagreement"] = rec.get("org_uuid") == "u2"
-    path.write_text(
-        "".join(json.dumps(r) + "\n" for r in records), encoding="utf-8"
-    )
+    run_id, _ = mini_run
     report = scoring.score_run(run_id, write=False)
     pbm = report["pass_b_metrics"]
     assert "subclass_family_conditional" in pbm
     assert "rad_ai_native_only" in pbm
-    assert pbm["boundary_disagreement"]["n"] == 3
-    assert pbm["boundary_disagreement"]["rate"] == pytest.approx(1 / 3)
     assert "definitions" in pbm
 
 

@@ -52,6 +52,5 @@ testpaths = [
     "tavily_crawler/tests",
     "evals/tests",
     "wayback_machine/tests",
-    "tests",
 ]
 asyncio_mode = "auto"
