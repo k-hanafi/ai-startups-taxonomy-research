@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-28 | Active branch: `pr/land-freeze-contracts-on-main` (land frozen two-pass contracts on main)
+Last updated: 2026-07-28 | Active branch: `pr/resumable-async-runner` (V2 async runner + journal resume)
 
 ---
 
@@ -104,7 +104,7 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 |------|---------|
 | `single_pass_classifier/` | Legacy V1 one-pass classifier application and `python -m single_pass_classifier` CLI |
 | `tavily_crawler/` | Live liveness and Tavily crawl application and `python -m tavily_crawler` CLI |
-| `two_pass_classifier/` | Production V2 **contracts** package (prompts, schemas, manifest, confidence, professor CSV exporter). Runner/CLI land in later PRs |
+| `two_pass_classifier/` | Production V2 package: frozen contracts plus resumable async Responses runner (`events.jsonl` resume). CLI/workflow land in the next PR |
 | `README.md` | Public-facing writeup (taxonomy + pipeline narrative + mermaid diagrams) |
 | `pyproject.toml` | Dependencies + pytest config |
 | `AGENTS.md` | This file |
@@ -149,7 +149,7 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `sync_with_remote.sh` | Interactive Git synchronization helper |
 
 
-### `two_pass_classifier/` (production V2 contracts)
+### `two_pass_classifier/` (production V2 contracts + runner)
 | File | Responsibility |
 |------|----------------|
 | `config.py` | Supported models and locked defaults (`gpt-5.6-luna`, Pass A effort `none`, Pass B effort `low`, Pass A `top_logprobs=5`) |
@@ -162,8 +162,11 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `exporter.py` | Exact 18-column professor CSV (`company_alive` and `website_snapshot_date` after `cohort`) |
 | `costing.py` | Offline production token counts and normal Responses price ranges |
 | `paths.py` | Manifest/run output locations under `outputs/two_pass_classifier/` |
+| `journal.py` | Group-committed JSONL writer, run lock, authoritative resume state from `events.jsonl`, derived CSV/JSON rebuild |
+| `rate_control.py` | Dual RPM/TPM admission, adaptive concurrency, and cache-route warming |
+| `runner.py` | Coupled Pass A/B orchestration over AsyncOpenAI, retries, graceful shutdown, raw response preservation |
 
-Runner, journal, rate control, status, workflow, and CLI are intentionally omitted from this PR.
+Status, workflow, and CLI are intentionally omitted from this PR (next stack slice).
 
 ### `wayback_machine/` (historical + survivorship strands)
 | File | Responsibility |
@@ -231,6 +234,7 @@ Runner, journal, rate control, status, workflow, and CLI are intentionally omitt
 | `data visualization/02_Analysis_Code/vendor/plotly-2.35.2.min.js` | Vendored Plotly for offline/email-safe dashboard HTML (inlined at build time) |
 | `single_pass_classifier/tests/` | V1 schema, formatter, token, and cross-package input-contract tests |
 | `tavily_crawler/tests/` | Live enrichment and crawl reliability tests |
+| `two_pass_classifier/tests/` | V2 contracts plus async runner, journal, rate-control, retry, resume, lock, and export-gating tests |
 | `wayback_machine/tests/` | pytest for wayback (golden cleaner, cohort, state, config, budget, probe) |
 | `keys/` | API key env files, e.g. `keys/openai.env` (`OPENAI_API_KEY`). Git-ignored + cursor-ignored. **Never commit.** |
 | `data/`, `outputs/`, `wayback_machine/data/`, `wayback_machine/outputs/` | Generated/large data. Git-ignored **and not indexed** — read via terminal/Read, not semantic search. |
@@ -243,6 +247,7 @@ Runner, journal, rate control, status, workflow, and CLI are intentionally omitt
 | `outputs/tavilycrawl/processed/classifier_input.csv` | master + live `website_evidence`. **Default input to `single_pass_classifier`.** |
 | `outputs/production_csvs/production_classifications.csv` | 44,387 classified rows (the live output) |
 | `outputs/batch_data/state.json` | classify resume checkpoint |
+| `outputs/two_pass_classifier/runs/<run>/events.jsonl` | Sole V2 resume authority (attempts, Pass A checkpoints, completed companies, raw responses). Derived CSV/JSON must never decide which requests run |
 | `wayback_machine/data/coverage_full.csv` | Mar-2023 coverage probe over the 22,032 survivors |
 | `wayback_machine/data/not_found_cohort.csv` | ~22,002 companies Tavily couldn't extract (survivorship target) |
 | `wayback_machine/data/death_coverage.csv` | Death-anchored probe output (complete: 22,002 rows, 19,044 `ok`) |
@@ -281,7 +286,7 @@ when present; env vars take precedence.
 pip install -e ".[dev]"            # install with dev (pytest) extras
 pytest                             # all offline test suites
 pytest single_pass_classifier/tests tavily_crawler/tests
-pytest two_pass_classifier/tests -q # V2 contract tests (runner/CLI not in this PR)
+pytest two_pass_classifier/tests -q # V2 contracts + journal/rate-control/runner (CLI not in this PR)
 pytest wayback_machine/tests       # wayback tests (incl. golden cleaner)
 
 
@@ -320,6 +325,7 @@ python -m evals score <run_id> --confidence-from-raw --allow-missing-confidence 
 
 - **Classifier tunables live in `single_pass_classifier/config.py`; Wayback tunables live in `wayback_machine/config.py`.**
 - **V2 tunables live in `two_pass_classifier/config.py`; its prompts live only in `two_pass_classifier/prompts/`.**
+- **V2 `events.jsonl` is the sole resume authority.** Derived JSON and CSV files must never decide which requests run.
 - **V2 row and cost counts must come from the immutable manifest, never a hardcoded production population constant.**
 - **Identical request prefix** across all requests is what enables prompt caching — keep it byte-stable.
 - **Match results by `custom_id`**, never by position (batch order is not guaranteed).
@@ -338,6 +344,7 @@ python -m evals score <run_id> --confidence-from-raw --allow-missing-confidence 
 | Change V1 classification instructions | `single_pass_classifier/prompts/system_classifier_prompt.txt` |
 | Tune V1 cost / rate limits / batch size | `single_pass_classifier/config.py` |
 | Change V1 row → prompt mapping | `single_pass_classifier/formatter.py` |
+| Change V2 execution, resume, retry, or rate control | `two_pass_classifier/runner.py` + `journal.py` + `rate_control.py` + `request_builder.py` |
 | Change evidence cleaning | `tavily_crawler/website_evidence.py` → re-vendor `wayback_machine/evidence.py` → run golden test |
 | Add/modify a V1 classify subcommand | `single_pass_classifier/cli.py` |
 | Live website scraping behavior | `tavily_crawler/crawl.py` |
