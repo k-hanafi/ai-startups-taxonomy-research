@@ -24,6 +24,7 @@ class Reservation:
     model: str
     admitted_at: float
     tokens: int
+    in_flight: bool = True
 
 
 @dataclass(slots=True)
@@ -156,6 +157,11 @@ class DualRateAdmissionController:
                     ),
                 )
 
+    async def release(self, reservation: Reservation) -> None:
+        """Mark one reservation finished so the sliding window may drop it."""
+        async with self._lock:
+            reservation.in_flight = False
+
     async def observe_headers(
         self,
         model: str,
@@ -233,8 +239,14 @@ class DualRateAdmissionController:
 
     def _prune(self, state: _ModelWindow, now: float) -> None:
         cutoff = now - self._window_seconds
-        while state.reservations and state.reservations[0].admitted_at <= cutoff:
-            state.reservations.popleft()
+        # Keep in-flight reservations even after admitted_at ages out. Their
+        # actual usage is reconciled only when the HTTP call finishes, so
+        # dropping them early under-counts TPM and can admit past the target.
+        state.reservations = deque(
+            item
+            for item in state.reservations
+            if item.in_flight or item.admitted_at > cutoff
+        )
 
         budget = state.header_budget
         if (
@@ -267,11 +279,9 @@ class DualRateAdmissionController:
         reservations = state.reservations
         if len(reservations) >= request_target:
             waits.append(
-                max(
-                    0.0,
-                    reservations[len(reservations) - request_target].admitted_at
-                    + self._window_seconds
-                    - now,
+                self._reservation_wait(
+                    reservations[len(reservations) - request_target],
+                    now,
                 )
             )
 
@@ -282,14 +292,19 @@ class DualRateAdmissionController:
             for item in reservations:
                 released += item.tokens
                 if released >= excess:
-                    waits.append(
-                        max(
-                            0.0,
-                            item.admitted_at + self._window_seconds - now,
-                        )
-                    )
+                    waits.append(self._reservation_wait(item, now))
                     break
         return max(waits)
+
+    def _reservation_wait(self, reservation: Reservation, now: float) -> float:
+        remaining = reservation.admitted_at + self._window_seconds - now
+        if remaining > 0:
+            return remaining
+        if reservation.in_flight:
+            # Past the nominal window but still outstanding: poll until release
+            # instead of treating capacity as free.
+            return config.RATE_LIMIT_IN_FLIGHT_POLL_SECONDS
+        return 0.0
 
     async def _sleep_interruptibly(
         self,

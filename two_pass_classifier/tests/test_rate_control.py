@@ -46,11 +46,12 @@ async def test_shared_rpm_and_tpm_admission_waits_for_window():
     )
 
     for _ in range(8):
-        await controller.acquire(
+        reservation = await controller.acquire(
             "test",
             estimated_input_tokens=5,
             output_allowance=5,
         )
+        await controller.release(reservation)
     await controller.acquire(
         "test",
         estimated_input_tokens=5,
@@ -68,11 +69,12 @@ async def test_shared_rpm_and_tpm_admission_waits_for_window():
         sleep=tpm_clock.sleep,
     )
     for _ in range(2):
-        await tpm.acquire(
+        reservation = await tpm.acquire(
             "test",
             estimated_input_tokens=20,
             output_allowance=20,
         )
+        await tpm.release(reservation)
     await tpm.acquire(
         "test",
         estimated_input_tokens=1,
@@ -106,6 +108,33 @@ async def test_actual_usage_reconciles_reservation_and_headers_revise_limits():
         },
     )
     assert controller.target_limits("test") == (16, 160)
+
+
+@pytest.mark.asyncio
+async def test_in_flight_reservations_stay_in_tpm_window_until_release():
+    clock = _FakeClock()
+    controller = DualRateAdmissionController(
+        model_limits={"test": config.ModelRateLimit(100, 100)},
+        target_fraction=0.8,
+        clock=clock,
+        sleep=clock.sleep,
+    )
+    reservation = await controller.acquire(
+        "test",
+        estimated_input_tokens=20,
+        output_allowance=20,
+    )
+    clock.now = 90.0
+    await controller.reconcile(
+        reservation,
+        actual_input_tokens=50,
+        actual_output_tokens=20,
+    )
+    assert await controller.utilization("test") == pytest.approx(70 / 80)
+
+    await controller.release(reservation)
+    clock.now = 91.0
+    assert await controller.utilization("test") == pytest.approx(0.0)
 
 
 @pytest.mark.asyncio

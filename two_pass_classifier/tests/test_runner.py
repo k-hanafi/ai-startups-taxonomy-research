@@ -19,6 +19,7 @@ from two_pass_classifier.request_builder import RequestSettings
 from two_pass_classifier.runner import (
     ProductionRunner,
     RunnerSettings,
+    _idempotency_key,
 )
 
 
@@ -493,6 +494,61 @@ async def test_429_is_journaled_retried_and_reduces_global_concurrency(tmp_path)
         event for event in events if event["event_type"] == "pass_a_completed"
     )
     assert pass_a["attempt"] == 2
+
+
+def test_idempotency_key_is_stable_for_the_same_logical_attempt():
+    first = _idempotency_key(
+        company_id="company-1",
+        stage="pass_b",
+        input_hash="hash-1",
+        attempt=1,
+    )
+    second = _idempotency_key(
+        company_id="company-1",
+        stage="pass_b",
+        input_hash="hash-1",
+        attempt=1,
+    )
+    third = _idempotency_key(
+        company_id="company-1",
+        stage="pass_b",
+        input_hash="hash-1",
+        attempt=2,
+    )
+    assert first == second == "company-1:pass_b:hash-1:1"
+    assert third != first
+
+
+@pytest.mark.asyncio
+async def test_pass_b_sends_stable_idempotency_key(tmp_path):
+    async def handler(kwargs: dict[str, Any]) -> _FakeResponse:
+        headers = kwargs.get("extra_headers") or {}
+        if "top_logprobs" in kwargs:
+            assert headers["Idempotency-Key"] == _idempotency_key(
+                company_id="company-1",
+                stage="pass_a",
+                input_hash="hash-1",
+                attempt=1,
+            )
+            return _pass_a_response()
+        assert headers["Idempotency-Key"] == _idempotency_key(
+            company_id="company-1",
+            stage="pass_b",
+            input_hash="hash-1",
+            attempt=1,
+        )
+        assert headers["X-Client-Request-Id"] == headers["Idempotency-Key"]
+        return _pass_b_response()
+
+    runner = ProductionRunner(
+        manifest=_manifest(),
+        run_dir=tmp_path / "idempotency",
+        client=_FakeClient(handler),
+        settings=_runner_settings(),
+        install_signal_handlers=False,
+    )
+    result = await runner.run()
+    assert result.all_complete is True
 
 
 @pytest.mark.asyncio
