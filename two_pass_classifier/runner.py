@@ -225,6 +225,9 @@ class ProductionRunner:
 
     async def run(self) -> RunResult:
         """Run or resume one manifest under an exclusive process lock."""
+        # A prior SIGINT/request_shutdown/fatal error must not sticky-block
+        # the next in-process run on this same runner instance.
+        self.shutdown_event.clear()
         self.paths.run_dir.mkdir(parents=True, exist_ok=True)
         fingerprint = request_fingerprint(self.settings.requests)
 
