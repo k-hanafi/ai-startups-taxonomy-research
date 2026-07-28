@@ -832,7 +832,8 @@ def _print_human_status(console: Console, status: RunStatus) -> None:
     operations.add_row(
         "Throughput",
         (
-            f"{status.throughput_companies_per_hour:,.1f} companies/hour"
+            f"{status.throughput_companies_per_hour:,.1f} companies/hour "
+            "(active time)"
             if status.throughput_companies_per_hour is not None
             else "not available"
         ),

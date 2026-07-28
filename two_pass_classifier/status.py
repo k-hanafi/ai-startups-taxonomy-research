@@ -10,6 +10,10 @@ from typing import Any, Mapping
 from .costing import actual_usage_cost
 from .workflow import RunContext
 
+# Inter-event gaps longer than this are treated as downtime (killed process,
+# confirm prompt, laptop sleep) and excluded from throughput / ETA.
+_ACTIVE_GAP_SECONDS = 120.0
+
 
 @dataclass(frozen=True, slots=True)
 class FailureBreakdown:
@@ -78,16 +82,20 @@ def build_run_status(context: RunContext) -> RunStatus:
         context.events,
         model=context.settings.model,
     )
+    # Wall clock stays useful for "how long since this run began".
+    # Throughput / ETA must use active processing time only, or long pauses
+    # between resume sessions make a healthy runner look hours too slow.
     elapsed = _elapsed_seconds(context)
+    active_elapsed = _active_elapsed_seconds(context)
     throughput = (
-        complete / elapsed * 3_600
-        if elapsed is not None and elapsed > 0 and complete > 0
+        complete / active_elapsed * 3_600
+        if active_elapsed is not None and active_elapsed > 0 and complete > 0
         else None
     )
-    if complete == total:
+    if complete == total or remaining_runnable == 0:
         eta = 0.0
     elif throughput is not None and throughput > 0:
-        eta = (total - complete) / throughput * 3_600
+        eta = remaining_runnable / throughput * 3_600
     else:
         eta = None
     last_operational = _last_operational_event(context)
@@ -166,6 +174,38 @@ def _elapsed_seconds(context: RunContext) -> float | None:
     ]
     end = max(finished) if finished else datetime.now(UTC)
     return max(0.0, (end - created).total_seconds())
+
+
+def _active_elapsed_seconds(context: RunContext) -> float | None:
+    """Sum productive time between journal timestamps, skipping long idle gaps."""
+    timestamps = _operational_timestamps(context)
+    if not timestamps:
+        return None
+    if len(timestamps) == 1:
+        # In flight with no finishes yet: count wall time since start.
+        return max(0.0, (datetime.now(UTC) - timestamps[0]).total_seconds())
+
+    active = 0.0
+    previous = timestamps[0]
+    for current in timestamps[1:]:
+        delta = (current - previous).total_seconds()
+        if 0.0 < delta <= _ACTIVE_GAP_SECONDS:
+            active += delta
+        previous = current
+    return active
+
+
+def _operational_timestamps(context: RunContext) -> list[datetime]:
+    stamps: list[datetime] = []
+    created = _parse_time(context.header.get("created_at"))
+    if created is not None:
+        stamps.append(created)
+    for event in context.events:
+        finished = _parse_time(event.get("finished_at"))
+        if finished is not None:
+            stamps.append(finished)
+    stamps.sort()
+    return stamps
 
 
 def _last_operational_event(context: RunContext) -> Mapping[str, Any]:
