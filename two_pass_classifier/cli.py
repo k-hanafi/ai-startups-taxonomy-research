@@ -523,7 +523,9 @@ def _cmd_retry(
     if not events:
         status = build_run_status(context)
         console.print("No active retriable failures matched the requested stage.")
-        return EXIT_ERROR if status.terminal_failures.total else 0
+        if status.retryable_failures.total or status.terminal_failures.total:
+            return EXIT_ERROR
+        return 0
     if not args.continue_run:
         console.print(
             "Continue with: "

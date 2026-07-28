@@ -467,6 +467,60 @@ def test_run_refuses_stale_smoke_fingerprint(
     assert "no successful 10-company smoke matches" in output
 
 
+def test_run_refuses_smoke_with_wrong_selection_ids(
+    tmp_path: Path,
+    registry: dict[str, Path],
+):
+    artifact, _ = _manifest_artifact(
+        tmp_path / "source",
+        live_count=5,
+        dead_count=5,
+    )
+    smoke_code, _ = _invoke(
+        [
+            "smoke",
+            "--manifest",
+            str(artifact),
+            "--model",
+            "gpt-5.4-nano",
+            "--run-id",
+            "selection-smoke",
+            "--yes",
+        ],
+        client_factory=lambda api_key: _successful_fake_client(),
+    )
+    assert smoke_code == 0
+
+    journal = registry["runs"] / "selection-smoke" / "events.jsonl"
+    lines = journal.read_text(encoding="utf-8").splitlines()
+    header = json.loads(lines[0])
+    recorded = list(header["run_config"]["selection_company_ids"])
+    assert recorded
+    header["run_config"]["selection_company_ids"] = list(reversed(recorded))
+    journal.write_text(
+        "\n".join([json.dumps(header, sort_keys=True), *lines[1:]]) + "\n",
+        encoding="utf-8",
+    )
+
+    code, output = _invoke(
+        [
+            "run",
+            "--manifest",
+            str(artifact),
+            "--model",
+            "gpt-5.4-nano",
+            "--run-id",
+            "blocked-by-selection",
+            "--yes",
+        ],
+        client_factory=lambda api_key: pytest.fail(
+            "wrong smoke selection must fail before client creation"
+        ),
+    )
+    assert code != 0
+    assert "no successful 10-company smoke matches" in output
+
+
 def test_formatter_helper_drift_invalidates_smoke_approval(
     tmp_path: Path,
     registry: dict[str, Path],
@@ -680,6 +734,53 @@ def test_retry_appends_events_without_mutating_history(
     context = load_run_context(run_id)
     assert len(context.state.retry_requests) == 1
     assert context.state.latest_errors == {}
+
+
+def test_retry_stage_filter_exits_error_when_other_stage_failures_remain(
+    tmp_path: Path,
+    registry: dict[str, Path],
+):
+    artifact, manifest = _manifest_artifact(
+        tmp_path / "source",
+        live_count=1,
+        dead_count=0,
+    )
+    settings = RequestSettings(model="gpt-5.4-nano", pass_b_effort="low")
+    run_id = "retry-stage-miss"
+    run_path = registry["runs"] / run_id
+    metadata = build_run_metadata(
+        kind="full",
+        run_id=run_id,
+        manifest_path=artifact,
+        manifest=manifest,
+        settings=settings,
+    )
+
+    async def handler(kwargs: dict[str, Any]) -> Any:
+        raise _FakeHTTPError(429, "too many requests", {"retry-after": "0"})
+
+    runner = ProductionRunner(
+        manifest=manifest,
+        run_dir=run_path,
+        client=_FakeClient(handler),
+        settings=_runner_settings(requests=settings, attempts=1),
+        run_metadata=metadata,
+        install_signal_handlers=False,
+    )
+    result = asyncio.run(runner.run())
+    assert result.all_complete is False
+
+    code, output = _invoke(["retry", run_id, "--stage", "pass_b"])
+
+    assert code != 0
+    assert "No active retriable failures matched the requested stage." in output
+    status_code, status_json = _invoke(["status", run_id, "--json"])
+    status_payload = json.loads(status_json)
+    assert status_code == 0
+    assert status_payload["retryable_failures"]["total"] == 1
+    assert status_payload["retryable_failures"]["by_stage_and_reason"] == {
+        "pass_a": {"rate_limit": 1}
+    }
 
 
 def test_status_human_and_json_are_offline(

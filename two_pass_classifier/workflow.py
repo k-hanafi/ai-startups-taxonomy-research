@@ -321,6 +321,12 @@ def find_matching_smoke(
 ) -> SmokeGate | None:
     """Find the newest complete smoke with an identical semantic identity."""
     expected_fingerprint = request_fingerprint(settings)
+    try:
+        expected_selection = [
+            row.company_id for row in select_smoke_manifest(parent_manifest).rows
+        ]
+    except WorkflowError:
+        return None
     matches: list[SmokeGate] = []
     if not RUNS_DIR.is_dir():
         return None
@@ -347,6 +353,8 @@ def find_matching_smoke(
                 metadata.get("semantic_request_fingerprint")
                 != expected_fingerprint
             ):
+                continue
+            if metadata.get("selection_company_ids") != expected_selection:
                 continue
             context = load_run_context(candidate.name)
         except Exception:
