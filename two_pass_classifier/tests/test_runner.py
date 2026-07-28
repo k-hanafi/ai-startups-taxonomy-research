@@ -399,6 +399,47 @@ async def test_resume_pass_a_only_then_skip_completed_company(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_same_runner_clears_shutdown_flag_before_next_run(tmp_path):
+    """In-process resume must not inherit a sticky shutdown flag."""
+    run_dir = tmp_path / "reuse-shutdown"
+    holder: dict[str, ProductionRunner] = {}
+
+    async def shutdown_handler(kwargs: dict[str, Any]) -> _FakeResponse:
+        assert "top_logprobs" in kwargs
+        holder["runner"].request_shutdown()
+        return _pass_a_response(response_id="a-1")
+
+    client = _FakeClient(shutdown_handler)
+    runner = ProductionRunner(
+        manifest=_manifest(),
+        run_dir=run_dir,
+        client=client,
+        settings=_runner_settings(),
+        install_signal_handlers=False,
+    )
+    holder["runner"] = runner
+    first = await runner.run()
+
+    assert first.stopped is True
+    assert first.completed_count == 0
+    assert first.pass_a_checkpoint_count == 1
+    assert runner.shutdown_event.is_set()
+
+    async def resume_handler(kwargs: dict[str, Any]) -> _FakeResponse:
+        assert "top_logprobs" not in kwargs
+        return _pass_b_response(response_id="b-1")
+
+    client.responses._handler = resume_handler
+    second = await runner.run()
+
+    assert second.stopped is False
+    assert second.all_complete is True
+    assert second.completed_count == 1
+    assert len(client.responses.calls) == 2
+    assert not runner.shutdown_event.is_set()
+
+
+@pytest.mark.asyncio
 async def test_unavailable_confidence_still_completes_with_blank_csv(tmp_path):
     async def handler(kwargs: dict[str, Any]) -> _FakeResponse:
         if "top_logprobs" in kwargs:
