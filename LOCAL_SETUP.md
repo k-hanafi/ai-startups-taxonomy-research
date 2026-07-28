@@ -107,9 +107,9 @@ python wayback_machine/scripts/run_extract_dead.py
 ```
 /
 ├── single_pass_classifier/ # Live V1 classifier application
-├── two_pass_classifier/ # Production V2 classifier (contracts, runner, CLI)
+├── two_pass_classifier/ # Production V2 classifier and contract owner
 ├── tavily_crawler/       # Live liveness and crawl application
-├── evals/                # Golden-set eval harness
+├── evals/                # Golden-set research harness over production V2
 ├── wayback_machine/      # Historical + survivorship strands
 ├── scripts/              # Supporting utilities
 ├── data/                 # Input data (git-ignored, not indexed)

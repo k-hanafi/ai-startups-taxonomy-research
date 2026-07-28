@@ -7,6 +7,8 @@ import json
 import logging
 import sys
 
+from evals import config as cfg
+
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -14,9 +16,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="python -m evals",
         description=(
-            "Golden-set evaluation harness for the startup classifier. "
-            "Paid screen path: cost-preview → run-evals → open-dashboard "
-            "(or the lower-level run-classification / matrix / score)."
+            "Golden-set research harness for the exact production classifier "
+            "owned by two_pass_classifier. Paid screen path: cost-preview, "
+            "run-evals, open-dashboard. Historical scored runs remain "
+            "readable, but runs from before eval alignment have an older "
+            "prompt fingerprint and cannot supply reusable Pass A banks."
         ),
     )
     subs = parser.add_subparsers(dest="command", required=True)
@@ -25,12 +29,23 @@ def main() -> None:
         "cost-preview",
         help=(
             "Print estimated cost for every locked matrix config and the "
-            "grand total (Pass A counted once per model). No API calls."
+            "grand total using production requests, output caps, and normal "
+            "Responses prices. Pass A is counted once per model. No API calls."
         ),
     )
     p_cost.add_argument(
         "--limit", type=int, default=None,
         help="Cap rows for a cheaper smoke estimate (default: full golden set)",
+    )
+    p_cost.add_argument(
+        "--manifest",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Optional immutable production manifest for the production N "
+            "reference. By default, discover the newest valid local manifest "
+            "or use the labeled 37,746-row offline fallback."
+        ),
     )
     p_run_evals = subs.add_parser(
         "run-evals",
@@ -86,28 +101,19 @@ def main() -> None:
     )
     p_drafts.add_argument("drafts_json", help="Path to a drafts JSON batch")
     subs.add_parser("review-page", help="Render the human-review HTML page (Stage 2)")
-    p_run = subs.add_parser(
-        "run",
-        help=(
-            "LEGACY single-pass runner (retired for the locked matrix). Prefer "
-            "run-classification. Kept only to rescore old banked runs."
-        ),
-    )
-    p_run.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
-    p_run.add_argument("--effort", default=None, help="Reasoning effort (default: screen effort)")
-    p_run.add_argument("--repeat", type=int, default=1, help="Repeat index for the run_id")
-    p_run.add_argument("--run-id", default=None, help="Override run_id to resume a partial run")
-    p_run.add_argument("--limit", type=int, default=None, help="Cap rows (cheap smoke test)")
-    p_run.add_argument("--dry-run", action="store_true", help="Print plan + cost, no API call")
-
     def _add_classification_run_args(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--model", default=None, help="Model name (default: first EVAL_MODEL)")
+        p.add_argument(
+            "--model",
+            default=None,
+            help=f"Production model (default: {cfg.DEFAULT_MODEL})",
+        )
         p.add_argument(
             "--effort-b",
             default=None,
             help=(
-                "Pass B reasoning effort (default: high). Locked matrix uses "
-                "low/medium/high."
+                "Pass B reasoning effort "
+                f"(default: {cfg.DEFAULT_PASS_B_EFFORT}). "
+                "Locked matrix uses low, medium, and high."
             ),
         )
         p.add_argument("--repeat", type=int, default=1, help="Repeat index for the run_id")
@@ -287,7 +293,7 @@ def main() -> None:
             if args.limit < 1:
                 sys.exit(f"--limit must be a positive row cap, got {args.limit}")
             rows = rows[: args.limit]
-        print_matrix_preview(rows)
+        print_matrix_preview(rows, manifest_path=args.manifest)
         return
     if args.command == "run-evals":
         from evals.orchestrate import run_evals
@@ -329,34 +335,15 @@ def main() -> None:
 
         render_review_page()
         return
-    if args.command == "run":
-        logging.warning(
-            "Single-pass `run` is LEGACY. Paid science uses "
-            "`run-classification` (bank Pass A once per model, sweep Pass B "
-            "effort)."
-        )
-        from evals import config as cfg
-        from evals.runner import run
-
-        run(
-            model=args.model or cfg.EVAL_MODELS[0],
-            effort=args.effort or cfg.SCREEN_REASONING_EFFORT,
-            repeat=args.repeat,
-            limit=args.limit,
-            dry_run=args.dry_run,
-            run_id=args.run_id,
-        )
-        return
     if args.command in ("run-classification", "run-two-pass"):
         if args.command == "run-two-pass":
             logging.warning(
                 "`run-two-pass` is deprecated; use `run-classification`."
             )
-        from evals import config as cfg
         from evals.classification import run_classification, validate_matrix_cell
 
-        model = args.model or cfg.EVAL_MODELS[0]
-        effort_b = args.effort_b or cfg.PASS_B_EFFORT
+        model = args.model or cfg.DEFAULT_MODEL
+        effort_b = args.effort_b or cfg.DEFAULT_PASS_B_EFFORT
         require_matrix = args.require_matrix_cell or args.require_stage8_cell
         if args.require_stage8_cell and not args.require_matrix_cell:
             logging.warning(
@@ -379,7 +366,6 @@ def main() -> None:
         return
 
     if args.command == "matrix":
-        from evals import config as cfg
         from evals.classification import matrix_cells
 
         cells = matrix_cells()

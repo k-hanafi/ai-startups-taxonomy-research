@@ -115,10 +115,12 @@ def render_cost_html(run_id: str, estimate: dict) -> str:
   <ul>
     <li>N_prod = {html.escape(str(assumptions.get("n_prod")))}
         ({html.escape(str(assumptions.get("n_prod_label")))})</li>
+    <li>Population source:
+        {html.escape(str(assumptions.get("production_population_source")))}</li>
     <li>n_golden = {html.escape(str(assumptions.get("n_golden")))}</li>
     <li>Cache source: {html.escape(str(assumptions.get("cache_source")))}</li>
-    <li>Sync Responses API pricing (no Batch API discount),
-        cache discount = {html.escape(str(assumptions.get("cache_discount")))}</li>
+    <li>Normal Responses API pricing (no Batch API discount),
+        cached input = ${html.escape(str(assumptions.get("cached_input_price_per_million")))}/1M</li>
     <li>Reasoning tokens billed inside output</li>
     <li>Do not use historical production cache rate
         ({html.escape(str(assumptions.get("do_not_use_historical_production_cache_rate")))})</li>

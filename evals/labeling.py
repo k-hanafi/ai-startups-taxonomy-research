@@ -3,7 +3,7 @@
 Flow:
 1. export_labeling_workspace() dumps each golden-set company as the exact
    formatted user message the classifier models receive (via the production
-   single_pass_classifier.formatter), with no production prediction attached, so the drafter
+   single-pass formatter), with no production prediction attached, so the drafter
    judges the same evidence the models see and is not anchored by nano's
    answer.
 2. The drafter (Fable, in-session) fills draft_* columns via apply_drafts().
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from single_pass_classifier.formatter import format_user_message
+from two_pass_classifier.formatter import format_input_message
 
 from evals.paths import (
     CLASSIFIER_INPUT_CSV,
@@ -75,7 +75,7 @@ def export_labeling_workspace() -> list[Path]:
     paths: list[Path] = []
     for seq, row in enumerate(merged.to_dict(orient="records"), start=1):
         row["name"] = _s(row.get("name_ci")) or _s(row.get("name"))
-        body = format_user_message(row)
+        body = format_input_message(row)
         path = LABELING_WORKSPACE_DIR / f"{seq:03d}_{row['org_uuid'][:8]}.txt"
         path.write_text(body, encoding="utf-8")
         paths.append(path)

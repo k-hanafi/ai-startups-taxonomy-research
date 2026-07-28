@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 
 import pytest
@@ -10,13 +11,22 @@ from evals import config as cfg
 from evals import cost_extrapolate as ce
 from evals import report as report_mod
 from evals import scoring
+from two_pass_classifier.input_contract import SOURCE_COLUMNS
+from two_pass_classifier.manifest import build_manifest, write_manifest
+
+
+@pytest.fixture(autouse=True)
+def _empty_manifest_directory(tmp_path, monkeypatch):
+    manifests = tmp_path / "manifests"
+    manifests.mkdir()
+    monkeypatch.setattr(ce, "MANIFESTS_DIR", manifests)
 
 
 def test_ladder_known_answer_classification_with_cache():
     # 1M input (500k cached) + 1M output on nano: sync in=$0.20, out=$1.25.
     # After cache: uncached 0.5M @ 0.20 = $0.10, cached 0.5M @ 0.10 = $0.05
     # → $0.15 + $1.25 = $1.40. Production runs the sync Responses API, so
-    # no batch discount: scale × N_PROD_DEFAULT (n_golden=1) → $1.40 * N.
+    # No Batch discount: scale × fallback N (n_golden=1) gives $1.40 * N.
     records = [{
         "a_input_tokens": 400_000, "a_output_tokens": 100_000,
         "a_cached_tokens": 200_000, "a_reasoning_tokens": 0,
@@ -26,8 +36,11 @@ def test_ladder_known_answer_classification_with_cache():
     est = ce.production_cost_from_records(records, "gpt-5.4-nano")
     assert est["available"] is True
     assert est["assumptions"]["architecture"] == "classification"
-    assert est["assumptions"]["n_prod"] == cfg.N_PROD_DEFAULT
-    assert est["assumptions"]["n_prod_label"] == "evidence_universe"
+    assert est["assumptions"]["n_prod"] == cfg.OFFLINE_PRODUCTION_ROW_FALLBACK
+    assert est["assumptions"]["n_prod_label"] == "offline_fallback_37746"
+    assert est["assumptions"]["production_population_source"] == (
+        "offline_fallback"
+    )
     assert est["assumptions"]["cache_source"] == "measured_from_run"
 
     s1 = est["steps"]["1_golden_sync"]
@@ -43,10 +56,79 @@ def test_ladder_known_answer_classification_with_cache():
 
     assert "3_batch" not in est["steps"]
     s3 = est["steps"]["3_scale"]
-    assert s3["n_prod"] == cfg.N_PROD_EVIDENCE_UNIVERSE
+    assert s3["n_prod"] == cfg.OFFLINE_PRODUCTION_ROW_FALLBACK
     assert s3["estimated_production_usd"] == pytest.approx(
-        1.40 * cfg.N_PROD_EVIDENCE_UNIVERSE
+        1.40 * cfg.OFFLINE_PRODUCTION_ROW_FALLBACK
     )
+
+
+def test_population_comes_from_manifest_when_present(tmp_path, monkeypatch):
+    live = tmp_path / "live.csv"
+    dead = tmp_path / "dead.csv"
+    live_raw = tmp_path / "raw_results.jsonl"
+    dead_scrape = tmp_path / "scrape_processed_dead.csv"
+    base = {column: "" for column in SOURCE_COLUMNS}
+    rows = [
+        {
+            **base,
+            "org_uuid": f"u{index}",
+            "name": f"Company {index}",
+            "founded_date": "2024-01",
+            "website_evidence": "Direct company evidence.",
+        }
+        for index in range(3)
+    ]
+    with live.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SOURCE_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+    with dead.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SOURCE_COLUMNS)
+        writer.writeheader()
+    with live_raw.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(
+                json.dumps(
+                    {
+                        "org_uuid": row["org_uuid"],
+                        "ok": True,
+                        "requested_at": "2026-05-04T17:12:06.086815+00:00",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+    with dead_scrape.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "org_uuid",
+                "name",
+                "homepage_url",
+                "snapshot_ts",
+                "website_pages_used",
+                "website_evidence",
+            ],
+        )
+        writer.writeheader()
+    manifest = build_manifest(
+        live,
+        dead,
+        live_raw_results=live_raw,
+        dead_scrape_processed=dead_scrape,
+    )
+    manifests = tmp_path / "production_manifests"
+    write_manifest(manifest, manifests)
+    monkeypatch.setattr(ce, "MANIFESTS_DIR", manifests)
+
+    estimate = ce.production_cost_from_records(
+        [{"input_tokens": 100, "output_tokens": 10, "cached_tokens": 0}],
+        "gpt-5.4-nano",
+    )
+
+    assert estimate["assumptions"]["n_prod"] == 3
+    assert estimate["assumptions"]["production_population_source"] == "manifest"
+    assert estimate["assumptions"]["manifest_path"]
 
 
 def test_legacy_run_without_cached_field_marks_cache_unavailable():
@@ -124,7 +206,8 @@ def test_format_cost_ladder_mentions_assumptions():
     text = ce.format_cost_ladder(ce.production_cost_from_records(records, "gpt-5.4-nano"))
     assert "PRODUCTION COST EXTRAPOLATION" in text
     assert "Cache source" in text
-    assert str(cfg.N_PROD_DEFAULT) in text or f"{cfg.N_PROD_DEFAULT:,}" in text
+    fallback = cfg.OFFLINE_PRODUCTION_ROW_FALLBACK
+    assert str(fallback) in text or f"{fallback:,}" in text
 
 
 def test_score_run_includes_production_cost_estimate(mini_run_factory):
@@ -157,7 +240,7 @@ def test_report_writes_html(tmp_path, monkeypatch, mini_run_factory):
     html = out.read_text(encoding="utf-8")
     assert "Production cost extrapolation" in html
     assert "After cache" in html
-    assert str(cfg.N_PROD_DEFAULT) in html
+    assert str(cfg.OFFLINE_PRODUCTION_ROW_FALLBACK) in html
 
 
 GOLD_HEADER = "org_uuid,draft_ai_native,draft_subclass,draft_rad\n"

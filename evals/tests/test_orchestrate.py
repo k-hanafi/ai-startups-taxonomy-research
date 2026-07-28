@@ -97,6 +97,32 @@ def test_count_completed_and_spend_from_predictions(tmp_path, monkeypatch):
     ) == pytest.approx(0.40)
 
 
+def test_spend_uses_production_cached_input_price(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        orch,
+        "run_predictions_path",
+        lambda run_id: tmp_path / run_id / "predictions.jsonl",
+    )
+    run_id = "cached-cell"
+    (tmp_path / run_id).mkdir()
+    append_jsonl(
+        tmp_path / run_id / "predictions.jsonl",
+        {
+            "custom_id": "startup-u0",
+            "status": "completed",
+            "a_input_tokens": 1_000_000,
+            "a_cached_tokens": 500_000,
+            "a_output_tokens": 0,
+        },
+    )
+
+    assert orch.spend_from_predictions(
+        run_id,
+        "gpt-5.4-nano",
+        prefixes=("a",),
+    ) == pytest.approx(0.15)
+
+
 def test_cell_already_scored_requires_exact_row_count(tmp_path, monkeypatch):
     monkeypatch.setattr(orch, "run_scored_path", lambda rid: tmp_path / rid / "scored.json")
     monkeypatch.setattr(orch, "run_config_path", lambda rid: tmp_path / rid / "config.json")

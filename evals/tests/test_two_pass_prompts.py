@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 PROMPTS_DIR = (
-    Path(__file__).resolve().parents[1] / "two_pass_classifier" / "prompts"
+    Path(__file__).resolve().parents[2] / "two_pass_classifier" / "prompts"
 )
 
 

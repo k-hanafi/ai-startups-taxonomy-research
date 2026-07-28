@@ -83,8 +83,28 @@ Environment variables take precedence over `keys/openai.env`.
 
 ## Relationship to the eval harness
 
-`two_pass_classifier` owns production classifier behavior. The next stack
-slice points `evals` at these contracts so unpaid checks match the live path.
-Until then, treat this package as the production CLI and contracts owner, and
-keep historical eval runs scoreable but not as reusable Pass A banks after
-alignment lands.
+`two_pass_classifier` is the only owner of classifier behavior. The
+`evals` package imports its prompts, schemas, request builders, formatter and
+cohort semantics, confidence extraction, supported models, defaults, output
+caps, and normal Responses pricing. Evals separately owns the golden set,
+three-model by three-effort matrix, Pass A banks, scoring, calibration,
+dashboards, and archives.
+
+Existing eval results created before this alignment, including the local
+2026-07-27 sweep, used the prior prompt fingerprint. They remain valid
+historical artifacts, but their Pass A banks are rejected for reuse. A new
+aligned sweep starts with this offline cost gate:
+
+```bash
+OPENAI_API_KEY=placeholder python -m evals cost-preview
+```
+
+After reviewing that estimate, run the paid sweep with:
+
+```bash
+python -m evals run-evals
+```
+
+The first command makes no API calls. The second command rebuilds all three
+Pass A banks, runs all nine Pass B cells with normal Responses calls, scores
+them, and archives the resulting dashboard.

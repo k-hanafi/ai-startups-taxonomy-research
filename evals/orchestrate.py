@@ -25,12 +25,10 @@ from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 from rich.text import Text
+from two_pass_classifier import config as production_config
 
 from evals import config as cfg
-from evals.classification import (
-    matrix_cells,
-    pass_a_bank_covers,
-)
+from evals.classification import matrix_cells
 from evals.cost_preview import print_matrix_preview
 from evals.jsonl_io import iter_jsonl
 from evals.paths import (
@@ -88,7 +86,7 @@ class Job:
 def require_openai_key() -> None:
     """Refuse with a plain-English message if the API key is missing/placeholder.
 
-    ``single_pass_classifier.config`` already loads ``keys/openai.env``; this only preflights so
+    The single-pass config already loads ``keys/openai.env``; this only preflights so
     beginners see a clear fix instead of a KeyError traceback.
     """
     from dotenv import load_dotenv
@@ -161,13 +159,22 @@ def spend_from_predictions(
     path = run_predictions_path(run_id)
     if not path.exists():
         return 0.0
-    pricing = cfg.require_model_pricing(model)
+    pricing = production_config.require_model_pricing(model)
     total = 0.0
     for rec in iter_jsonl(path, tolerate_truncated_final=True):
         for prefix in prefixes:
             inp = rec.get(f"{prefix}_input_tokens") or 0
             out = rec.get(f"{prefix}_output_tokens") or 0
-            total += (inp / 1e6) * pricing["input"] + (out / 1e6) * pricing["output"]
+            cached = min(
+                int(rec.get(f"{prefix}_cached_tokens") or 0),
+                int(inp),
+            )
+            uncached = int(inp) - cached
+            total += (
+                (uncached / 1e6) * pricing["input"]
+                + (cached / 1e6) * pricing["cached_input"]
+                + (out / 1e6) * pricing["output"]
+            )
     return total
 
 
@@ -206,11 +213,6 @@ def cell_already_scored(run_id: str, expected_n: int) -> bool:
         if conf.get("n_rows") is not None and int(conf["n_rows"]) != expected_n:
             return False
     return True
-
-
-def bank_already_complete(model: str, custom_ids: list[str]) -> bool:
-    bank_id = pass_a_bank_run_id(model)
-    return pass_a_bank_covers(bank_id, custom_ids)
 
 
 def mint_cell_run_id(

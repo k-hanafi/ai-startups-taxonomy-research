@@ -1,9 +1,8 @@
 """Golden-set evaluation harness for the startup classifier.
 
-Standalone package: benchmarks OpenAI models against a 100-company
-human-verified golden dataset and validates the logprob-confidence
-methodology before any production pipeline change.
-
-Only three read-only production-identity artifacts may be imported from
-single_pass_classifier/ (schema, formatter, system prompt loader). Nothing here modifies single_pass_classifier/.
+The harness owns golden data, matrix orchestration, scoring, calibration,
+dashboards, and archives. ``two_pass_classifier`` owns every classifier
+contract used by the harness: prompts, schemas, formatting, cohort assignment,
+request bodies, confidence extraction, supported models, output caps, and
+pricing.
 """

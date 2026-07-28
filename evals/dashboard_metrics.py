@@ -3,9 +3,9 @@
 Pure compute. The HTML builder only shapes Plotly traces and the config
 filter. No OpenAI imports: offline stages must not require API keys.
 
-Fixture path exists because paid matrix runs are not banked yet. Real
-``evals/runs/*/scored.json`` files plug in with the same loader once they
-exist.
+The fixture remains the default until a new production-aligned paid matrix is
+run. Historical scored runs use the prior prompt fingerprint and can still be
+loaded explicitly.
 """
 
 from __future__ import annotations
@@ -224,7 +224,16 @@ def _cost_breakdown(scored: dict[str, Any]) -> Optional[dict[str, Any]]:
         "n_golden": _i(assumptions.get("n_golden", s1.get("n_rows", cost.get("n_rows")))),
         "n_prod": _i(assumptions.get("n_prod", s3.get("n_prod"))),
         "n_prod_label": assumptions.get("n_prod_label") or s3.get("n_prod_label"),
-        "cache_discount": _f(assumptions.get("cache_discount", s2.get("cache_discount"))),
+        "production_population_source": assumptions.get(
+            "production_population_source"
+        ),
+        "manifest_path": assumptions.get("manifest_path"),
+        "cached_input_price_per_mtok": _f(
+            assumptions.get(
+                "cached_input_price_per_million",
+                s2.get("cached_input_price_per_million"),
+            )
+        ),
         "cache_source": assumptions.get("cache_source"),
         "total_input_tokens": _i(
             s1.get("total_input_tokens", cost.get("total_input_tokens"))
@@ -355,7 +364,6 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
     pbm = scored.get("pass_b_metrics") or {}
     subclass_cond = pbm.get("subclass_family_conditional") or {}
     rad_ai = pbm.get("rad_ai_native_only") or {}
-    boundary = pbm.get("boundary_disagreement") or {}
     latency = ((scored.get("latency") or {}).get("latency_s")) or {}
     if not latency and screen:
         latency = {
@@ -412,11 +420,6 @@ def config_row_from_scored(scored: dict[str, Any]) -> dict[str, Any]:
             float(rad_ai["accuracy"])
             if rad_ai.get("accuracy") is not None
             else screen.get("rad_ai_native_only_acc")
-        ),
-        "boundary_disagreement_rate": (
-            float(boundary["rate"])
-            if boundary.get("rate") is not None
-            else screen.get("boundary_disagreement_rate")
         ),
         "ai_native_acc": float(
             ai_native.get("accuracy", screen.get("ai_native_acc", 0.0))
@@ -477,6 +480,33 @@ def _sort_configs(configs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         )
 
     return sorted(configs, key=key)
+
+
+def _production_population(
+    configs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    recorded = [
+        config["cost_breakdown"]
+        for config in configs
+        if config.get("cost_breakdown")
+        and config["cost_breakdown"].get("n_prod") is not None
+    ]
+    counts = {int(item["n_prod"]) for item in recorded}
+    labels = {
+        str(item["n_prod_label"])
+        for item in recorded
+        if item.get("n_prod_label")
+    }
+    sources = {
+        str(item["production_population_source"])
+        for item in recorded
+        if item.get("production_population_source")
+    }
+    return {
+        "row_count": next(iter(counts)) if len(counts) == 1 else None,
+        "label": next(iter(labels)) if len(labels) == 1 else None,
+        "source": next(iter(sources)) if len(sources) == 1 else None,
+    }
 
 
 def _aggregate_finalist_repeats(configs: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -542,7 +572,6 @@ def _aggregate_finalist_repeats(configs: list[dict[str, Any]]) -> list[dict[str,
             "is_aggregate": True,
             "subclass_family_conditional_acc": None,
             "rad_ai_native_only_acc": None,
-            "boundary_disagreement_rate": None,
         })
     return extras
 
@@ -899,6 +928,7 @@ def build_metrics(
         "n_configs": len(configs),
         "run_instance": build_run_instance(scored_runs, synthetic=synthetic),
         "robustness": build_robustness(scored_runs),
+        "production_population": _production_population(configs),
         "configs": configs,
         "config_ids": [c["id"] for c in configs],
         "model_groups": _model_groups(configs),
