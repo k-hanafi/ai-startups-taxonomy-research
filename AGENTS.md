@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-28 | Active branch: `pr/align-evals-to-v2` (evals import production V2 contracts)
+Last updated: 2026-07-28 | Active branch: `cursor/v2-dashboard-confidence-plan-ecb9` (V2 prod dashboard plan: Confidence section)
 
 ---
 
@@ -54,6 +54,7 @@ Authoritative plans (read when resuming a strand; committed under **`.cursor/pla
 - `.cursor/plans/logprob_confidence_classifier_*.plan.md` — logprob-based confidence methodology (active).
 - `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; production-aligned contracts built; prior local matrix uses the old fingerprint and stays historical; next = `python -m evals run-evals` for a fresh aligned 9-cell matrix).
 - `.cursor/plans/v1_alive_dead_dashboard.plan.md` — V1 alive-vs-dead dashboard PRD (implemented; evidence-only universe, 4-act survivorship section, coverage checklist for the retired insights dashboard).
+- `.cursor/plans/v2_production_dashboard.plan.md` — V2 production alive+dead dashboard (WU-5b; drafting; Confidence = three field subsections with measurement explainers).
 - `.cursor/plans/eval_suite_redesign.plan.md` — Classifier Eval Suite redesign contract + per-tab spec (implemented on `eval/suite-redesign`).
 - `.cursor/plans/eval_cli_redesign.plan.md` — beginner-friendly paid eval CLI (`cost-preview` / `run-evals` / `open-dashboard`) on `eval/cli-redesign`.
 
