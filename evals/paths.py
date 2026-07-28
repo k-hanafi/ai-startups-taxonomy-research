@@ -68,8 +68,10 @@ def run_scored_path(run_id: str) -> Path:
 LABELING_WORKSPACE_DIR = GOLDEN_DIR / "workspace"
 REVIEW_PAGE_HTML = GOLDEN_DIR / "review_page.html"
 
-# Two-pass classifier prompts (committed, reviewed in PR #14).
-PROMPTS_DIR = PROJECT_ROOT / "two_pass_classifier" / "prompts"
+# Legacy eval Pass A/B prompt drafts (match evals/classification.py schemas).
+# Production V2 prompts live only under two_pass_classifier/prompts/; full eval
+# ownership rewrite is a later PR.
+PROMPTS_DIR = EVALS_DIR / "prompts"
 BINARY_GATE_PROMPT = PROMPTS_DIR / "binary_gate_prompt.txt"
 SUBCLASS_RAD_PROMPT = PROMPTS_DIR / "subclass_rad_prompt.txt"
 FAMILY_BLOCK_AI = PROMPTS_DIR / "family_block_ai_native.txt"
