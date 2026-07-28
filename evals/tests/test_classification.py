@@ -82,7 +82,7 @@ def test_pass_b_prompt_embeds_matching_family_block():
     p0 = classification.load_pass_b_prompt(0)
     assert "{family_block}" not in p1 and "{family_block}" not in p0
     assert "1A | Foundation Layer" in p1 and "0A |" not in p1.split("ANALYTICAL")[0][:2000]
-    assert "0A | Traditional Tech or SaaS" in p0 and "1A | Foundation Layer" not in p0
+    assert "0A | Traditional Tech / SaaS" in p0 and "1A | Foundation Layer" not in p0
 
 
 def test_strict_schemas_forbid_extra_properties():

@@ -19,6 +19,7 @@ from two_pass_classifier.request_builder import RequestSettings
 from two_pass_classifier.runner import (
     ProductionRunner,
     RunnerSettings,
+    _idempotency_key,
 )
 
 
@@ -493,6 +494,101 @@ async def test_429_is_journaled_retried_and_reduces_global_concurrency(tmp_path)
         event for event in events if event["event_type"] == "pass_a_completed"
     )
     assert pass_a["attempt"] == 2
+
+
+def test_idempotency_key_is_stable_across_attempts_for_one_stage():
+    first = _idempotency_key(
+        company_id="company-1",
+        stage="pass_b",
+        input_hash="hash-1",
+    )
+    second = _idempotency_key(
+        company_id="company-1",
+        stage="pass_b",
+        input_hash="hash-1",
+    )
+    other_stage = _idempotency_key(
+        company_id="company-1",
+        stage="pass_a",
+        input_hash="hash-1",
+    )
+    assert first == second == "company-1:pass_b:hash-1"
+    assert other_stage != first
+
+
+@pytest.mark.asyncio
+async def test_pass_b_sends_stable_idempotency_key(tmp_path):
+    seen_pass_a_keys: list[str] = []
+
+    async def handler(kwargs: dict[str, Any]) -> _FakeResponse:
+        headers = kwargs.get("extra_headers") or {}
+        if "top_logprobs" in kwargs:
+            seen_pass_a_keys.append(headers["Idempotency-Key"])
+            assert headers["Idempotency-Key"] == _idempotency_key(
+                company_id="company-1",
+                stage="pass_a",
+                input_hash="hash-1",
+            )
+            if len(seen_pass_a_keys) == 1:
+                raise _FakeHTTPError(
+                    429,
+                    "too many requests",
+                    {"retry-after": "0", "x-request-id": "rate-request"},
+                )
+            return _pass_a_response()
+        assert headers["Idempotency-Key"] == _idempotency_key(
+            company_id="company-1",
+            stage="pass_b",
+            input_hash="hash-1",
+        )
+        assert headers["X-Client-Request-Id"] == headers["Idempotency-Key"]
+        return _pass_b_response()
+
+    runner = ProductionRunner(
+        manifest=_manifest(),
+        run_dir=tmp_path / "idempotency",
+        client=_FakeClient(handler),
+        settings=_runner_settings(attempts=2),
+        install_signal_handlers=False,
+    )
+    result = await runner.run()
+    assert result.all_complete is True
+    assert seen_pass_a_keys == [
+        "company-1:pass_a:hash-1",
+        "company-1:pass_a:hash-1",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_empty_run_metadata_cannot_resume_recorded_run_config(tmp_path):
+    run_dir = tmp_path / "run-config"
+    holder: dict[str, ProductionRunner] = {}
+
+    async def stop_after_a(kwargs: dict[str, Any]) -> _FakeResponse:
+        holder["runner"].request_shutdown()
+        return _pass_a_response()
+
+    first = ProductionRunner(
+        manifest=_manifest(),
+        run_dir=run_dir,
+        client=_FakeClient(stop_after_a),
+        settings=_runner_settings(),
+        run_metadata={"cohort_label": "pilot"},
+        install_signal_handlers=False,
+    )
+    holder["runner"] = first
+    await first.run()
+
+    second = ProductionRunner(
+        manifest=_manifest(),
+        run_dir=run_dir,
+        client=_FakeClient(stop_after_a),
+        settings=_runner_settings(),
+        run_metadata={},
+        install_signal_handlers=False,
+    )
+    with pytest.raises(ResumeMismatchError, match="run configuration"):
+        await second.run()
 
 
 @pytest.mark.asyncio

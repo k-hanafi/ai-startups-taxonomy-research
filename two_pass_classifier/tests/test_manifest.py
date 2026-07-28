@@ -310,6 +310,38 @@ def test_live_join_ignores_non_ok_raw_rows(tmp_path):
     assert manifest.rows[0].website_snapshot_date == "2026-05-04"
 
 
+def test_live_join_keeps_last_successful_requested_at(tmp_path):
+    live = tmp_path / "live.csv"
+    dead = tmp_path / "dead.csv"
+    live_raw = tmp_path / "raw_results.jsonl"
+    dead_scrape = tmp_path / "scrape_processed_dead.csv"
+    _write_csv(live, [_row("live-1", "evidence")])
+    _write_csv(dead, [_row("dead-1", "archive")])
+    _write_dead_scrape(dead_scrape, [("dead-1", "20240902223056")])
+    _write_live_raw(
+        live_raw,
+        [
+            {
+                "org_uuid": "live-1",
+                "ok": True,
+                "requested_at": "2020-01-01T00:00:00+00:00",
+            },
+            {
+                "org_uuid": "live-1",
+                "ok": True,
+                "requested_at": "2026-05-04T17:12:06.086815+00:00",
+            },
+        ],
+    )
+    manifest = build_manifest(
+        live,
+        dead,
+        live_raw_results=live_raw,
+        dead_scrape_processed=dead_scrape,
+    )
+    assert manifest.rows[0].website_snapshot_date == "2026-05-04"
+
+
 @pytest.mark.parametrize("source", ["live", "dead"])
 def test_duplicate_ids_fail(tmp_path, source):
     duplicate_rows = [_row("same", "one"), _row("same", "two")]

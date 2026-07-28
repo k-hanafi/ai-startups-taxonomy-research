@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-27 | Active branch: `pr/two-pass-production-cli` (V2 CLI + smoke/cost gates)
+Last updated: 2026-07-28 | Active branch: `pr/resumable-async-runner` (V2 async runner + journal resume)
 
 ---
 
@@ -210,6 +210,7 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 ### `evals/` — golden-set eval harness
 | Path | Purpose |
 |------|---------|
+| `prompts/` | Legacy Pass A/B prompt drafts paired with `evals/classification.py` schemas (kept separate from frozen V2 prompts until eval ownership lands) |
 | `dashboard_metrics.py` | Eval dashboard metrics: scored.json/fixture → chart metrics (ECE, reliability bins, selective curves, vs_baseline, Pass B isolating fields, finalist mean±range aggregates, per-config `cost_breakdown` for the cost popover). Real loads recompute production $ from each run's `predictions.jsonl` and scale by the newest valid production manifest, with an explicit offline fallback of 37,746. Also `build_robustness` + `build_run_instance`. No OpenAI import. |
 | `tests/fixtures/dashboard/dashboard_mock_runs.json` | Synthetic locked matrix; Pass A metrics identical across efforts within each model (bank-once design); calibration blocks derive from one set of 100 synthetic rows per model (nano seeds the ECE ~0.077 early signal); per-run robustness blocks |
 | `instances.py` | Numbered dashboard archive: writes `eval_instance_NN.html` + `index.html` + `instances.json` under `01_Presentation_Materials/eval_instances/`; an instance is identified by the scored runs behind it (same sweep replaces its page; a later sweep still gets a new number); synthetic `--save-instance` previews replace the prior mock. Also owns the run-headline / run-meta text shared with the suite header card. |
