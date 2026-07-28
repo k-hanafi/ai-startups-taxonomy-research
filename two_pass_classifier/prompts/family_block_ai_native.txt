@@ -1,0 +1,164 @@
+============================================================
+FIXED FAMILY: AI-NATIVE (PriorBinaryVerdict = 1)
+============================================================
+
+Choose exactly one subclass from 1A through 1G, then assign RAD-H, RAD-M, or
+RAD-L. The family is fixed. Never output a 0-series subclass or RAD-NA.
+
+1A | Foundation Layer
+Companies building the base of the AI stack: frontier or foundation models,
+novel model architectures, core AI research, ML compute orchestration, model
+serving infrastructure, or vector databases. The model or infrastructure is
+the artifact other AI products build on.
+
+Key signal: the primary customer is another AI builder, and the company creates
+the model or foundational infrastructure rather than an end-user application.
+Examples include Anthropic, Mistral, Cohere, Pinecone, Modal, and Together AI.
+
+1B | AI-Native Infrastructure and Tooling
+Companies whose primary product serves the AI development lifecycle. This
+includes evaluation, fine-tuning, AI observability, prompt management,
+synthetic data, AI safety, model monitoring, and LLMOps.
+
+Key signal: the primary customer is an AI developer or AI team. A conventional
+database, integration platform, security product, or developer tool with a
+recent AI feature is not 1B unless serving AI builders is now the primary
+purpose of the product.
+
+1C | Thin LLM Wrapper
+Products whose mechanism is a third-party model API with little proprietary
+depth. Common signals are a small surface area, commodity prompting, no unique
+data flywheel, no material fine-tuning, shallow workflows, and easy replication
+by a small team.
+
+The business problem may predate generative AI. The company is still
+AI-native because removing the model call breaks this specific product.
+
+1D | Thick LLM Integrator
+Products built on third-party models with meaningful proprietary value such as
+domain adaptation, unique datasets, deep workflow integration, retrieval or
+index infrastructure, enterprise controls, distribution, network effects, or
+a strong user-experience moat.
+
+Key distinction from 1C: replacing or recreating the product requires
+substantial proprietary work beyond reproducing prompts and API calls.
+Key distinction from 1E: core intelligence still primarily flows from
+third-party foundation models rather than a deeply proprietary vertical model
+or classical ML stack.
+
+1E | Applied Vertical AI
+AI purpose-built for a specific domain where AI produces or fundamentally
+transforms the domain workflow. Signals include domain-specific datasets,
+expert validation, proprietary models, fine-tuning, classical ML pipelines,
+and deep integration into a regulated or specialized workflow.
+
+Key distinction from a conventional vertical SaaS product: removing AI
+destroys the core product mechanism rather than removing one feature.
+Key distinction from 1D: the evidence supports deep domain-specific AI
+capability, not only a general model wrapped in a vertical interface.
+
+1F | Autonomous Agent Systems
+The core product plans and executes multi-step tasks with tools, memory, or
+background operation. It acts in software or the world with limited
+step-by-step human approval.
+
+Require concrete action signals such as tool use, browsing, code execution,
+scheduled work, background jobs, or multi-step workflow completion. Marketing
+use of "agent" is insufficient. A responsive chatbot belongs in 1C or 1D
+unless autonomous action is the central mechanism.
+
+1G | Generative Content Platforms
+The customer deliverable is generated media such as images, audio, video,
+music, or 3D assets. Generation is the product, not one feature inside a
+traditional creative suite.
+
+Subclass follows what the product produces. A thin product calling a
+third-party media-generation API can still be 1G; its lack of proprietary
+depth affects RAD rather than subclass.
+
+------------------------------------------------------------
+SUBCLASS TIE-BREAKERS
+------------------------------------------------------------
+
+- Foundation models or foundational infrastructure sold to AI builders: 1A.
+- Tools for building, evaluating, operating, or securing AI systems: 1B.
+- General LLM API product with little proprietary depth: 1C.
+- General LLM API product with substantial proprietary depth: 1D.
+- Deep domain-specific AI or classical ML system: 1E.
+- AI that autonomously plans and acts across steps: 1F.
+- Generated media is the customer deliverable: 1G.
+- A company training its own models for one vertical domain is usually 1E,
+  not 1A.
+- A pre-2023 computer vision, NLP, recommendation, or forecasting company can
+  be 1E when AI is the core mechanism.
+- If evidence cannot distinguish the mechanism within this fixed family, use
+  1C as the conservative fallback and set subclass_confidence to 1.
+
+============================================================
+RAD: RESOURCE-ADJUSTED AI DEPENDENCY
+============================================================
+
+RAD measures structural dependence on current third-party generative AI
+infrastructure, adjusted for the company's demonstrated proprietary capability
+and resources.
+
+Core counterfactual: if the company had substantial funding and five years,
+could it build a competitive product without depending on current third-party
+foundation-model APIs?
+
+RAD-H | High Structural Dependency
+The product remains structurally tied to third-party frontier capabilities or
+model APIs that the company could not credibly reproduce. Signals include
+explicit reliance on external models, little proprietary model or data depth,
+and a commodity wrapper surface.
+
+RAD-M | Medium or Transitional Dependency
+The product depends on external models today but has credible partial
+independence through proprietary data, fine-tuning, model development, deep
+workflow assets, pre-2023 classical ML, meaningful technical scale, or the
+ability to switch providers without losing the whole product.
+
+RAD-L | Low Structural Dependency
+The company demonstrably builds and trains proprietary AI at the core, or has
+deeply independent AI capability that would survive the loss of third-party
+model APIs. Strong evidence is required.
+
+RAD rules:
+- 1C is RAD-H or RAD-M, never RAD-L.
+- 1D is RAD-M or RAD-L, never RAD-H.
+- 1A, 1B, 1E, 1F, and 1G can receive any RAD level based on evidence.
+- Before defaulting to RAD-H, look for own-model claims, training,
+  fine-tuning, research teams, proprietary datasets, data flywheels,
+  pre-2023 ML capability, multi-provider architecture, and credible scale.
+- GENAI-ERA companies with no proprietary-depth signal generally default to
+  RAD-H.
+- PRE-GENAI AI products with credible classical ML or proprietary depth
+  generally support RAD-M or RAD-L.
+- Funding or headcount alone never proves independence.
+- If evidence is insufficient in the fixed AI-native family, use RAD-H and
+  set rad_confidence to 1.
+
+============================================================
+AI-NATIVE OUTPUT CONTRACT
+============================================================
+
+Return one JSON object with exactly these fields in this order:
+
+1. subclass
+   One of 1A, 1B, 1C, 1D, 1E, 1F, 1G.
+2. rad_score
+   One of RAD-H, RAD-M, RAD-L.
+3. subclass_confidence
+   Integer 1 through 5.
+4. rad_confidence
+   Integer 1 through 5.
+5. subclass_reasoning
+   Maximum 100 words.
+6. rad_reasoning
+   Maximum 100 words.
+7. sources_used
+   Structured source array defined by the main prompt.
+8. subclass_critique
+   Maximum 100 words.
+9. rad_critique
+   Maximum 100 words.
