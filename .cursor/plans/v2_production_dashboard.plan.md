@@ -11,7 +11,33 @@
   alive + dead under one classifier version. Never mix V1 and V2 verdicts.
 - **Locked so far (2026-07-28):** Confidence is three subsections, one per
   professor confidence field, each opening with a measurement explainer before
-  any charts.
+  any charts. Dashboard copy style locked (see below).
+
+## Copy style (locked)
+
+Hard rules for every user-facing string in the dashboard: titles, section
+intros, chart captions, KPI labels, methods box, footers, banners.
+
+1. **No em dashes.** Never use `—` or `--` as punctuation. Use a comma, period,
+   colon, parentheses, or a new sentence.
+2. **No AI-slop voice.** Ban stock filler and soft hedging that reads generated:
+   "delve", "landscape", "robust", "nuanced", "comprehensive", "it is worth
+   noting", "in today's", "plays a crucial role", "underscores", "leverages",
+   "empower", "cutting-edge", rhetorical questions as section intros, and
+   stacked adjective chains.
+3. **Punchy and direct.** One claim per sentence. Prefer short verbs and
+   concrete nouns. Cut throat-clearing ("In this section we examine…") and
+   restated takeaways after charts.
+4. **Numbers do the talking.** Lead with the finding, then the chart. Captions
+   state what the axes mean and any caveat the reader must not miss. No essay
+   paragraphs under charts.
+5. **Explainers stay short.** Measurement explainers (section 5) are 3 to 5
+   short sentences max, then the chart. Methods detail goes in the Act 4
+   methods box or a footnote, not the body.
+
+Apply these rules when writing new copy and when forking V1 strings into the
+V2 builder. Existing V1 slop in inherited titles or captions gets rewritten in
+the same pass that builds the V2 HTML.
 
 ## Deliverable (unchanged intent)
 
@@ -61,8 +87,8 @@ charts for that field. Do not dump all three chart banks before the explainers.
 
 ### 5.1 AI-native confidence (logprob)
 
-**Measurement explainer (required, before charts).** Plain-English primer,
-professor-readable, no API jargon wall. Cover:
+**Measurement explainer (required, before charts).** Short primer, no API
+jargon wall, obeys the copy-style rules above. Cover:
 
 1. Pass A only answers `ai_native` as `0` or `1`. The model does not write a
    confidence score for this field.
@@ -74,10 +100,10 @@ professor-readable, no API jargon wall. Cover:
    probability mass on the digit the model actually sampled. That probability
    is `ai_native_confidence` (higher means the model was more committed to the
    bit it output).
-4. Optional one-sentence honesty note: when the opposing digit is missing from
-   the reported alternatives (censored case), production uses the validated
-   midpoint bound from `confidence.py` rather than pretending the opponent had
-   zero mass. Blank cells mean extraction was unavailable for that row.
+4. One-sentence caveat if needed: when the opposing digit is missing from the
+   reported alternatives (censored case), production uses the validated midpoint
+   bound from `confidence.py` rather than pretending the opponent had zero mass.
+   Blank cells mean extraction was unavailable for that row.
 
 Keep the explainer concrete (token probabilities on a 0/1 decision), not a
 full information-theory digression. Point to the production module only in a
