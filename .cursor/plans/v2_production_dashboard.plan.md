@@ -141,15 +141,87 @@ non-blank `rad_confidence`, analogous to the V1 `conf_rad` chart.
 
 - Overview, Landscape, RAD, Cohorts base sections (column renames only as needed
   for the V2 CSV).
-- Survivorship Acts 1-4, including Act 4.1 alive-vs-dead confidence (will need a
-  follow-up edit to say which of the three V2 fields that act uses).
+- Survivorship Acts 1-4, subject to the consolidation pass below.
 - Evidence-only universe and corrected-only base sections.
+
+---
+
+## Chart consolidation (redundancy cuts)
+
+**Status: PROPOSED, awaiting confirmation.** The inherited WU-5a design carries
+roughly 18 charts. Several state the same fact on a different scale, which makes
+the page longer without making the argument stronger. Each cut below names the
+chart it duplicates and what is kept instead.
+
+Guiding rule: one fact, one chart, on the most interpretable scale. Prefer
+**mortality rate** (dead / dead + survivor) over ratios of shares, because a
+percentage of a named group is the scale a reader can restate correctly.
+
+### Safe cuts (pure duplicates)
+
+| Cut | Duplicates | Keep instead |
+|---|---|---|
+| **1.2 Composition before and after** (two 100 percent stacked bars, 10 segments each) | Same comparison as 1.3, which shows the difference directly | **1.3 Share shift per subclass** (diverging bar). Ten-segment stacked bars cannot be compared segment to segment by eye; the delta chart is the finding. |
+| **2.2 Subclass lift** (dead share / survivor share) | Ratio of the two series already drawn in 2.1, and answers the same question as 2.2b on a harder scale | **2.1** (levels, with the significance stars) plus **2.2b** (mortality). Lift reads as "1.4x" with no denominator a reader can name. |
+| **2.6 companion bar** (mortality percent per funding bucket) | Funding appears as the log-funding term in 3.1 and as heatmap rows in 3.3 | **2.6 main chart only** (bucket shares, survivor vs dead). |
+
+### Merges (two charts, one story)
+
+| Merge | Why |
+|---|---|
+| **2.2b** currently renders mortality by subclass AND mortality by defensibility group as separate charts. Render **one** ranked mortality-by-subclass bar chart, with bars colored by defensibility group and a legend. | The group chart is an aggregation of the same bars. Coloring shows both the ranking and the grouping in one read, and makes the "commoditizable genres die more" claim visible rather than asserted across two charts. |
+| **4.2** currently renders two sensitivity bar charts (thin history, snapshot age). Render as **one compact table** of AI-native rate plus n per cut. | Robustness cuts are null results. A table saying the rate barely moves communicates "nothing hinges on this" faster than two bar charts that look like findings. |
+
+### Cut on grounds of self-admitted weakness
+
+- **2.4 Mortality by founding era.** The inherited plan already prints a caption
+  explaining that raw era mortality mostly measures exposure time and that the
+  regression handles it properly. A chart whose own caption argues against
+  reading it costs attention and buys nothing. The era term stays in both forest
+  plots (3.1, 3.2), which is where it is interpretable. Keep the fact as one
+  sentence in the Act 2 intro or the methods box if wanted.
+
+### V2-specific de-duplication: confidence
+
+Three confidence fields multiply any alive-vs-dead confidence comparison by
+three. Locked split of responsibility:
+
+- **Section 5** owns the measurement explainers and the overall distributions for
+  all three fields (see section 5 above).
+- **Act 4.1** shows exactly **one** alive-vs-dead confidence comparison, on
+  `ai_native_confidence`, because it is the measured (logprob) quantity and
+  `ai_native` is the headline axis of the correction. The evidence-thinness
+  caveat stays printed under it.
+- Alive-vs-dead splits of `subclass_confidence` and `rad_confidence` are NOT
+  charted. If the gap is worth noting, it goes in one sentence of the Act 4
+  methods box.
+
+This resolves former open follow-up 3.
+
+### Flagged, not cut (decide explicitly)
+
+- **Landscape evidence filter pill group** (`All / Live only / Dead only`). It
+  lets a reader hand-build an untested version of Act 2.1 in a section that is
+  supposed to be the corrected baseline, and it costs the 45-key precomputed
+  filter grid. Options: drop the evidence dimension and keep the section purely
+  corrected (simpler, one story per section), or keep it as an exploration
+  affordance. Recommendation: drop it, since the flagship section owns the
+  comparison with statistics attached.
+- **3.4 Deaths over time.** Scientifically the weakest chart (death anchor is the
+  last archive capture, coverage-bounded, marked exploratory), but it is the only
+  time-axis chart on the page and carries the frontier-release narrative. Keep,
+  with the exploratory caption.
+
+### Net effect
+
+Roughly 18 charts to roughly 11, with no fact removed from the argument: 3 cut as
+duplicates, 2 pairs merged into 1 each, 1 cut as self-disclaimed, 2 confidence
+comparisons dropped in favor of one measured field.
 
 ## Open follow-ups (not locked this pass)
 
 1. Exact chart inventory and KPI cards inside 5.1 / 5.2 / 5.3.
 2. Whether Overview still surfaces a single confidence headline card, and if so
    which field it uses.
-3. How Survivorship Act 4.1 compares alive vs dead once confidence is three
-   fields (likely three small charts or a field selector).
+3. Confirm the consolidation cuts above, and decide the flagged Landscape filter.
 4. Output HTML filename and builder module name.
