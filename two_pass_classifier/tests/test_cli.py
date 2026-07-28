@@ -4,6 +4,7 @@ import asyncio
 import csv
 import io
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -12,9 +13,13 @@ from rich.console import Console
 
 from two_pass_classifier import cli, request_builder, workflow
 from two_pass_classifier.input_contract import SOURCE_COLUMNS
-from two_pass_classifier.journal import RunLock
+from two_pass_classifier.journal import JOURNAL_VERSION, RunLock
 from two_pass_classifier.manifest import build_manifest, load_manifest, write_manifest
-from two_pass_classifier.request_builder import RequestSettings
+from two_pass_classifier.request_builder import (
+    RequestSettings,
+    request_fingerprint,
+    request_identity,
+)
 from two_pass_classifier.runner import ProductionRunner
 from two_pass_classifier.workflow import (
     build_run_metadata,
@@ -832,6 +837,56 @@ def test_retry_stage_filter_exits_error_when_other_stage_failures_remain(
     assert status_payload["retryable_failures"]["by_stage_and_reason"] == {
         "pass_a": {"rate_limit": 1}
     }
+
+
+def test_status_elapsed_uses_wall_clock_before_first_finish(
+    tmp_path: Path,
+    registry: dict[str, Path],
+):
+    artifact, manifest = _manifest_artifact(
+        tmp_path / "source",
+        live_count=1,
+        dead_count=0,
+    )
+    settings = RequestSettings(model="gpt-5.4-nano", pass_b_effort="low")
+    run_id = "in-flight-elapsed"
+    run_path = registry["runs"] / run_id
+    run_manifest = write_manifest(manifest, run_path / "inputs")
+    metadata = build_run_metadata(
+        kind="full",
+        run_id=run_id,
+        manifest_path=run_manifest,
+        manifest=manifest,
+        settings=settings,
+        parent_manifest_path=artifact,
+        parent_manifest=manifest,
+    )
+    fingerprint = request_fingerprint(settings)
+    created_at = datetime.now(UTC) - timedelta(seconds=45)
+    header = {
+        "event_type": "run_started",
+        "event_id": "header-event",
+        "journal_version": JOURNAL_VERSION,
+        "created_at": created_at.isoformat(),
+        "manifest_sha256": manifest.manifest_sha256,
+        "manifest_rows_sha256": manifest.rows_sha256,
+        "manifest_row_count": manifest.row_count,
+        "request_fingerprint": fingerprint,
+        "request_identity": request_identity(settings),
+        "run_config": metadata,
+    }
+    (run_path / "events.jsonl").write_text(
+        json.dumps(header, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+
+    code, raw = _invoke(["status", run_id, "--json"])
+    payload = json.loads(raw)
+
+    assert code == 0
+    assert payload["elapsed_seconds"] is not None
+    assert payload["elapsed_seconds"] >= 40
+    assert payload["complete"] == 0
 
 
 def test_status_human_and_json_are_offline(
