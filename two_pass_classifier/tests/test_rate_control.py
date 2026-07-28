@@ -111,6 +111,29 @@ async def test_actual_usage_reconciles_reservation_and_headers_revise_limits():
 
 
 @pytest.mark.asyncio
+async def test_tiny_provider_headers_keep_nonzero_rate_targets():
+    controller = DualRateAdmissionController(
+        model_limits={"test": config.ModelRateLimit(10, 100)},
+        target_fraction=0.8,
+    )
+    await controller.observe_headers(
+        "test",
+        {
+            "x-ratelimit-limit-requests": "1",
+            "x-ratelimit-limit-tokens": "1",
+        },
+    )
+    assert controller.target_limits("test") == (1, 1)
+    reservation = await controller.acquire(
+        "test",
+        estimated_input_tokens=0,
+        output_allowance=1,
+    )
+    assert await controller.utilization("test") == pytest.approx(1.0)
+    await controller.release(reservation)
+
+
+@pytest.mark.asyncio
 async def test_in_flight_reservations_stay_in_tpm_window_until_release():
     clock = _FakeClock()
     controller = DualRateAdmissionController(

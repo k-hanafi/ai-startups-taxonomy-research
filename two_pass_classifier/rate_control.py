@@ -73,9 +73,11 @@ class DualRateAdmissionController:
 
     def target_limits(self, model: str) -> tuple[int, int]:
         state = self._model(model)
+        # Floor at 1 so a tiny provider header (for example RPM=1) cannot make
+        # int(limit * 0.8) become 0 and break admission or utilization.
         return (
-            int(state.requests_per_minute * self._target_fraction),
-            int(state.tokens_per_minute * self._target_fraction),
+            max(1, int(state.requests_per_minute * self._target_fraction)),
+            max(1, int(state.tokens_per_minute * self._target_fraction)),
         )
 
     async def acquire(
