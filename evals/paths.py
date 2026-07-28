@@ -1,7 +1,7 @@
 """Filesystem paths for the eval harness.
 
 Input artifacts (production predictions + classifier input) are referenced
-by literal path rather than imported from src.paths: importing src.config
+by literal path rather than imported from single_pass_classifier.paths: importing single_pass_classifier.config
 transitively would require OPENAI_API_KEY at import time, which offline
 stages (sampling, scoring) must not need.
 """

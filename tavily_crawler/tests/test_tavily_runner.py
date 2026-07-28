@@ -22,7 +22,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.tavily_crawl import (
+from tavily_crawler.crawl import (
     MANIFEST_FIELDS,
     TavilyCrawlConfig,
     TavilyCrawlState,
@@ -76,7 +76,7 @@ def test_state_save_is_atomic_when_replace_fails(tmp_path, monkeypatch):
     def boom(_src, _dst):
         raise OSError("simulated mid-rename crash")
 
-    monkeypatch.setattr("src.tavily_crawl.os.replace", boom)
+    monkeypatch.setattr("tavily_crawler.crawl.os.replace", boom)
 
     next_state = TavilyCrawlState(total_credits=999.0, completed=99, last_org_uuid="org-next")
     with pytest.raises(OSError, match="simulated mid-rename crash"):
@@ -123,9 +123,9 @@ def test_runner_self_heals_jsonl_on_startup(tmp_path, monkeypatch):
     pre_existing_good = json.dumps({"org_uuid": "org-pre", "ok": True, "retryable": False}) + "\n"
     output_path.write_text(pre_existing_good + '{"org_uuid":"org-bad",', encoding="utf-8")
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
     monkeypatch.setattr(
-        "src.tavily_crawl.call_tavily_crawl",
+        "tavily_crawler.crawl.call_tavily_crawl",
         lambda url, config, api_key, **_kwargs: _success_response(url),
     )
 
@@ -170,8 +170,8 @@ def test_outage_loop_retries_row_through_transient_errors(tmp_path, monkeypatch)
             raise TimeoutError("simulated outage")
         return _success_response(url, credits=1.0)
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
-    monkeypatch.setattr("src.tavily_crawl.call_tavily_crawl", flaky_call)
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl.call_tavily_crawl", flaky_call)
 
     report = run_tavily_crawl(
         queue_path,
@@ -211,9 +211,9 @@ def test_outage_loop_gives_up_after_max_outage_seconds(tmp_path, monkeypatch):
     state_path = tmp_path / "state.json"
     queue.to_csv(queue_path, index=False)
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
     monkeypatch.setattr(
-        "src.tavily_crawl.call_tavily_crawl",
+        "tavily_crawler.crawl.call_tavily_crawl",
         lambda url, config, api_key, **_kwargs: (_ for _ in ()).throw(TimeoutError("never recovers")),
     )
 
@@ -244,7 +244,7 @@ def test_runner_exits_at_row_boundary_on_sigint(tmp_path, monkeypatch):
     output_path = tmp_path / "raw.jsonl"
     state_path = tmp_path / "state.json"
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
 
     raised_signal = {"done": False}
 
@@ -254,7 +254,7 @@ def test_runner_exits_at_row_boundary_on_sigint(tmp_path, monkeypatch):
             os.kill(os.getpid(), 2)  # SIGINT delivered to the controller
         return _success_response(url)
 
-    monkeypatch.setattr("src.tavily_crawl.call_tavily_crawl", fake_call)
+    monkeypatch.setattr("tavily_crawler.crawl.call_tavily_crawl", fake_call)
 
     report = run_tavily_crawl(
         queue_path,
@@ -298,8 +298,8 @@ def test_preflight_aborts_when_no_eligible_rows(tmp_path, monkeypatch):
         calls["n"] += 1
         return {"results": [], "usage": {"credits": 0}}
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
-    monkeypatch.setattr("src.tavily_crawl.call_tavily_crawl", fake_call)
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl.call_tavily_crawl", fake_call)
 
     with pytest.raises(RuntimeError, match="master_csv.csv"):
         run_tavily_crawl(
@@ -328,8 +328,8 @@ def test_budget_pre_reservation_blocks_next_row(tmp_path, monkeypatch):
         calls["n"] += 1
         return _success_response(url, credits=1.0)
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
-    monkeypatch.setattr("src.tavily_crawl.call_tavily_crawl", fake_call)
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl.call_tavily_crawl", fake_call)
 
     report = run_tavily_crawl(
         queue_path,
@@ -355,9 +355,9 @@ def test_run_manifest_appends_one_row_per_run(tmp_path, monkeypatch):
     state_path = tmp_path / "state.json"
     manifest_path = tmp_path / "manifest.csv"
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
     monkeypatch.setattr(
-        "src.tavily_crawl.call_tavily_crawl",
+        "tavily_crawler.crawl.call_tavily_crawl",
         lambda url, config, api_key, **_kwargs: _success_response(url),
     )
 
@@ -396,9 +396,9 @@ def test_heartbeat_writes_progress_lines(tmp_path, monkeypatch):
     state_path = tmp_path / "state.json"
     heartbeat_path = tmp_path / "heartbeat.log"
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
     monkeypatch.setattr(
-        "src.tavily_crawl.call_tavily_crawl",
+        "tavily_crawler.crawl.call_tavily_crawl",
         lambda url, config, api_key, **_kwargs: _success_response(url),
     )
 
@@ -444,9 +444,9 @@ def test_concurrent_run_finishes_all_rows(tmp_path, monkeypatch):
     output_path = tmp_path / "raw.jsonl"
     state_path = tmp_path / "state.json"
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
     monkeypatch.setattr(
-        "src.tavily_crawl.call_tavily_crawl",
+        "tavily_crawler.crawl.call_tavily_crawl",
         lambda url, config, api_key, **_kwargs: _success_response(url),
     )
 
@@ -480,7 +480,7 @@ def test_resume_picks_up_after_kill(tmp_path, monkeypatch):
     output_path = tmp_path / "raw.jsonl"
     state_path = tmp_path / "state.json"
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
 
     raised = {"done": False}
 
@@ -490,7 +490,7 @@ def test_resume_picks_up_after_kill(tmp_path, monkeypatch):
             os.kill(os.getpid(), 2)
         return _success_response(url)
 
-    monkeypatch.setattr("src.tavily_crawl.call_tavily_crawl", first_call)
+    monkeypatch.setattr("tavily_crawler.crawl.call_tavily_crawl", first_call)
     first = run_tavily_crawl(
         queue_path,
         output_path,
@@ -503,7 +503,7 @@ def test_resume_picks_up_after_kill(tmp_path, monkeypatch):
     assert first.exit_reason == "user_interrupt"
 
     monkeypatch.setattr(
-        "src.tavily_crawl.call_tavily_crawl",
+        "tavily_crawler.crawl.call_tavily_crawl",
         lambda url, config, api_key, **_kwargs: _success_response(url),
     )
     second = run_tavily_crawl(

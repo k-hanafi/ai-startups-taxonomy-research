@@ -4,7 +4,7 @@ Verifies that token counts are accurate and cost projections are internally
 consistent. All tests run offline with no API calls.
 """
 
-from src.tokens import (
+from single_pass_classifier.tokens import (
     BATCH_DISCOUNT,
     CACHE_DISCOUNT,
     CostEstimate,

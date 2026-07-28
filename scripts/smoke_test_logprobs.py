@@ -24,14 +24,19 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.builder import (  # noqa: E402
+from single_pass_classifier.builder import (  # noqa: E402
     _openai_strict_schema,
     load_system_prompt,
     responses_text_format_json_schema,
 )
-from src.config import DEFAULT_MODEL, MAX_OUTPUT_TOKENS, PROMPT_CACHE_KEY  # noqa: E402
-from src.formatter import format_user_message  # noqa: E402
-from src.submitter import get_client  # noqa: E402
+from single_pass_classifier.config import (  # noqa: E402
+    DEFAULT_MODEL,
+    MAX_OUTPUT_TOKENS,
+    PROMPT_CACHE_KEY,
+)
+from single_pass_classifier.formatter import format_user_message  # noqa: E402
+from single_pass_classifier.paths import DEFAULT_CLASSIFIER_INPUT_CSV  # noqa: E402
+from single_pass_classifier.submitter import get_client  # noqa: E402
 
 
 def _minimal_schema() -> dict:
@@ -106,8 +111,6 @@ def _resolve_user_message(args: argparse.Namespace) -> tuple[str, str]:
         return "Classify using the company fields in the user message.", system_prompt
 
     import pandas as pd
-
-    from src.tavily_crawl import DEFAULT_CLASSIFIER_INPUT_CSV
 
     data_path = Path(args.data) if args.data else DEFAULT_CLASSIFIER_INPUT_CSV
     df = pd.read_csv(data_path)

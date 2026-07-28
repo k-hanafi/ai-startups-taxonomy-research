@@ -9,13 +9,13 @@ a reasoning-effort knob, and temperature.
 
 Design choices:
 - Fidelity over convenience. The request body comes verbatim from
-  src.builder.build_request_body; we override only max_output_tokens (reasoning
+  single_pass_classifier.builder.build_request_body; we override only max_output_tokens (reasoning
   needs headroom) and append the experimental params. Every run snapshots the
   SHA-256 of the prompt, schema, and formatter source, so any drift from the
   production artifacts is detectable after the fact.
 - Resumable. Each finished row is appended to predictions.jsonl keyed by
   custom_id; a re-run skips rows already present, so a mid-run crash or rate
-  limit never re-bills completed work (same checkpoint idea as classify.py).
+  limit never re-bills completed work (same checkpoint idea as single_pass_classifier).
 - Results are matched to inputs by custom_id, never by order.
 """
 
@@ -47,13 +47,13 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from src.builder import (
+from single_pass_classifier.builder import (
     _openai_strict_schema,
     build_request_body,
     load_system_prompt,
 )
-from src.config import OPENAI_API_KEY, PROMPT_CACHE_KEY
-from src.formatter import build_custom_id, format_user_message
+from single_pass_classifier.config import OPENAI_API_KEY, PROMPT_CACHE_KEY
+from single_pass_classifier.formatter import build_custom_id, format_user_message
 
 from evals import config as cfg
 from evals.jsonl_io import append_jsonl, iter_jsonl

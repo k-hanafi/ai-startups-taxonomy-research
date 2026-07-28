@@ -31,7 +31,7 @@ Pass B isolating metrics (alongside end-to-end axes):
   structural RAD-NA zeros on the not-AI-native family).
 - ``boundary_disagreement``: rate of Pass B ``boundary_disagreement=True``.
 
-This module must stay importable without OPENAI_API_KEY: no src.* or
+This module must stay importable without OPENAI_API_KEY: no single_pass_classifier.* or
 evals.runner imports.
 """
 

@@ -3,7 +3,7 @@
 Flow:
 1. export_labeling_workspace() dumps each golden-set company as the exact
    formatted user message the classifier models receive (via the production
-   src.formatter), with no production prediction attached, so the drafter
+   single_pass_classifier.formatter), with no production prediction attached, so the drafter
    judges the same evidence the models see and is not anchored by nano's
    answer.
 2. The drafter (Fable, in-session) fills draft_* columns via apply_drafts().
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.formatter import format_user_message
+from single_pass_classifier.formatter import format_user_message
 
 from evals.paths import (
     CLASSIFIER_INPUT_CSV,

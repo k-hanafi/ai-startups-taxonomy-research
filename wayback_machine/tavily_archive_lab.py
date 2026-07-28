@@ -48,7 +48,7 @@ else:
     os.environ.setdefault("SSL_CERT_FILE", certifi.where())
     os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
 
-from src.tavily_crawl import (
+from tavily_crawler.crawl import (
     TAVILY_CRAWL_ENDPOINT,
     TavilyCrawlConfig,
     _api_key,
@@ -57,7 +57,7 @@ from src.tavily_crawl import (
     _has_usable_results,
     extract_usage_credits,
 )
-from src.website_evidence import compact_tavily_response
+from tavily_crawler.website_evidence import compact_tavily_response
 
 from wayback_machine.cdx import to_host
 from wayback_machine.cohort import MASTER_CSV_COLUMNS
@@ -591,10 +591,10 @@ class ArchiveLab:
         }]
         return call_tavily_extract(start_url, cfg, _api_key()), requests
 
-    # -- classifier (mirrors `classify.py test`, flex tier) ----------------
+    # -- classifier (mirrors the single-pass `test` command, flex tier) -----
 
     def _format_input(self, org_uuid: str, pages_used: str, evidence: str) -> str:
-        from src.formatter import format_user_message
+        from single_pass_classifier.formatter import format_user_message
 
         row = {**self._metadata(org_uuid), "website_pages_used": pages_used, "website_evidence": evidence}
         return format_user_message(row)
@@ -602,10 +602,18 @@ class ArchiveLab:
     def _classify(self, user_msg: str) -> dict[str, Any]:
         from tenacity import retry, stop_after_attempt, wait_fixed
 
-        from src.builder import _openai_strict_schema, load_system_prompt, responses_text_format_json_schema
-        from src.config import DEFAULT_MODEL, MAX_OUTPUT_TOKENS, PROMPT_CACHE_KEY
-        from src.schema import ClassificationResult
-        from src.submitter import get_client
+        from single_pass_classifier.builder import (
+            _openai_strict_schema,
+            load_system_prompt,
+            responses_text_format_json_schema,
+        )
+        from single_pass_classifier.config import (
+            DEFAULT_MODEL,
+            MAX_OUTPUT_TOKENS,
+            PROMPT_CACHE_KEY,
+        )
+        from single_pass_classifier.schema import ClassificationResult
+        from single_pass_classifier.submitter import get_client
 
         client = get_client()
         system_prompt = load_system_prompt()

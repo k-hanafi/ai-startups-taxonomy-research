@@ -6,10 +6,10 @@ did, and emit a `classifier_input_2023.csv` that drops straight into the existin
 classifier. Running the unchanged classifier on it lets us diff today vs 2023 and
 measure how startup AI messaging shifted.
 
-This folder is a **self-contained sub-project**: it imports nothing from `src/`.
-The one shared piece — the evidence cleaner — is vendored in `evidence.py` and
-guarded by a golden test, so the folder could be lifted into its own repo
-unchanged.
+The evidence-recovery stages are a **self-contained sub-project**. Their cleaner
+is vendored in `evidence.py` and guarded by a golden test. The only intentional
+bridge to a root application is `classify_2023.py`, which binds an isolated
+namespace before importing the unchanged V1 classifier.
 
 ## Why Tavily `/extract` (not a raw HTML download)?
 
@@ -27,11 +27,12 @@ wayback_machine/
   config.py          # all tunables (target date, extract config, rate/budget)
   paths.py           # every path; nothing hard-codes a string
   cohort.py          # vendored column contracts + snapshot-URL builder + filters
-  evidence.py        # VENDORED frozen cleaner (== src; golden-tested)
+  evidence.py        # VENDORED frozen crawler cleaner (golden-tested)
   state.py           # atomic resume state + JSONL healing + completed-ids
   extract.py         # the resumable Tavily /extract engine
   targets.py         # Stage B: coverage_full.csv -> scrape_targets.csv
   classifier_input.py# Stage D: master + 2023 evidence -> classifier_input_2023.csv
+  classify_2023.py   # Stage E: namespaced bridge to the unchanged V1 classifier
   scripts/           # thin argparse CLIs (run these)
   tests/             # golden cleaner + cohort helpers
   data/              # frozen inputs   (git-ignored)
@@ -56,7 +57,11 @@ in via a later snapshot.
 | Spike (de-risk) | `python3 wayback_machine/scripts/spike_extract.py --n 50` | ~10 credits |
 | C. Extract | `python3 wayback_machine/scripts/run_extract.py` | paid |
 | D. Build input | `python3 wayback_machine/scripts/build_classifier_input_2023.py` | free |
-| E. Classify | existing `classify.py` on `classifier_input_2023.csv` | paid |
+| E. Classify | `python -m wayback_machine.classify_2023 run` | paid |
+
+The Stage E wrapper sets `CLASSIFY_NS=wayback_2023` before any classifier
+imports. Its state and final CSV therefore stay under `outputs/wayback_2023/`
+and cannot overwrite the live V1 artifacts.
 
 For the overnight extract, hold sleep with caffeinate (outside the sandbox):
 
@@ -79,5 +84,5 @@ caffeinate -ims python3 wayback_machine/scripts/run_extract.py
 
 ## The one rule that matters
 
-`evidence.py` must stay byte-identical in behavior to `src/website_evidence.py`.
+`evidence.py` must stay behavior-identical to `tavily_crawler/website_evidence.py`.
 If the live cleaner ever changes, re-vendor it and run `pytest wayback_machine/tests`.

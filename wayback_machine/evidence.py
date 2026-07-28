@@ -1,11 +1,11 @@
-"""VENDORED FROZEN COPY of ``src/website_evidence.py``.
+"""VENDORED FROZEN COPY of ``tavily_crawler/website_evidence.py``.
 
 This is a deliberate copy, not an import. The whole research design rests on the
 2023 evidence being cleaned EXACTLY the way today's evidence was, so any measured
 change is real and not a tooling artifact. Vendoring keeps this sub-project
-free of ``src`` imports (so it can be lifted out), while
+free of crawler-package imports (so it can be lifted out), while
 ``tests/test_evidence_golden.py`` asserts this function produces output
-identical to the live ``src`` version on sample inputs — failing loudly the
+identical to ``tavily_crawler.website_evidence`` on sample inputs, failing loudly the
 moment the two drift apart.
 
 Do NOT "improve" this file. If the live cleaner changes, re-vendor it verbatim

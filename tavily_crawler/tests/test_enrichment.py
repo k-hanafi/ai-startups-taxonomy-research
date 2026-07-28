@@ -3,19 +3,19 @@ import json
 import pandas as pd
 import pytest
 
-from src.master_csv import (
+from tavily_crawler.master_csv import (
     CLASSIFIER_INPUT_COLUMNS,
     MASTER_CSV_COLUMNS,
     is_valid_homepage_url,
     tavily_eligible_mask,
 )
-from src.tavily_crawl import (
+from tavily_crawler.crawl import (
     PROCESSED_OUTPUT_FIELDS,
     TavilyCrawlConfig,
     extract_usage_credits,
     run_tavily_crawl,
 )
-from src.website_evidence import (
+from tavily_crawler.website_evidence import (
     MIN_USEFUL_EVIDENCE_CHARS,
     compact_tavily_response,
 )
@@ -214,9 +214,9 @@ def test_run_tavily_crawl_appends_to_processed_csv(tmp_path, monkeypatch):
 
     queue.to_csv(queue_path, index=False)
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
     monkeypatch.setattr(
-        "src.tavily_crawl.call_tavily_crawl",
+        "tavily_crawler.crawl.call_tavily_crawl",
         lambda url, config, api_key, **_kwargs: _success_response(url),
     )
 
@@ -252,9 +252,9 @@ def test_run_tavily_crawl_writes_classifier_input_on_completion(tmp_path, monkey
 
     queue.to_csv(queue_path, index=False)
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
     monkeypatch.setattr(
-        "src.tavily_crawl.call_tavily_crawl",
+        "tavily_crawler.crawl.call_tavily_crawl",
         lambda url, config, api_key, **_kwargs: _success_response(url),
     )
 
@@ -303,8 +303,8 @@ def test_run_tavily_crawl_classifier_input_not_written_on_interrupt(tmp_path, mo
             os.kill(os.getpid(), 2)
         return _success_response(url)
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
-    monkeypatch.setattr("src.tavily_crawl.call_tavily_crawl", fake_call)
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl.call_tavily_crawl", fake_call)
 
     report = run_tavily_crawl(
         queue_path,
@@ -343,8 +343,8 @@ def test_run_tavily_crawl_falls_back_on_empty_results(tmp_path, monkeypatch):
             "usage": {"credits": 1},
         }
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
-    monkeypatch.setattr("src.tavily_crawl.call_tavily_crawl", fake_call)
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl.call_tavily_crawl", fake_call)
 
     report = run_tavily_crawl(
         queue_path, output_path, state_path,
@@ -370,9 +370,9 @@ def test_run_tavily_crawl_records_terminal_empty_results(tmp_path, monkeypatch):
     state_path = tmp_path / "state.json"
     queue.to_csv(queue_path, index=False)
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
     monkeypatch.setattr(
-        "src.tavily_crawl.call_tavily_crawl",
+        "tavily_crawler.crawl.call_tavily_crawl",
         lambda url, config, api_key, **_kwargs: {"results": [], "usage": {"credits": 0}},
     )
 
@@ -419,8 +419,8 @@ def test_run_tavily_crawl_retries_transient_errors(tmp_path, monkeypatch):
             "usage": {"credits": 1},
         }
 
-    monkeypatch.setattr("src.tavily_crawl._api_key", lambda: "test-key")
-    monkeypatch.setattr("src.tavily_crawl.call_tavily_crawl", flaky_call)
+    monkeypatch.setattr("tavily_crawler.crawl._api_key", lambda: "test-key")
+    monkeypatch.setattr("tavily_crawler.crawl.call_tavily_crawl", flaky_call)
 
     report = run_tavily_crawl(
         queue_path,

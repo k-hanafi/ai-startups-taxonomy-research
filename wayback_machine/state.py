@@ -10,7 +10,7 @@ Three things make a multi-hour paid run safe to interrupt and resume:
    companies are already done and rebuild counters from JSONL so budget state
    cannot drift from the append-only log.
 
-Adapted from the proven helpers in ``src/tavily_crawl.py``.
+Adapted from the proven helpers in ``tavily_crawler/crawl.py``.
 """
 
 from __future__ import annotations

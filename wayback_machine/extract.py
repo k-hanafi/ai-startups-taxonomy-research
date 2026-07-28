@@ -1,6 +1,6 @@
 """Resumable, budget-capped Tavily ``/extract`` runner over archive snapshots.
 
-This is the historical analogue of ``src/tavily_crawl.py``. The job is simpler:
+This is the historical analogue of ``tavily_crawler/crawl.py``. The job is simpler:
 we already know one exact snapshot URL per company, so there is no crawl, no
 fallback config, and no usage field to parse. What we keep are the reliability
 layers that make a multi-hour paid run safe to close the laptop on:

@@ -33,7 +33,7 @@ def sample_row() -> dict[str, str]:
 
 
 def test_request_kwargs_are_production_faithful(sample_row):
-    from src.builder import _openai_strict_schema, load_system_prompt
+    from single_pass_classifier.builder import _openai_strict_schema, load_system_prompt
 
     system_prompt = load_system_prompt()
     schema = _openai_strict_schema()
@@ -60,7 +60,7 @@ def test_request_kwargs_are_production_faithful(sample_row):
 
 
 def test_logprobs_captured_only_when_reasoning_off(sample_row):
-    from src.builder import _openai_strict_schema, load_system_prompt
+    from single_pass_classifier.builder import _openai_strict_schema, load_system_prompt
     from evals import config as cfg
 
     sp = load_system_prompt()

@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
-"""Run the cost-controlled Tavily Crawl enrichment job."""
+"""CLI adapter for the cost-controlled Tavily Crawl enrichment job."""
 
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
-
-from src.tavily_crawl import (
+from .crawl import (
     DEFAULT_CLASSIFIER_INPUT_CSV,
     DEFAULT_CRAWL_RPM_HEADROOM,
     DEFAULT_CRAWL_STATE_JSON,
@@ -28,7 +23,7 @@ from src.tavily_crawl import (
     TavilyCrawlConfig,
     run_tavily_crawl,
 )
-from src.master_csv import DEFAULT_MASTER_CSV
+from .master_csv import DEFAULT_MASTER_CSV
 
 
 def _path(value: str) -> Path:
@@ -37,6 +32,7 @@ def _path(value: str) -> Path:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
+        prog="python -m tavily_crawler crawl",
         description="Run Tavily Crawl over master_csv.csv (skips website_alive=false rows).",
     )
     parser.add_argument(
@@ -136,8 +132,8 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> None:
-    args = build_parser().parse_args()
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
     config = TavilyCrawlConfig(
         limit=args.limit,
         max_depth=args.max_depth,

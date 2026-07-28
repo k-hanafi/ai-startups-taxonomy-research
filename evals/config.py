@@ -1,6 +1,6 @@
 """Eval-harness configuration. All harness tunables live here.
 
-Mirrors the no-magic-numbers convention of src/config.py but is fully
+Mirrors the no-magic-numbers convention of single_pass_classifier/config.py but is fully
 independent: nothing here is imported by (or from) the production pipeline.
 """
 
@@ -159,7 +159,7 @@ SELECTIVE_COVERAGE_GRID: list[float] = [round(0.1 * k, 1) for k in range(1, 11)]
 
 # ---------------------------------------------------------------------------
 # Pricing ($ per 1M tokens, sync API) — verified 2026-07-05 against the
-# OpenAI pricing page. src/tokens.py MODEL_PRICING is stale; the harness
+# OpenAI pricing page. single_pass_classifier/tokens.py MODEL_PRICING is stale; the harness
 # carries its own table so cost numbers in eval reports are trustworthy.
 # ---------------------------------------------------------------------------
 

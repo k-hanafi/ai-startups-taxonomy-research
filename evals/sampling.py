@@ -17,7 +17,7 @@ import logging
 
 import pandas as pd
 
-from src.formatter import _clean as _clean_prompt_value
+from single_pass_classifier.formatter import _clean as _clean_prompt_value
 
 from evals.config import (
     EVIDENCE_TERCILE_LABELS,

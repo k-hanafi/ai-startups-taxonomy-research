@@ -1,6 +1,6 @@
 """Normalize Responses API usage fields for eval run records.
 
-Matches the mapping in ``src/downloader._usage_from_batch_body`` so eval
+Matches the mapping in ``single_pass_classifier/downloader._usage_from_batch_body`` so eval
 cost math and production cost math read the same cached-token signal.
 Missing cache details are treated as 0 (not null): the API omits the
 field when nothing was cached, and inventing a production hit rate would

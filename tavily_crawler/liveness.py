@@ -3,31 +3,26 @@
 
 Runs a parallel HTTP GET against every row whose ``website_alive`` is blank
 (or every row when --force-recheck is passed). Writes true/false back to
-master_csv.csv in-place. Safe to re-run — already-checked rows are skipped
+master_csv.csv in-place. Safe to re-run because already-checked rows are skipped
 by default.
 
 Usage:
-    python scripts/update_website_liveness.py            # check blank rows
-    python scripts/update_website_liveness.py --force-recheck  # re-check all
-    python scripts/update_website_liveness.py --workers 64 --timeout 10
+    python -m tavily_crawler liveness
+    python -m tavily_crawler liveness --force-recheck
+    python -m tavily_crawler liveness --workers 64 --timeout 10
 """
 
 from __future__ import annotations
 
 import argparse
 import ssl
-import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib import error, request
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
-
 import pandas as pd
 
-from src.master_csv import DEFAULT_MASTER_CSV, MASTER_CSV_COLUMNS, is_valid_homepage_url
+from .master_csv import DEFAULT_MASTER_CSV, MASTER_CSV_COLUMNS, is_valid_homepage_url
 
 USER_AGENT = "ai-native-startup-classification/liveness-check (+https://github.com)"
 
@@ -87,8 +82,11 @@ def _path(value: str) -> Path:
     return Path(value).expanduser()
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        prog="python -m tavily_crawler liveness",
+        description=__doc__,
+    )
     parser.add_argument("--input", type=_path, default=DEFAULT_MASTER_CSV,
                         help="Path to master_csv.csv (updated in-place).")
     parser.add_argument("--workers", type=int, default=32,
@@ -99,7 +97,7 @@ def main() -> None:
                         help="Re-probe all rows, not just blank website_alive rows.")
     parser.add_argument("--max-rows", type=int, default=None,
                         help="Limit number of rows to probe (for testing).")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     path: Path = args.input
     if not path.is_file():

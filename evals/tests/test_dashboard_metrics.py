@@ -1,6 +1,6 @@
 """Offline tests for Stage 9 dashboard metrics (fixture + filter keys).
 
-No OpenAI key required: dashboard_metrics does not import src.config.
+No OpenAI key required: dashboard_metrics does not import single_pass_classifier.config.
 """
 
 from __future__ import annotations

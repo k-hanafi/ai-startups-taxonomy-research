@@ -31,6 +31,24 @@ analysis = [
     "statsmodels>=0.14.0",
 ]
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "single_pass_classifier*",
+    "tavily_crawler*",
+    "evals*",
+    "wayback_machine*",
+]
+
+[tool.setuptools.package-data]
+single_pass_classifier = ["prompts/*.txt"]
+
 [tool.pytest.ini_options]
-testpaths = ["tests", "evals/tests"]
+testpaths = [
+    "single_pass_classifier/tests",
+    "tavily_crawler/tests",
+    "evals/tests",
+    "wayback_machine/tests",
+    "tests",
+]
 asyncio_mode = "auto"

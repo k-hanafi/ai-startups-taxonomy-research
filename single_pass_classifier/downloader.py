@@ -19,14 +19,14 @@ import json
 import logging
 from pathlib import Path
 
-from src.paths import (
+from .paths import (
     BATCH_ERRORS_DIR,
     BATCH_RESULTS_DIR,
     DEFAULT_CLASSIFICATION_OUTPUT_CSV,
 )
-from src.schema import ClassificationResult
-from src.state import PipelineState
-from src.submitter import get_client
+from .schema import ClassificationResult
+from .state import PipelineState
+from .submitter import get_client
 
 logger = logging.getLogger(__name__)
 
