@@ -400,6 +400,27 @@ def test_run_refuses_missing_smoke_and_existing_run_id(
     assert smoke_code == 0
     existing = registry["runs"] / "already-there"
     existing.mkdir(parents=True)
+    orphan_code, orphan_output = _invoke(
+        [
+            "run",
+            "--manifest",
+            str(artifact),
+            "--model",
+            "gpt-5.4-nano",
+            "--run-id",
+            "already-there",
+            "--yes",
+        ],
+        client_factory=forbidden_factory,
+    )
+    assert orphan_code != 0
+    assert "no journal yet" in orphan_output.lower()
+    assert "resume already-there" not in orphan_output
+
+    (existing / "events.jsonl").write_text(
+        "{}\n",
+        encoding="utf-8",
+    )
     existing_code, existing_output = _invoke(
         [
             "run",
@@ -416,6 +437,36 @@ def test_run_refuses_missing_smoke_and_existing_run_id(
     assert existing_code != 0
     assert "continue it with" in existing_output.lower()
     assert "resume already-there" in existing_output
+
+
+def test_run_reports_small_manifest_instead_of_missing_smoke(
+    tmp_path: Path,
+    registry: dict[str, Path],
+):
+    del registry
+    artifact, _ = _manifest_artifact(
+        tmp_path / "source",
+        live_count=2,
+        dead_count=1,
+    )
+    code, output = _invoke(
+        [
+            "run",
+            "--manifest",
+            str(artifact),
+            "--model",
+            "gpt-5.4-nano",
+            "--run-id",
+            "too-small",
+            "--yes",
+        ],
+        client_factory=lambda api_key: pytest.fail(
+            "small manifests must fail before client creation"
+        ),
+    )
+    assert code != 0
+    assert "smoke requires 10 companies" in output
+    assert "no successful 10-company smoke matches" not in output
 
 
 def test_run_refuses_stale_smoke_fingerprint(
