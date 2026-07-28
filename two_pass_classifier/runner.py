@@ -235,7 +235,7 @@ class ProductionRunner:
                 expected_fingerprint=fingerprint,
                 replay_mode="repair",
             )
-            if state.header is not None and self.run_metadata:
+            if state.header is not None:
                 recorded_metadata = state.header.get("run_config") or {}
                 if recorded_metadata != self.run_metadata:
                     raise ResumeMismatchError(
@@ -454,21 +454,18 @@ class ProductionRunner:
         estimated_input = estimate_input_tokens(request)
         output_allowance = int(request["max_output_tokens"])
 
-        attempt = 1
-        for physical in range(1, self.settings.max_request_attempts + 1):
+        # One key per company/stage/input so resume after any attempt still
+        # hits the provider idempotency cache (attempt number is local only).
+        client_request_id = _idempotency_key(
+            company_id=row.company_id,
+            stage=stage,
+            input_hash=row.input_hash,
+        )
+        for attempt in range(1, self.settings.max_request_attempts + 1):
             if self.shutdown_event.is_set():
                 raise ShutdownRequested(
                     f"shutdown began before {stage} attempt {attempt}"
                 )
-            # Stable across resume of the same logical attempt so a crash after
-            # provider success but before journal fsync can safely re-issue
-            # without a second charge (OpenAI Idempotency-Key cache).
-            client_request_id = _idempotency_key(
-                company_id=row.company_id,
-                stage=stage,
-                input_hash=row.input_hash,
-                attempt=attempt,
-            )
             kwargs = dict(request)
             extra_headers = dict(kwargs.get("extra_headers") or {})
             extra_headers["X-Client-Request-Id"] = client_request_id
@@ -547,7 +544,7 @@ class ProductionRunner:
                     operational = await self._operational_snapshot()
                     will_retry = (
                         disposition.retriable
-                        and physical < self.settings.max_request_attempts
+                        and attempt < self.settings.max_request_attempts
                         and not self.shutdown_event.is_set()
                     )
                     error_event = {
@@ -605,10 +602,6 @@ class ProductionRunner:
                     if retry_after is not None:
                         delay = max(delay, retry_after)
                     await self._sleep_before_retry(delay)
-                    # Ambiguous billing keeps the same attempt and idempotency
-                    # key so a late provider success is replayed, not re-billed.
-                    if not disposition.ambiguous_provider_billing:
-                        attempt += 1
                     continue
 
                 return PhysicalCall(
@@ -756,14 +749,15 @@ def _idempotency_key(
     company_id: str,
     stage: str,
     input_hash: str,
-    attempt: int,
 ) -> str:
-    """Return a stable key for one logical physical attempt.
+    """Return a stable key for one company stage under a fixed input hash.
 
     Resume after a crash between provider success and journal fsync reuses the
     same key so OpenAI can return the cached response instead of re-billing.
+    Attempt number is omitted on purpose: resume cannot recover which attempt
+    was in flight when the process died before the journal write.
     """
-    return f"{company_id}:{stage}:{input_hash}:{attempt}"
+    return f"{company_id}:{stage}:{input_hash}"
 
 
 def categorize_error(exc: BaseException) -> ErrorDisposition:
