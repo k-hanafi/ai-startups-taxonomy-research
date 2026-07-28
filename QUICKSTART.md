@@ -64,9 +64,16 @@ python -m tavily_crawler crawl
 
 ### Run Classification Pipeline
 ```bash
+# V1 (legacy Batch path)
 python -m single_pass_classifier prepare --dry-run  # Cost estimate
 python -m single_pass_classifier status             # Check progress
 python -m single_pass_classifier run                # Full run
+
+# V2 (production Responses path; see two_pass_classifier/README.md)
+python -m two_pass_classifier build-manifest        # Freeze live+dead input
+python -m two_pass_classifier cost-preview          # Offline token/$ estimate
+python -m two_pass_classifier smoke                 # Paid 10-row gate
+python -m two_pass_classifier run                   # Paid full run
 ```
 
 ### Survivorship Pipeline

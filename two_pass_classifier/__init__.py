@@ -1,7 +1,4 @@
-"""Production two-pass classifier contracts plus resumable async runner.
-
-CLI, workflow, and status modules land in the next stacked PR.
-"""
+"""Production two-pass classifier: contracts, resumable runner, and CLI entrypoints."""
 
 from .config import (
     DEFAULT_MODEL,
