@@ -1,6 +1,6 @@
 {
   "synthetic": true,
-  "note": "SYNTHETIC locked-matrix mock for the Classifier Eval Suite. Numbers are design placeholders, not measured eval results. Pass A metrics (ai_native accuracy, calibration, confidence, robustness) are identical across Pass B efforts within each model, matching the bank-once Pass A design. Calibration blocks (reliability bins, ECE, selective curve, mean confidence, share above 0.9) were all computed from the same 100 synthetic per-row confidence/correctness pairs per model, so every derived number recomputes from every other; nano seeds the documented early signal (ECE near 0.077, top-half confidence fully correct). Cost blocks + production_cost_estimate ladders were generated with evals.cost_extrapolate.extrapolate_production_cost on synthetic token totals, so the popover arithmetic recomputes exactly to the displayed projected $ (sync Responses API pricing with the cache discount; no Batch API discount, since production two-pass runs sync). Replace by loading real evals/runs/*/scored.json after the paid sweep.",
+  "note": "SYNTHETIC locked-matrix mock for the Classifier Eval Suite. Numbers are design placeholders, not measured eval results. Pass A metrics are identical across Pass B efforts within each model, matching the bank-once design. Calibration fields derive from one set of 100 synthetic rows per model. Costs use production-owned normal Responses prices, cached-input rates, and the explicit 37,746-row offline fallback. No Batch discount is applied. Replace this mock with a new paid sweep before interpreting model performance.",
   "scored_runs": [
     {
       "run_id": "mock_gpt-5.4-nano_low_r1",
@@ -43,24 +43,22 @@
         "rad_ai_native_only": {
           "n": 48,
           "accuracy": 0.71
-        },
-        "boundary_disagreement": {
-          "n": 100,
-          "rate": 0.08
         }
       },
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 37672,
-          "n_prod_label": "evidence_universe",
+          "n_prod": 37746,
+          "n_prod_label": "offline_fallback_37746",
+          "production_population_source": "offline_fallback",
+          "manifest_path": null,
           "n_golden": 100,
           "model": "gpt-5.4-nano",
           "architecture": "classification",
-          "cache_discount": 0.5,
+          "cached_input_price_per_million": 0.1,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "stacking": "normal Responses API list price on uncached input and output, plus the production cached-input rate on measured cached tokens; no Batch API discount",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -71,35 +69,35 @@
             "total_output_tokens": 246000,
             "total_usd": 0.5575,
             "mean_usd_per_row": 0.005575,
-            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+            "note": "Normal list price on measured tokens. Reasoning tokens are inside output_tokens. The cached-input rate is not applied at this step."
           },
           "2_cache": {
             "label": "cache_adjustment",
             "available": true,
             "total_cached_tokens": 950000,
             "cache_hit_rate": 0.76,
-            "cache_discount": 0.5,
+            "cached_input_price_per_million": 0.1,
             "total_usd_after_cache": 0.4625,
             "mean_usd_per_row": 0.004625000000000001,
-            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+            "note": "Measured cached_tokens from this run. Cached input billed at $0.1 per one million tokens."
           },
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 37672,
-            "n_prod_label": "evidence_universe",
-            "scale_factor": 376.72,
-            "estimated_production_usd": 174.23300000000003,
+            "n_prod": 37746,
+            "n_prod_label": "offline_fallback_37746",
+            "scale_factor": 377.46,
+            "estimated_production_usd": 174.57525,
             "estimated_usd_per_company": 0.004625000000000001,
-            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "note": "Linear scale × (37746 / 100) at normal Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 0.5575,
           "golden_after_cache_usd": 0.4625,
-          "estimated_production_usd": 174.23300000000003,
+          "estimated_production_usd": 174.57525,
           "cache_hit_rate": 0.76,
-          "n_prod": 37672
+          "n_prod": 37746
         }
       },
       "latency": {
@@ -294,6 +292,7 @@
         "mean_usd_per_row": 0.005575,
         "pricing_per_mtok": {
           "input": 0.2,
+          "cached_input": 0.1,
           "output": 1.25
         }
       },
@@ -305,12 +304,6 @@
           "mean": 0.9985,
           "threshold": 0.98,
           "n_below_threshold": 0
-        },
-        "batch_parity": {
-          "verdict": "PASS",
-          "n_rows": 10,
-          "n_checks": 190,
-          "n_failed": 0
         }
       }
     },
@@ -355,24 +348,22 @@
         "rad_ai_native_only": {
           "n": 48,
           "accuracy": 0.77
-        },
-        "boundary_disagreement": {
-          "n": 100,
-          "rate": 0.06
         }
       },
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 37672,
-          "n_prod_label": "evidence_universe",
+          "n_prod": 37746,
+          "n_prod_label": "offline_fallback_37746",
+          "production_population_source": "offline_fallback",
+          "manifest_path": null,
           "n_golden": 100,
           "model": "gpt-5.4-nano",
           "architecture": "classification",
-          "cache_discount": 0.5,
+          "cached_input_price_per_million": 0.1,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "stacking": "normal Responses API list price on uncached input and output, plus the production cached-input rate on measured cached tokens; no Batch API discount",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -383,35 +374,35 @@
             "total_output_tokens": 336000,
             "total_usd": 0.67,
             "mean_usd_per_row": 0.0067,
-            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+            "note": "Normal list price on measured tokens. Reasoning tokens are inside output_tokens. The cached-input rate is not applied at this step."
           },
           "2_cache": {
             "label": "cache_adjustment",
             "available": true,
             "total_cached_tokens": 950000,
             "cache_hit_rate": 0.76,
-            "cache_discount": 0.5,
+            "cached_input_price_per_million": 0.1,
             "total_usd_after_cache": 0.5750000000000001,
             "mean_usd_per_row": 0.005750000000000001,
-            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+            "note": "Measured cached_tokens from this run. Cached input billed at $0.1 per one million tokens."
           },
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 37672,
-            "n_prod_label": "evidence_universe",
-            "scale_factor": 376.72,
-            "estimated_production_usd": 216.61400000000003,
-            "estimated_usd_per_company": 0.005750000000000001,
-            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "n_prod": 37746,
+            "n_prod_label": "offline_fallback_37746",
+            "scale_factor": 377.46,
+            "estimated_production_usd": 217.0395,
+            "estimated_usd_per_company": 0.00575,
+            "note": "Linear scale × (37746 / 100) at normal Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 0.67,
           "golden_after_cache_usd": 0.5750000000000001,
-          "estimated_production_usd": 216.61400000000003,
+          "estimated_production_usd": 217.0395,
           "cache_hit_rate": 0.76,
-          "n_prod": 37672
+          "n_prod": 37746
         }
       },
       "latency": {
@@ -606,6 +597,7 @@
         "mean_usd_per_row": 0.0067,
         "pricing_per_mtok": {
           "input": 0.2,
+          "cached_input": 0.1,
           "output": 1.25
         }
       },
@@ -617,12 +609,6 @@
           "mean": 0.9985,
           "threshold": 0.98,
           "n_below_threshold": 0
-        },
-        "batch_parity": {
-          "verdict": "PASS",
-          "n_rows": 10,
-          "n_checks": 190,
-          "n_failed": 0
         }
       }
     },
@@ -667,24 +653,22 @@
         "rad_ai_native_only": {
           "n": 48,
           "accuracy": 0.79
-        },
-        "boundary_disagreement": {
-          "n": 100,
-          "rate": 0.05
         }
       },
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 37672,
-          "n_prod_label": "evidence_universe",
+          "n_prod": 37746,
+          "n_prod_label": "offline_fallback_37746",
+          "production_population_source": "offline_fallback",
+          "manifest_path": null,
           "n_golden": 100,
           "model": "gpt-5.4-nano",
           "architecture": "classification",
-          "cache_discount": 0.5,
+          "cached_input_price_per_million": 0.1,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "stacking": "normal Responses API list price on uncached input and output, plus the production cached-input rate on measured cached tokens; no Batch API discount",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -695,35 +679,35 @@
             "total_output_tokens": 558000,
             "total_usd": 0.9475,
             "mean_usd_per_row": 0.009475,
-            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+            "note": "Normal list price on measured tokens. Reasoning tokens are inside output_tokens. The cached-input rate is not applied at this step."
           },
           "2_cache": {
             "label": "cache_adjustment",
             "available": true,
             "total_cached_tokens": 950000,
             "cache_hit_rate": 0.76,
-            "cache_discount": 0.5,
+            "cached_input_price_per_million": 0.1,
             "total_usd_after_cache": 0.8525,
             "mean_usd_per_row": 0.008525,
-            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+            "note": "Measured cached_tokens from this run. Cached input billed at $0.1 per one million tokens."
           },
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 37672,
-            "n_prod_label": "evidence_universe",
-            "scale_factor": 376.72,
-            "estimated_production_usd": 321.15380000000005,
-            "estimated_usd_per_company": 0.008525000000000001,
-            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "n_prod": 37746,
+            "n_prod_label": "offline_fallback_37746",
+            "scale_factor": 377.46,
+            "estimated_production_usd": 321.78465,
+            "estimated_usd_per_company": 0.008525,
+            "note": "Linear scale × (37746 / 100) at normal Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 0.9475,
           "golden_after_cache_usd": 0.8525,
-          "estimated_production_usd": 321.15380000000005,
+          "estimated_production_usd": 321.78465,
           "cache_hit_rate": 0.76,
-          "n_prod": 37672
+          "n_prod": 37746
         }
       },
       "latency": {
@@ -918,6 +902,7 @@
         "mean_usd_per_row": 0.009475,
         "pricing_per_mtok": {
           "input": 0.2,
+          "cached_input": 0.1,
           "output": 1.25
         }
       },
@@ -929,12 +914,6 @@
           "mean": 0.9985,
           "threshold": 0.98,
           "n_below_threshold": 0
-        },
-        "batch_parity": {
-          "verdict": "PASS",
-          "n_rows": 10,
-          "n_checks": 190,
-          "n_failed": 0
         }
       }
     },
@@ -979,24 +958,22 @@
         "rad_ai_native_only": {
           "n": 48,
           "accuracy": 0.79
-        },
-        "boundary_disagreement": {
-          "n": 100,
-          "rate": 0.07
         }
       },
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 37672,
-          "n_prod_label": "evidence_universe",
+          "n_prod": 37746,
+          "n_prod_label": "offline_fallback_37746",
+          "production_population_source": "offline_fallback",
+          "manifest_path": null,
           "n_golden": 100,
           "model": "gpt-5.4-mini",
           "architecture": "classification",
-          "cache_discount": 0.5,
+          "cached_input_price_per_million": 0.375,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "stacking": "normal Responses API list price on uncached input and output, plus the production cached-input rate on measured cached tokens; no Batch API discount",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -1007,35 +984,35 @@
             "total_output_tokens": 184000,
             "total_usd": 1.7654999999999998,
             "mean_usd_per_row": 0.017654999999999997,
-            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+            "note": "Normal list price on measured tokens. Reasoning tokens are inside output_tokens. The cached-input rate is not applied at this step."
           },
           "2_cache": {
             "label": "cache_adjustment",
             "available": true,
             "total_cached_tokens": 950000,
             "cache_hit_rate": 0.76,
-            "cache_discount": 0.5,
+            "cached_input_price_per_million": 0.375,
             "total_usd_after_cache": 1.40925,
             "mean_usd_per_row": 0.014092499999999999,
-            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+            "note": "Measured cached_tokens from this run. Cached input billed at $0.375 per one million tokens."
           },
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 37672,
-            "n_prod_label": "evidence_universe",
-            "scale_factor": 376.72,
-            "estimated_production_usd": 530.89266,
-            "estimated_usd_per_company": 0.014092499999999999,
-            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "n_prod": 37746,
+            "n_prod_label": "offline_fallback_37746",
+            "scale_factor": 377.46,
+            "estimated_production_usd": 531.9355049999999,
+            "estimated_usd_per_company": 0.014092499999999997,
+            "note": "Linear scale × (37746 / 100) at normal Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 1.7654999999999998,
           "golden_after_cache_usd": 1.40925,
-          "estimated_production_usd": 530.89266,
+          "estimated_production_usd": 531.9355049999999,
           "cache_hit_rate": 0.76,
-          "n_prod": 37672
+          "n_prod": 37746
         }
       },
       "latency": {
@@ -1230,6 +1207,7 @@
         "mean_usd_per_row": 0.017655,
         "pricing_per_mtok": {
           "input": 0.75,
+          "cached_input": 0.375,
           "output": 4.5
         }
       },
@@ -1241,12 +1219,6 @@
           "mean": 0.999,
           "threshold": 0.98,
           "n_below_threshold": 0
-        },
-        "batch_parity": {
-          "verdict": "PASS",
-          "n_rows": 10,
-          "n_checks": 190,
-          "n_failed": 0
         }
       }
     },
@@ -1291,24 +1263,22 @@
         "rad_ai_native_only": {
           "n": 48,
           "accuracy": 0.83
-        },
-        "boundary_disagreement": {
-          "n": 100,
-          "rate": 0.05
         }
       },
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 37672,
-          "n_prod_label": "evidence_universe",
+          "n_prod": 37746,
+          "n_prod_label": "offline_fallback_37746",
+          "production_population_source": "offline_fallback",
+          "manifest_path": null,
           "n_golden": 100,
           "model": "gpt-5.4-mini",
           "architecture": "classification",
-          "cache_discount": 0.5,
+          "cached_input_price_per_million": 0.375,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "stacking": "normal Responses API list price on uncached input and output, plus the production cached-input rate on measured cached tokens; no Batch API discount",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -1319,35 +1289,35 @@
             "total_output_tokens": 317000,
             "total_usd": 2.364,
             "mean_usd_per_row": 0.023639999999999998,
-            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+            "note": "Normal list price on measured tokens. Reasoning tokens are inside output_tokens. The cached-input rate is not applied at this step."
           },
           "2_cache": {
             "label": "cache_adjustment",
             "available": true,
             "total_cached_tokens": 950000,
             "cache_hit_rate": 0.76,
-            "cache_discount": 0.5,
+            "cached_input_price_per_million": 0.375,
             "total_usd_after_cache": 2.00775,
             "mean_usd_per_row": 0.0200775,
-            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+            "note": "Measured cached_tokens from this run. Cached input billed at $0.375 per one million tokens."
           },
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 37672,
-            "n_prod_label": "evidence_universe",
-            "scale_factor": 376.72,
-            "estimated_production_usd": 756.3595800000002,
-            "estimated_usd_per_company": 0.020077500000000005,
-            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "n_prod": 37746,
+            "n_prod_label": "offline_fallback_37746",
+            "scale_factor": 377.46,
+            "estimated_production_usd": 757.845315,
+            "estimated_usd_per_company": 0.0200775,
+            "note": "Linear scale × (37746 / 100) at normal Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 2.364,
           "golden_after_cache_usd": 2.00775,
-          "estimated_production_usd": 756.3595800000002,
+          "estimated_production_usd": 757.845315,
           "cache_hit_rate": 0.76,
-          "n_prod": 37672
+          "n_prod": 37746
         }
       },
       "latency": {
@@ -1542,6 +1512,7 @@
         "mean_usd_per_row": 0.02364,
         "pricing_per_mtok": {
           "input": 0.75,
+          "cached_input": 0.375,
           "output": 4.5
         }
       },
@@ -1553,12 +1524,6 @@
           "mean": 0.999,
           "threshold": 0.98,
           "n_below_threshold": 0
-        },
-        "batch_parity": {
-          "verdict": "PASS",
-          "n_rows": 10,
-          "n_checks": 190,
-          "n_failed": 0
         }
       }
     },
@@ -1603,24 +1568,22 @@
         "rad_ai_native_only": {
           "n": 48,
           "accuracy": 0.85
-        },
-        "boundary_disagreement": {
-          "n": 100,
-          "rate": 0.04
         }
       },
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 37672,
-          "n_prod_label": "evidence_universe",
+          "n_prod": 37746,
+          "n_prod_label": "offline_fallback_37746",
+          "production_population_source": "offline_fallback",
+          "manifest_path": null,
           "n_golden": 100,
           "model": "gpt-5.4-mini",
           "architecture": "classification",
-          "cache_discount": 0.5,
+          "cached_input_price_per_million": 0.375,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "stacking": "normal Responses API list price on uncached input and output, plus the production cached-input rate on measured cached tokens; no Batch API discount",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -1631,35 +1594,35 @@
             "total_output_tokens": 498000,
             "total_usd": 3.1785,
             "mean_usd_per_row": 0.031785,
-            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+            "note": "Normal list price on measured tokens. Reasoning tokens are inside output_tokens. The cached-input rate is not applied at this step."
           },
           "2_cache": {
             "label": "cache_adjustment",
             "available": true,
             "total_cached_tokens": 950000,
             "cache_hit_rate": 0.76,
-            "cache_discount": 0.5,
+            "cached_input_price_per_million": 0.375,
             "total_usd_after_cache": 2.82225,
             "mean_usd_per_row": 0.028222499999999998,
-            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+            "note": "Measured cached_tokens from this run. Cached input billed at $0.375 per one million tokens."
           },
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 37672,
-            "n_prod_label": "evidence_universe",
-            "scale_factor": 376.72,
-            "estimated_production_usd": 1063.19802,
-            "estimated_usd_per_company": 0.0282225,
-            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "n_prod": 37746,
+            "n_prod_label": "offline_fallback_37746",
+            "scale_factor": 377.46,
+            "estimated_production_usd": 1065.2864849999999,
+            "estimated_usd_per_company": 0.028222499999999998,
+            "note": "Linear scale × (37746 / 100) at normal Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 3.1785,
           "golden_after_cache_usd": 2.82225,
-          "estimated_production_usd": 1063.19802,
+          "estimated_production_usd": 1065.2864849999999,
           "cache_hit_rate": 0.76,
-          "n_prod": 37672
+          "n_prod": 37746
         }
       },
       "latency": {
@@ -1854,6 +1817,7 @@
         "mean_usd_per_row": 0.031785,
         "pricing_per_mtok": {
           "input": 0.75,
+          "cached_input": 0.375,
           "output": 4.5
         }
       },
@@ -1865,12 +1829,6 @@
           "mean": 0.999,
           "threshold": 0.98,
           "n_below_threshold": 0
-        },
-        "batch_parity": {
-          "verdict": "PASS",
-          "n_rows": 10,
-          "n_checks": 190,
-          "n_failed": 0
         }
       }
     },
@@ -1915,24 +1873,22 @@
         "rad_ai_native_only": {
           "n": 48,
           "accuracy": 0.81
-        },
-        "boundary_disagreement": {
-          "n": 100,
-          "rate": 0.06
         }
       },
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 37672,
-          "n_prod_label": "evidence_universe",
+          "n_prod": 37746,
+          "n_prod_label": "offline_fallback_37746",
+          "production_population_source": "offline_fallback",
+          "manifest_path": null,
           "n_golden": 100,
           "model": "gpt-5.6-luna",
           "architecture": "classification",
-          "cache_discount": 0.5,
+          "cached_input_price_per_million": 0.5,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "stacking": "normal Responses API list price on uncached input and output, plus the production cached-input rate on measured cached tokens; no Batch API discount",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -1943,35 +1899,35 @@
             "total_output_tokens": 666000,
             "total_usd": 5.246,
             "mean_usd_per_row": 0.05246000000000001,
-            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+            "note": "Normal list price on measured tokens. Reasoning tokens are inside output_tokens. The cached-input rate is not applied at this step."
           },
           "2_cache": {
             "label": "cache_adjustment",
             "available": true,
             "total_cached_tokens": 950000,
             "cache_hit_rate": 0.76,
-            "cache_discount": 0.5,
+            "cached_input_price_per_million": 0.5,
             "total_usd_after_cache": 4.771000000000001,
             "mean_usd_per_row": 0.04771000000000001,
-            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+            "note": "Measured cached_tokens from this run. Cached input billed at $0.5 per one million tokens."
           },
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 37672,
-            "n_prod_label": "evidence_universe",
-            "scale_factor": 376.72,
-            "estimated_production_usd": 1797.3311200000005,
-            "estimated_usd_per_company": 0.047710000000000016,
-            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "n_prod": 37746,
+            "n_prod_label": "offline_fallback_37746",
+            "scale_factor": 377.46,
+            "estimated_production_usd": 1800.8616600000003,
+            "estimated_usd_per_company": 0.04771000000000001,
+            "note": "Linear scale × (37746 / 100) at normal Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 5.246,
           "golden_after_cache_usd": 4.771000000000001,
-          "estimated_production_usd": 1797.3311200000005,
+          "estimated_production_usd": 1800.8616600000003,
           "cache_hit_rate": 0.76,
-          "n_prod": 37672
+          "n_prod": 37746
         }
       },
       "latency": {
@@ -2166,6 +2122,7 @@
         "mean_usd_per_row": 0.05246,
         "pricing_per_mtok": {
           "input": 1.0,
+          "cached_input": 0.5,
           "output": 6.0
         }
       },
@@ -2177,12 +2134,6 @@
           "mean": 0.9989,
           "threshold": 0.98,
           "n_below_threshold": 0
-        },
-        "batch_parity": {
-          "verdict": "PASS",
-          "n_rows": 10,
-          "n_checks": 190,
-          "n_failed": 0
         }
       }
     },
@@ -2227,24 +2178,22 @@
         "rad_ai_native_only": {
           "n": 48,
           "accuracy": 0.85
-        },
-        "boundary_disagreement": {
-          "n": 100,
-          "rate": 0.04
         }
       },
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 37672,
-          "n_prod_label": "evidence_universe",
+          "n_prod": 37746,
+          "n_prod_label": "offline_fallback_37746",
+          "production_population_source": "offline_fallback",
+          "manifest_path": null,
           "n_golden": 100,
           "model": "gpt-5.6-luna",
           "architecture": "classification",
-          "cache_discount": 0.5,
+          "cached_input_price_per_million": 0.5,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "stacking": "normal Responses API list price on uncached input and output, plus the production cached-input rate on measured cached tokens; no Batch API discount",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -2255,35 +2204,35 @@
             "total_output_tokens": 1047000,
             "total_usd": 7.532,
             "mean_usd_per_row": 0.07532,
-            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+            "note": "Normal list price on measured tokens. Reasoning tokens are inside output_tokens. The cached-input rate is not applied at this step."
           },
           "2_cache": {
             "label": "cache_adjustment",
             "available": true,
             "total_cached_tokens": 950000,
             "cache_hit_rate": 0.76,
-            "cache_discount": 0.5,
+            "cached_input_price_per_million": 0.5,
             "total_usd_after_cache": 7.057,
             "mean_usd_per_row": 0.07057000000000001,
-            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+            "note": "Measured cached_tokens from this run. Cached input billed at $0.5 per one million tokens."
           },
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 37672,
-            "n_prod_label": "evidence_universe",
-            "scale_factor": 376.72,
-            "estimated_production_usd": 2658.5130400000003,
-            "estimated_usd_per_company": 0.07057000000000001,
-            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "n_prod": 37746,
+            "n_prod_label": "offline_fallback_37746",
+            "scale_factor": 377.46,
+            "estimated_production_usd": 2663.73522,
+            "estimated_usd_per_company": 0.07057,
+            "note": "Linear scale × (37746 / 100) at normal Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 7.532,
           "golden_after_cache_usd": 7.057,
-          "estimated_production_usd": 2658.5130400000003,
+          "estimated_production_usd": 2663.73522,
           "cache_hit_rate": 0.76,
-          "n_prod": 37672
+          "n_prod": 37746
         }
       },
       "latency": {
@@ -2478,6 +2427,7 @@
         "mean_usd_per_row": 0.07532,
         "pricing_per_mtok": {
           "input": 1.0,
+          "cached_input": 0.5,
           "output": 6.0
         }
       },
@@ -2489,12 +2439,6 @@
           "mean": 0.9989,
           "threshold": 0.98,
           "n_below_threshold": 0
-        },
-        "batch_parity": {
-          "verdict": "PASS",
-          "n_rows": 10,
-          "n_checks": 190,
-          "n_failed": 0
         }
       }
     },
@@ -2539,24 +2483,22 @@
         "rad_ai_native_only": {
           "n": 48,
           "accuracy": 0.86
-        },
-        "boundary_disagreement": {
-          "n": 100,
-          "rate": 0.03
         }
       },
       "production_cost_estimate": {
         "available": true,
         "assumptions": {
-          "n_prod": 37672,
-          "n_prod_label": "evidence_universe",
+          "n_prod": 37746,
+          "n_prod_label": "offline_fallback_37746",
+          "production_population_source": "offline_fallback",
+          "manifest_path": null,
           "n_golden": 100,
           "model": "gpt-5.6-luna",
           "architecture": "classification",
-          "cache_discount": 0.5,
+          "cached_input_price_per_million": 0.5,
           "cache_source": "measured_from_run",
           "reasoning_billed_inside_output": true,
-          "stacking": "sync Responses API list price on all tokens (production runs sync, no Batch API discount); cache_discount on the cached input portion (cached input = sync_input * cache)",
+          "stacking": "normal Responses API list price on uncached input and output, plus the production cached-input rate on measured cached tokens; no Batch API discount",
           "do_not_use_historical_production_cache_rate": true
         },
         "steps": {
@@ -2567,35 +2509,35 @@
             "total_output_tokens": 1575000,
             "total_usd": 10.7,
             "mean_usd_per_row": 0.107,
-            "note": "Sync list price on measured tokens. Reasoning tokens are inside output_tokens. Cache discount not applied at this step."
+            "note": "Normal list price on measured tokens. Reasoning tokens are inside output_tokens. The cached-input rate is not applied at this step."
           },
           "2_cache": {
             "label": "cache_adjustment",
             "available": true,
             "total_cached_tokens": 950000,
             "cache_hit_rate": 0.76,
-            "cache_discount": 0.5,
+            "cached_input_price_per_million": 0.5,
             "total_usd_after_cache": 10.225,
             "mean_usd_per_row": 0.10225,
-            "note": "Measured cached_tokens from this run. Cached input billed at 50% of sync input rate."
+            "note": "Measured cached_tokens from this run. Cached input billed at $0.5 per one million tokens."
           },
           "3_scale": {
             "label": "scale_to_production_n",
             "available": true,
-            "n_prod": 37672,
-            "n_prod_label": "evidence_universe",
-            "scale_factor": 376.72,
-            "estimated_production_usd": 3851.962,
-            "estimated_usd_per_company": 0.10225,
-            "note": "Linear scale \u00d7 (37672 / 100) at sync Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
+            "n_prod": 37746,
+            "n_prod_label": "offline_fallback_37746",
+            "scale_factor": 377.46,
+            "estimated_production_usd": 3859.5284999999994,
+            "estimated_usd_per_company": 0.10224999999999998,
+            "note": "Linear scale × (37746 / 100) at normal Responses API pricing (production runs sync, no Batch API discount). Assumes golden-set token mix and measured cache rate hold at production volume."
           }
         },
         "summary": {
           "golden_sync_usd": 10.7,
           "golden_after_cache_usd": 10.225,
-          "estimated_production_usd": 3851.962,
+          "estimated_production_usd": 3859.5284999999994,
           "cache_hit_rate": 0.76,
-          "n_prod": 37672
+          "n_prod": 37746
         }
       },
       "latency": {
@@ -2790,6 +2732,7 @@
         "mean_usd_per_row": 0.107,
         "pricing_per_mtok": {
           "input": 1.0,
+          "cached_input": 0.5,
           "output": 6.0
         }
       },
@@ -2801,12 +2744,6 @@
           "mean": 0.9989,
           "threshold": 0.98,
           "n_below_threshold": 0
-        },
-        "batch_parity": {
-          "verdict": "PASS",
-          "n_rows": 10,
-          "n_checks": 190,
-          "n_failed": 0
         }
       }
     }

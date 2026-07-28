@@ -1,8 +1,4 @@
-"""Production two-pass classifier contracts and artifact builders.
-
-This PR freezes taxonomy contracts only. The async runner, journal, CLI, and
-workflow modules land in later stacked PRs.
-"""
+"""Production two-pass classifier: contracts, resumable runner, and CLI entrypoints."""
 
 from .config import (
     DEFAULT_MODEL,
@@ -14,6 +10,7 @@ from .config import (
     SUPPORTED_MODELS,
 )
 from .request_builder import RequestSettings
+from .runner import ProductionRunner, RunnerSettings, RunResult
 
 __all__ = [
     "DEFAULT_MODEL",
@@ -22,6 +19,9 @@ __all__ = [
     "PASS_A_EFFORT",
     "PASS_A_REASONING_EFFORT",
     "PASS_A_TOP_LOGPROBS",
+    "ProductionRunner",
     "RequestSettings",
+    "RunResult",
+    "RunnerSettings",
     "SUPPORTED_MODELS",
 ]

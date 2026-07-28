@@ -1,7 +1,7 @@
 """Filesystem paths for the eval harness.
 
 Input artifacts (production predictions + classifier input) are referenced
-by literal path rather than imported from single_pass_classifier.paths: importing single_pass_classifier.config
+by literal path rather than imported from the single-pass paths module: its config
 transitively would require OPENAI_API_KEY at import time, which offline
 stages (sampling, scoring) must not need.
 """
@@ -67,12 +67,3 @@ def run_scored_path(run_id: str) -> Path:
 # Stage 2 labeling artifacts (git-ignored: both embed scraped evidence text).
 LABELING_WORKSPACE_DIR = GOLDEN_DIR / "workspace"
 REVIEW_PAGE_HTML = GOLDEN_DIR / "review_page.html"
-
-# Legacy eval Pass A/B prompt drafts (match evals/classification.py schemas).
-# Production V2 prompts live only under two_pass_classifier/prompts/; full eval
-# ownership rewrite is a later PR.
-PROMPTS_DIR = EVALS_DIR / "prompts"
-BINARY_GATE_PROMPT = PROMPTS_DIR / "binary_gate_prompt.txt"
-SUBCLASS_RAD_PROMPT = PROMPTS_DIR / "subclass_rad_prompt.txt"
-FAMILY_BLOCK_AI = PROMPTS_DIR / "family_block_ai_native.txt"
-FAMILY_BLOCK_NOT = PROMPTS_DIR / "family_block_not_ai_native.txt"

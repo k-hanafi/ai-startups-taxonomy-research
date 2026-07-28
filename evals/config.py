@@ -1,92 +1,21 @@
-"""Eval-harness configuration. All harness tunables live here.
-
-Mirrors the no-magic-numbers convention of single_pass_classifier/config.py but is fully
-independent: nothing here is imported by (or from) the production pipeline.
-"""
+"""Research-only configuration for the golden-set eval harness."""
 
 from __future__ import annotations
+
+from two_pass_classifier import config as production_config
 
 # ---------------------------------------------------------------------------
 # Benchmark matrix (locked model × Pass B effort screen)
 # ---------------------------------------------------------------------------
 
-# Locked screen matrix: nano / mini / luna × Pass B low/medium/high.
-# gpt-5.4 / gpt-5.5 stay in EVAL_MODEL_PRICING for scoring older banked runs.
-EVAL_MODELS: list[str] = [
-    "gpt-5.4-nano",   # current production model
-    "gpt-5.4-mini",
-    "gpt-5.6-luna",
-]
-
-# Pass B effort arms for the locked 9-cell screen (not "none":
-# Pass A already owns the logprob/calibration axis at effort=none).
-MATRIX_PASS_B_EFFORTS: list[str] = ["low", "medium", "high"]
-
-# Legacy single-pass knobs (kept for scoring older banked runs only).
-SCREEN_REASONING_EFFORT: str = "medium"
-REASONING_EFFORTS: list[str] = ["none", "low", "medium", "high"]
-FINALIST_REPEATS: int = 3
-
-# Empirical finding (2026-07-05, gpt-5.4-nano): logprobs are returned ONLY when
-# reasoning is fully off. reasoning={"effort":"none"} yields reasoning_tokens=0
-# and logprobs; "minimal"/"low"/"medium"/"high" all reject logprobs with a 400
-# ("logprobs are not supported with reasoning models"). So token-level
-# confidence and reasoning are mutually exclusive, and the none-vs-reasoning
-# A/B measures the accuracy cost of getting logprobs. The runner captures
-# logprobs only at this effort.
-REASONING_OFF: str = "none"
-
-# ---------------------------------------------------------------------------
-# Classification runner (Stage 5): Pass A = binary gate, Pass B = subclass + RAD
-# ---------------------------------------------------------------------------
-
-# Pass A runs with reasoning off (logprobs on); Pass B defaults to maximum
-# reasoning, per the split-reasoning design in the classification plan.
-PASS_A_EFFORT: str = REASONING_OFF
-PASS_B_EFFORT: str = "high"
-
-# Pass A emits a single-field JSON (~6 tokens); 500 is generous headroom.
-# Pass B reasons at high effort; observed single-pass high runs peaked at
-# ~1,450 output tokens, so the shared 8,000 cap (MAX_OUTPUT_TOKENS) applies.
-PASS_A_MAX_OUTPUT_TOKENS: int = 500
-
-# Distinct cache keys per pass: each pass has its own stable instruction
-# prefix, and mixing them in one cache route would hurt hit rates.
-# Opaque strings kept as the historical "two-pass-*" values so prompt-cache
-# identity does not reset when the public CLI/module was renamed.
-PASS_A_CACHE_KEY: str = "two-pass-a-binary-gate"
-PASS_B_CACHE_KEY: str = "two-pass-b-subclass-rad"
-
-# GPT-4 launch month: the cohort boundary (founded 2023-03 or later = GENAI-ERA).
-COHORT_BOUNDARY: tuple[int, int] = (2023, 3)
-
-# ---------------------------------------------------------------------------
-# Request parameters (experimental; production does not send these yet)
-# ---------------------------------------------------------------------------
-
-# Pass A is a binary {0,1} digit decision. Request depth 5 so the opposing
-# digit can still appear when the model is near-certain (with depth 2 the
-# second slot is often whitespace, which makes confidence unavailable and
-# blocks score --confidence-from-raw). Legacy TOP_LOGPROBS=15 was a
-# single-pass subclass leftover and must not drive Pass A success criteria.
-#
-# Depth is not sufficient on its own: gpt-5.4-mini and gpt-5.6-luna only
-# return candidates holding roughly 1% probability or more (measured floor
-# 2.3e-2 and 1.3e-1 against nano's 3.7e-44), so a near-certain row omits the
-# opposing digit at any requested depth. Extraction handles that by bounding
-# the missing digit with the unreported residual rather than inventing mass.
-PASS_A_TOP_LOGPROBS: int = 5
-# Kept for legacy single-pass runner / older banked runs only.
-TOP_LOGPROBS: int = 15
-LOGPROB_INCLUDE: list[str] = ["message.output_text.logprobs"]
-
-# Widest confidence interval accepted from a censored (one-sided) candidate
-# pool. The residual bound is only useful while it is narrow: validated
-# against nano ground truth on 77 simulated-censored rows the midpoint sat
-# within 0.005 of exact, and observed widths peak at 0.018 on mini. Beyond
-# this the row carries too little information to report, so it is marked
-# unavailable instead.
-MAX_CENSORED_INTERVAL_WIDTH: float = 0.05
+# Production owns every classifier setting. The eval harness only defines the
+# research matrix assembled from those supported production values.
+EVAL_MODELS: tuple[str, ...] = production_config.SUPPORTED_MODELS
+MATRIX_PASS_B_EFFORTS: tuple[str, ...] = (
+    production_config.SUPPORTED_PASS_B_EFFORTS
+)
+DEFAULT_MODEL: str = production_config.DEFAULT_MODEL
+DEFAULT_PASS_B_EFFORT: str = production_config.DEFAULT_PASS_B_EFFORT
 
 # Per-row floor: below this, most probability went to non-verdict tokens
 # (whitespace, punctuation), so renormalized confidence rests on a thin slice.
@@ -95,32 +24,6 @@ MAX_CENSORED_INTERVAL_WIDTH: float = 0.05
 # are thin (so 1/100 is tolerated; 11/100 is not).
 VALID_MASS_THRESHOLD: float = 0.90
 VALID_MASS_MAX_BELOW_SHARE: float = 0.05
-
-# Pass A/B output+reasoning token guesses for dry-run / cost-preview only.
-# Calibrated to the 2026-07-25 two-pass matrix (mean output tokens/row).
-# Preview still ignores prompt-cache savings, so it stays a mild upper bound
-# on matrix spend; the dashboard Projected cost uses measured tokens instead.
-PASS_B_OUTPUT_TOKEN_ESTIMATE: dict[str, int] = {
-    "none": 250,
-    "low": 350,
-    "medium": 550,
-    "high": 1_000,
-}
-PASS_A_OUTPUT_TOKEN_ESTIMATE: int = 16
-
-# Empirical finding (2026-07-05, gpt-5.4-nano): reasoning models reject the
-# `temperature` parameter with a 400 ("not supported with this model"). They
-# decode at a fixed internal setting, so temperature is not a lever here and is
-# omitted. Determinism instead comes from reasoning effort + the model itself,
-# which the finalist-repeat runs measure. Flip SEND_TEMPERATURE only if a
-# benchmarked model is a non-reasoning model that accepts it.
-SEND_TEMPERATURE: bool = False
-DECODING_TEMPERATURE: float = 0.0
-
-# Reasoning tokens count against this cap. Sized ~8x the observed v2 output
-# (~210 tokens) to leave room for reasoning=medium; the harness measures the
-# real usage that will later size the production MAX_OUTPUT_TOKENS.
-MAX_OUTPUT_TOKENS: int = 8_000
 
 # ---------------------------------------------------------------------------
 # Golden set
@@ -157,57 +60,5 @@ CALIBRATION_BINS: int = 10
 # model only answers on its top-X% most confident rows.
 SELECTIVE_COVERAGE_GRID: list[float] = [round(0.1 * k, 1) for k in range(1, 11)]
 
-# ---------------------------------------------------------------------------
-# Pricing ($ per 1M tokens, sync API) — verified 2026-07-05 against the
-# OpenAI pricing page. single_pass_classifier/tokens.py MODEL_PRICING is stale; the harness
-# carries its own table so cost numbers in eval reports are trustworthy.
-# ---------------------------------------------------------------------------
-
-EVAL_MODEL_PRICING: dict[str, dict[str, float]] = {
-    "gpt-5.4-nano": {"input": 0.20, "output": 1.25},
-    "gpt-5.4-mini": {"input": 0.75, "output": 4.50},
-    "gpt-5.4":      {"input": 2.50, "output": 15.00},
-    "gpt-5.5":      {"input": 5.00, "output": 30.00},
-    # gpt-5.6-luna: OpenAI GPT-5.6 launch pricing, $1.00/$6.00 per 1M
-    # (re-verified 2026-07-22 against OpenAI's published GPT-5.6 rates).
-    "gpt-5.6-luna": {"input": 1.00, "output": 6.00},
-}
-
-
-def require_model_pricing(model: str) -> dict[str, float]:
-    """Return pricing for *model*, or refuse rather than silently estimate $0."""
-    pricing = EVAL_MODEL_PRICING.get(model)
-    if pricing is None:
-        raise SystemExit(
-            f"Unknown model pricing for {model!r}. Add it to EVAL_MODEL_PRICING "
-            "before dry-run or cost estimates (refusing a silent $0 figure)."
-        )
-    return pricing
-
-# ---------------------------------------------------------------------------
-# Production cost extrapolation (pivot 8)
-# ---------------------------------------------------------------------------
-# Projections price the sync Responses API: production two-pass will run
-# sync (faster, and far simpler than orchestrating async Pass A -> Pass B
-# dependencies through the Batch API), so no Batch discount is assumed.
-# Prompt caching applies to the sync API, so the cached portion of input
-# bills at 50% of the sync input rate. Do NOT import from src: evals
-# stays offline-safe without keys.
-CACHE_DISCOUNT: float = 0.50
-
-# Scale-up N for production $ projections. Default is the evidence-only
-# universe the V1 alive/dead dashboard reports (~37.7k): survivors with
-# non-empty live evidence plus dead companies recovered with usable
-# archive evidence. Named alternatives stay available for later toggles.
-N_PROD_ALIVE_EVIDENCE: int = 22_032
-N_PROD_DEAD_EXTRACTABLE: int = 19_044
-N_PROD_ALIVE_PLUS_DEAD: int = N_PROD_ALIVE_EVIDENCE + N_PROD_DEAD_EXTRACTABLE
-N_PROD_EVIDENCE_UNIVERSE: int = 37_672
-N_PROD_DEFAULT: int = N_PROD_EVIDENCE_UNIVERSE
-
-N_PROD_SCALE_OPTIONS: dict[str, int] = {
-    "evidence_universe": N_PROD_EVIDENCE_UNIVERSE,
-    "alive_evidence": N_PROD_ALIVE_EVIDENCE,
-    "dead_extractable": N_PROD_DEAD_EXTRACTABLE,
-    "alive_plus_dead": N_PROD_ALIVE_PLUS_DEAD,
-}
+# Used only when no immutable production manifest can be supplied or discovered.
+OFFLINE_PRODUCTION_ROW_FALLBACK: int = 37_746

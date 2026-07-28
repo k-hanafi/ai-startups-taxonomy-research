@@ -697,8 +697,13 @@ function passRow(label, p) {
 function costBreakdownHtml(c) {
   const b = c.cost_breakdown;
   const p = b.pricing_per_mtok || null;
+  const cachedPrice = b.cached_input_price_per_mtok != null
+    ? b.cached_input_price_per_mtok
+    : (p && p.cached_input != null ? p.cached_input : null);
+  const cachedPriceText = cachedPrice != null ? '$' + cachedPrice : 'not recorded';
   const priceLine = p
-    ? 'input $' + p.input + ' / output $' + p.output + ' per 1M tokens'
+    ? 'input $' + p.input + ' / cached ' + cachedPriceText +
+      ' / output $' + p.output + ' per 1M tokens'
     : 'per-1M prices not recorded';
   let html = '<h4>' + c.label + ' &middot; cost breakdown</h4>' +
     '<div class="pop-sub">' + (b.model || 'model not recorded') + ' &middot; ' + priceLine + '</div>';
@@ -726,9 +731,9 @@ function costBreakdownHtml(c) {
     : 'tokens or prices not recorded') +
     '</td><td class="val">' + usd(b.golden_sync_usd, 4) + '</td></tr>';
 
-  if (b.golden_after_cache_usd != null && p && b.total_cached_tokens != null && b.cache_discount != null) {
+  if (b.golden_after_cache_usd != null && p && cachedPrice != null &&
+      b.total_cached_tokens != null) {
     const uncached = b.total_input_tokens - b.total_cached_tokens;
-    const cachedPrice = p.input * b.cache_discount;
     html += '<tr><td>2 &middot; Cache: ' + tok(uncached) + ' &times; $' + p.input + '/1M + ' +
       tok(b.total_cached_tokens) + ' &times; $' + cachedPrice + '/1M + output' +
       '</td><td class="val">' + usd(b.golden_after_cache_usd, 4) + '</td></tr>';
@@ -747,6 +752,7 @@ function costBreakdownHtml(c) {
 
   const notes = [];
   if (b.n_prod_label) notes.push('N = ' + tok(b.n_prod) + ' (' + b.n_prod_label.replaceAll('_', ' ') + ').');
+  if (b.production_population_source) notes.push('Population source: ' + b.production_population_source.replaceAll('_', ' ') + '.');
   notes.push('Unit costs come from this run\'s measured API tokens on the golden set, then scale linearly.');
   notes.push('Sync Responses API pricing; production runs sync, so no Batch API discount is assumed.');
   notes.push('Reasoning tokens are billed inside output.');
@@ -1454,6 +1460,25 @@ def build_html(metrics: dict) -> str:
     )
     appbar_meta = _appbar_meta_html(metrics)
     footer_times = _footer_times_note(metrics)
+    population = metrics.get("production_population") or {}
+    population_n = population.get("row_count")
+    if population_n is None:
+        population_count = "the recorded production population"
+        population_short = "recorded N"
+        population_title = "Measured golden-set unit cost scaled to recorded N"
+    else:
+        population_count = f"{int(population_n):,} companies"
+        population_short = f"{int(population_n) / 1000:.1f}k"
+        population_title = (
+            "Measured golden-set unit cost × "
+            f"({int(population_n):,} / n_golden)"
+        )
+    if population_n is None:
+        population_source = "available run metadata"
+    elif population.get("source") == "manifest":
+        population_source = "an immutable production manifest"
+    else:
+        population_source = "the explicit offline fallback"
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1506,7 +1531,7 @@ def build_html(metrics: dict) -> str:
       <p>The locked model &times; effort matrix compared on accuracy,
       confidence quality, projected production cost, and latency. Projected
       cost is measured golden-set spend for that run (API tokens, with cache)
-      scaled to the evidence-only production universe (37,672 companies), not
+      scaled to {population_count} from {population_source}, not
       the pre-run cost-preview guess. Latency is a production-practice metric
       (sync API wall-clock), not a model-quality score.</p>
     </div>
@@ -1520,7 +1545,7 @@ def build_html(metrics: dict) -> str:
             <th class="num">AI-native</th>
             <th class="num gloss" title="Resource-Adjusted AI Dependency: how dependent the company is on foundation-model providers">RAD</th>
             <th class="num">Mean confidence</th>
-            <th class="num" title="Measured golden-set unit cost × (37,672 / n_golden)">Projected cost @ 37.7k</th>
+            <th class="num" title="{html.escape(population_title)}">Projected cost @ {population_short}</th>
             <th class="num">Latency p50</th>
           </tr>
         </thead>
@@ -1531,7 +1556,7 @@ def build_html(metrics: dict) -> str:
       <div class="card-title">Cost against subclass accuracy</div>
       <div class="card-desc">Each point is one configuration; whiskers are the
       95% CI on subclass accuracy. The cost axis is that run's measured
-      golden-set spend scaled to 37,672 companies (open any cost value in the
+      golden-set spend scaled to {population_count} (open any cost value in the
       table above for the full arithmetic).</div>
       <div id="chart-pareto" class="chart"></div>
     </div>

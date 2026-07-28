@@ -64,9 +64,16 @@ python -m tavily_crawler crawl
 
 ### Run Classification Pipeline
 ```bash
+# V1 (legacy Batch path)
 python -m single_pass_classifier prepare --dry-run  # Cost estimate
 python -m single_pass_classifier status             # Check progress
 python -m single_pass_classifier run                # Full run
+
+# V2 (production Responses path; see two_pass_classifier/README.md)
+python -m two_pass_classifier build-manifest        # Freeze live+dead input
+python -m two_pass_classifier cost-preview          # Offline token/$ estimate
+python -m two_pass_classifier smoke                 # Paid 10-row gate
+python -m two_pass_classifier run                   # Paid full run
 ```
 
 ### Survivorship Pipeline
@@ -108,9 +115,9 @@ pytest single_pass_classifier/tests/test_schema.py  # Specific test file
 ```
 /
 ├── single_pass_classifier/ # Live V1 classifier application
-├── two_pass_classifier/ # V2 contracts (prompts, schema, manifest, exporter)
+├── two_pass_classifier/    # Production V2 classifier and contract owner
 ├── tavily_crawler/         # Live liveness and crawl application
-├── evals/                  # Golden-set eval harness
+├── evals/                  # Golden-set research harness over production V2
 ├── wayback_machine/        # Historical + survivorship
 │   ├── scripts/           # CDX probe, crawl, merge
 │   └── tests/             # Wayback tests
@@ -123,7 +130,9 @@ pytest single_pass_classifier/tests/test_schema.py  # Specific test file
 
 ## Important Conventions
 
-- **Classifier tunables** live in `single_pass_classifier/config.py`
+- **V1 classifier tunables** live in `single_pass_classifier/config.py`
+- **V2 classifier contracts and tunables** live in `two_pass_classifier/`
+- **`evals` imports V2 contracts** and must not duplicate classifier behavior
 - **Match by `custom_id`**, never by position (batch results)
 - **Only `website_evidence` differs** between strands
 - **CDX rate limit:** Max 58 req/min (60 risks IP ban)

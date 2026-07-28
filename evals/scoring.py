@@ -9,7 +9,7 @@ re-scoring every banked run later costs one command.
 Metrics: per-axis accuracy (ai_native / subclass / rad), macro-F1, confusion
 matrices, bootstrap CIs on accuracy, paired-bootstrap CIs on deltas vs a
 baseline run, cost per row from actual token usage, an output/reasoning
-token summary that sizes MAX_OUTPUT_TOKENS and the cost model (gate Q6),
+token summary that audits the production output caps and cost model (gate Q6),
 and wall-clock latency distributions when the run recorded them (pivot 7;
 older banked runs score unchanged with latency: null). When predictions
 carry ``cached_tokens`` (pivot 8), ``production_cost_estimate`` adds the
@@ -18,8 +18,8 @@ without that field mark the cache step unavailable instead of inventing
 a hit rate.
 
 Calibration (reliability bins + selective-prediction curve) is computed ONLY
-when a per-row binary confidence is supplied, either as a binary_confidence
-field on prediction records or as an external {custom_id|org_uuid: float}
+when per-row ``ai_native_confidence`` is stored on prediction records or
+supplied as an external {custom_id|org_uuid: float}
 mapping. The logprob extractor (Stage 6) plugs in through that data seam;
 this module never imports it.
 
@@ -29,9 +29,8 @@ Pass B isolating metrics (alongside end-to-end axes):
   Pass B quality from gate routing errors.
 - ``rad_ai_native_only``: RAD accuracy on gold AI-native rows only (excludes
   structural RAD-NA zeros on the not-AI-native family).
-- ``boundary_disagreement``: rate of Pass B ``boundary_disagreement=True``.
 
-This module must stay importable without OPENAI_API_KEY: no single_pass_classifier.* or
+This module must stay importable without OPENAI_API_KEY: no production runtime or
 evals.runner imports.
 """
 
@@ -45,6 +44,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
+from two_pass_classifier import config as production_config
 
 from evals import config as cfg
 from evals.paths import (
@@ -265,7 +265,10 @@ def cost_and_tokens(records: list[dict[str, Any]], model: str) -> dict[str, Any]
     cache_present = _records_have_cached_field(records)
     total_cached = sum(t["cached"] for t in tokens) if cache_present else None
 
-    pricing = cfg.EVAL_MODEL_PRICING.get(model)
+    try:
+        pricing = production_config.require_model_pricing(model)
+    except ValueError:
+        pricing = None
     total_usd = mean_usd = None
     if pricing is not None and records:
         total_usd = total_in / 1e6 * pricing["input"] + total_out / 1e6 * pricing["output"]
@@ -299,8 +302,8 @@ def cost_and_tokens(records: list[dict[str, Any]], model: str) -> dict[str, Any]
         "output_tokens": _token_stats([t["output"] for t in tokens]),
         "reasoning_tokens": _token_stats([t["reasoning"] for t in tokens]),
         "max_output_tokens_note": (
-            "Size MAX_OUTPUT_TOKENS from the output_tokens p95/max above "
-            "(reasoning tokens count against the cap)."
+            "Compare output_tokens p95/max above with the production-owned "
+            "output cap. Reasoning tokens count against that cap."
         ),
     }
 
@@ -365,6 +368,8 @@ def resolve_confidence(
             value = external.get(uuid)
             if value is None and rec.get("custom_id"):
                 value = external.get(rec["custom_id"])
+        if value is None:
+            value = rec.get("ai_native_confidence")
         if value is None:
             value = rec.get("binary_confidence")
         if value is not None:
@@ -538,17 +543,6 @@ def pass_b_isolating_metrics(
             "macro_f1": None,
         }
 
-    flags = []
-    for u in uuids:
-        flag = predictions[u].get("boundary_disagreement")
-        if flag is None:
-            continue
-        flags.append(bool(flag))
-    boundary = {
-        "n": len(flags),
-        "rate": (sum(flags) / len(flags)) if flags else None,
-    }
-
     return {
         "definitions": {
             "subclass_family_conditional": (
@@ -559,14 +553,9 @@ def pass_b_isolating_metrics(
                 "RAD accuracy on gold AI-native rows only (excludes structural "
                 "RAD-NA zeros on the not-AI-native family)"
             ),
-            "boundary_disagreement": (
-                "Share of completed rows where Pass B set "
-                "boundary_disagreement=true"
-            ),
         },
         "subclass_family_conditional": subclass_cond,
         "rad_ai_native_only": rad_ai,
-        "boundary_disagreement": boundary,
     }
 
 
@@ -798,9 +787,6 @@ def score_cli(
             "rad (AI-native only, n=%d): accuracy=%.3f",
             rad["n"], rad["accuracy"],
         )
-    bd = pbm.get("boundary_disagreement") or {}
-    if bd.get("rate") is not None:
-        logger.info("boundary_disagreement rate=%.3f (n=%d)", bd["rate"], bd["n"])
     cost = report["cost"]
     if cost["mean_usd_per_row"] is not None:
         logger.info("cost: $%.4f/row ($%.2f total, %d rows)",

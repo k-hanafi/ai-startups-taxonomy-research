@@ -1,19 +1,20 @@
 """Stage 5: Pass A/B classification runner over the golden set.
 
-Pass A (reasoning off, logprobs on) answers the binary "AI-native or not?"
-with a one-field JSON, putting the whole confidence signal on a handful of
-tokens. Pass B (reasoning high, no logprobs) assigns the fine-grained
-subclass, hard-constrained by the response schema to the family Pass A
-chose, plus RAD when the family is AI-native. Cohort never touches an LLM:
-it is a pure function of founded_date.
+Pass A (internal reasoning off, logprobs on) answers the binary "AI-native or
+not?" and records its explicit analysis. The decision field remains first so
+the confidence signal stays on a structurally located 0/1 token. Pass B
+(reasoning enabled, no logprobs) assigns the fine-grained subclass,
+hard-constrained by the response schema to the family Pass A chose, plus RAD
+when the family is AI-native. Cohort never touches an LLM: it is a pure
+function of founded_date.
 
 Empirical basis (see the split-reasoning plan): logprobs and reasoning are
 mutually exclusive per request, binary accuracy survives without reasoning
 (93% vs Fable either way), and 10-way subclass accuracy does not (41% vs 66%).
 
-Reuses the Stage 3 runner's reliability harness: tenacity retries, per-row
-resume keyed by custom_id, config snapshot with prompt hashes, raw responses
-banked per pass. A row is complete only when BOTH passes succeeded.
+Uses tenacity retries, per-row resume keyed by custom_id, production request
+fingerprints, and raw responses banked per pass. A row is complete only when
+both passes succeed and validate against the production schemas.
 
 Pass B effort sweeps bank Pass A once per model by default into
 ``evals/runs/pass_a_banks/<model>/``. Later efforts auto-reuse that bank so
@@ -26,28 +27,43 @@ on resume of the cell run.
 from __future__ import annotations
 
 import datetime
-import inspect
 import json
 import logging
 import shutil
 import time
 from types import SimpleNamespace
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 from openai import OpenAI
-from pydantic import BaseModel, Field
 
-from single_pass_classifier.builder import _add_additional_properties_false
 from single_pass_classifier.config import OPENAI_API_KEY
-from single_pass_classifier.formatter import _normalize_founded_date, build_custom_id, format_user_message
+from single_pass_classifier.formatter import build_custom_id
+from two_pass_classifier import config as production_config
+from two_pass_classifier.cohort import compute_cohort
+from two_pass_classifier.confidence import (
+    BinaryConfidenceUnavailable,
+    LogprobExtractionError,
+    extract_binary_confidence,
+)
+from two_pass_classifier.exporter import stable_source_union
+from two_pass_classifier.request_builder import (
+    RequestSettings,
+    build_pass_a_request,
+    build_pass_b_request,
+    pass_a_request_fingerprint,
+    pass_a_request_identity,
+    request_fingerprint,
+    request_identity,
+)
+from two_pass_classifier.schema import (
+    PassAResult,
+    PassBAINativeResult,
+    PassBNotAINativeResult,
+)
 
 from evals import config as cfg
 from evals.jsonl_io import append_jsonl, iter_jsonl
 from evals.paths import (
-    BINARY_GATE_PROMPT,
-    FAMILY_BLOCK_AI,
-    FAMILY_BLOCK_NOT,
-    SUBCLASS_RAD_PROMPT,
     pass_a_bank_run_id,
     run_config_path,
     run_dir,
@@ -58,169 +74,49 @@ from evals.runner import (
     _RETRIABLE,
     _completed_custom_ids,
     _git_commit,
-    _sha256,
     load_golden_rows,
 )
 
 logger = logging.getLogger(__name__)
 
-FAMILY_BLOCK_PLACEHOLDER = "{family_block}"
+BinaryResult = PassAResult
+SubclassResultAI = PassBAINativeResult
+SubclassResultNot = PassBNotAINativeResult
 
 
-# ---------------------------------------------------------------------------
-# Output schemas (one per request shape)
-# ---------------------------------------------------------------------------
-
-class BinaryResult(BaseModel):
-    """Pass A output: the binary verdict, nothing else."""
-
-    ai_native: Literal[0, 1]
+def request_settings(model: str, effort_b: str) -> RequestSettings:
+    """Build the exact production request settings for one eval cell."""
+    return RequestSettings(model=model, pass_b_effort=effort_b)
 
 
-class SubclassResultAI(BaseModel):
-    """Pass B output when the gate said AI-native (family 1A-1G, RAD applies)."""
-
-    subclass: Literal["1A", "1B", "1C", "1D", "1E", "1F", "1G"]
-    rad_score: Literal["RAD-H", "RAD-M", "RAD-L"]
-    conf_classification: int = Field(ge=1, le=5)
-    conf_rad: int = Field(ge=1, le=5)
-    reasons_3_points: str
-    sources_used: str
-    verification_critique: str
-    boundary_disagreement: bool
+def pass_a_kwargs(row: dict[str, Any], model: str) -> dict[str, Any]:
+    """Thin adapter to the production Pass A request builder."""
+    settings = request_settings(model, production_config.DEFAULT_PASS_B_EFFORT)
+    return build_pass_a_request(row, settings)
 
 
-class SubclassResultNot(BaseModel):
-    """Pass B output when the gate said not-AI-native (family 0A-0C, no RAD)."""
-
-    subclass: Literal["0A", "0B", "0C"]
-    conf_classification: int = Field(ge=1, le=5)
-    reasons_3_points: str
-    sources_used: str
-    verification_critique: str
-    boundary_disagreement: bool
-
-
-def strict_schema(model_cls: type[BaseModel]) -> dict:
-    """OpenAI strict-mode JSON schema for a Pydantic model."""
-    schema = model_cls.model_json_schema()
-    _add_additional_properties_false(schema)
-    return schema
-
-
-def _text_format(model_cls: type[BaseModel]) -> dict:
-    return {
-        "format": {
-            "type": "json_schema",
-            "name": model_cls.__name__,
-            "strict": True,
-            "schema": strict_schema(model_cls),
-        }
-    }
-
-
-# ---------------------------------------------------------------------------
-# Prompts and messages
-# ---------------------------------------------------------------------------
-
-def load_pass_a_prompt() -> str:
-    return BINARY_GATE_PROMPT.read_text(encoding="utf-8").strip()
-
-
-def load_pass_b_prompt(family: int) -> str:
-    """Pass B instructions with the family block substituted in."""
-    template = SUBCLASS_RAD_PROMPT.read_text(encoding="utf-8").strip()
-    block_path = FAMILY_BLOCK_AI if family == 1 else FAMILY_BLOCK_NOT
-    block = block_path.read_text(encoding="utf-8").strip()
-    if FAMILY_BLOCK_PLACEHOLDER not in template:
-        raise AssertionError(
-            f"{SUBCLASS_RAD_PROMPT.name} is missing the {FAMILY_BLOCK_PLACEHOLDER} placeholder"
-        )
-    return template.replace(FAMILY_BLOCK_PLACEHOLDER, block)
-
-
-def compute_cohort(founded_date: Any) -> str:
-    """PRE-GENAI / GENAI-ERA from founded_date; deterministic, no LLM.
-
-    Unknown or year-only dates resolve conservatively: an unknown date maps to
-    PRE-GENAI (most Crunchbase rows predate 2023), and a bare year uses
-    January, so year-2023 rows without a month count as PRE-GENAI (Jan < Mar).
-    """
-    normalized = _normalize_founded_date(founded_date)  # YYYY-MM | YYYY | Unknown
-    if normalized == "Unknown":
-        return "PRE-GENAI"
-    try:
-        year = int(normalized[:4])
-        month = int(normalized[5:7]) if len(normalized) >= 7 else 1
-    except ValueError:
-        return "PRE-GENAI"
-    return "GENAI-ERA" if (year, month) >= cfg.COHORT_BOUNDARY else "PRE-GENAI"
-
-
-def pass_a_message(row: dict[str, Any]) -> str:
-    """Pass A user message: the production format minus Website Pages Used.
-
-    The gate prompt dropped that field as redundant with Website Evidence, so
-    the message must not carry it either.
-    """
-    trimmed = dict(row)
-    trimmed["website_pages_used"] = ""
-    return format_user_message(trimmed)
-
-
-def pass_b_message(row: dict[str, Any], verdict: int, cohort: str) -> str:
-    """Pass B user message: full production format + the two conditioning fields."""
-    return (
-        format_user_message(row)
-        + f"\nPriorBinaryVerdict: {verdict}"
-        + f"\nCohort: {cohort}"
+def pass_b_kwargs(
+    row: dict[str, Any],
+    verdict: int,
+    model: str,
+    effort_b: str,
+) -> dict[str, Any]:
+    """Thin adapter to the production Pass B request builder."""
+    return build_pass_b_request(
+        row,
+        verdict,
+        request_settings(model, effort_b),
     )
 
 
-# ---------------------------------------------------------------------------
-# Request builders
-# ---------------------------------------------------------------------------
-
-def pass_a_kwargs(row: dict[str, Any], prompt_a: str, model: str) -> dict[str, Any]:
+def production_request_metadata(model: str, effort_b: str) -> dict[str, Any]:
+    """Return production-owned request identities for an eval run."""
+    settings = request_settings(model, effort_b)
     return {
-        "model": model,
-        "instructions": prompt_a,
-        "input": pass_a_message(row),
-        "prompt_cache_key": cfg.PASS_A_CACHE_KEY,
-        "max_output_tokens": cfg.PASS_A_MAX_OUTPUT_TOKENS,
-        "store": False,
-        "text": _text_format(BinaryResult),
-        "reasoning": {"effort": cfg.PASS_A_EFFORT},
-        "top_logprobs": cfg.PASS_A_TOP_LOGPROBS,
-        "include": list(cfg.LOGPROB_INCLUDE),
-    }
-
-
-def pass_b_kwargs(row: dict[str, Any], verdict: int, cohort: str,
-                  model: str, effort_b: str) -> dict[str, Any]:
-    result_cls = SubclassResultAI if verdict == 1 else SubclassResultNot
-    return {
-        "model": model,
-        "instructions": load_pass_b_prompt(verdict),
-        "input": pass_b_message(row, verdict, cohort),
-        "prompt_cache_key": cfg.PASS_B_CACHE_KEY,
-        "max_output_tokens": cfg.MAX_OUTPUT_TOKENS,
-        "store": False,
-        "text": _text_format(result_cls),
-        "reasoning": {"effort": effort_b},
-    }
-
-
-def identity_hashes() -> dict[str, str]:
-    """SHA-256 of every artifact that defines the classification request identity."""
-    return {
-        "prompt_a_sha256": _sha256(load_pass_a_prompt()),
-        "prompt_b_family1_sha256": _sha256(load_pass_b_prompt(1)),
-        "prompt_b_family0_sha256": _sha256(load_pass_b_prompt(0)),
-        "schema_a_sha256": _sha256(json.dumps(strict_schema(BinaryResult), sort_keys=True)),
-        "schema_b1_sha256": _sha256(json.dumps(strict_schema(SubclassResultAI), sort_keys=True)),
-        "schema_b0_sha256": _sha256(json.dumps(strict_schema(SubclassResultNot), sort_keys=True)),
-        "formatter_sha256": _sha256(inspect.getsource(format_user_message)),
+        "semantic_request_fingerprint": request_fingerprint(settings),
+        "request_identity": request_identity(settings),
+        "pass_a_request_fingerprint": pass_a_request_fingerprint(settings),
+        "pass_a_request_identity": pass_a_request_identity(settings),
     }
 
 
@@ -254,6 +150,52 @@ def _parse_output(resp: Any) -> Optional[dict[str, Any]]:
         return None
 
 
+def _validated_output(
+    resp: Any,
+    result_cls: type[PassAResult]
+    | type[PassBAINativeResult]
+    | type[PassBNotAINativeResult],
+) -> Optional[dict[str, Any]]:
+    parsed = _parse_output(resp)
+    if parsed is None:
+        return None
+    try:
+        return result_cls.model_validate(parsed).model_dump(mode="json")
+    except (TypeError, ValueError):
+        return None
+
+
+def _sampled_label_confidence(
+    resp: Any,
+    verdict: int,
+) -> tuple[float | None, str]:
+    raw = resp.model_dump()
+    try:
+        confidence = extract_binary_confidence(raw)
+    except BinaryConfidenceUnavailable:
+        return None, "unavailable"
+    except LogprobExtractionError:
+        return None, "invalid"
+    if confidence.ai_native != verdict:
+        return None, "verdict_mismatch"
+    return confidence.sampled_probability, "available"
+
+
+def _validated_pass_a(
+    resp: Any,
+) -> tuple[Optional[dict[str, Any]], float | None, str | None]:
+    parsed = _validated_output(resp, PassAResult)
+    if parsed is None:
+        return None, None, None
+    confidence, status = _sampled_label_confidence(
+        resp,
+        int(parsed["ai_native"]),
+    )
+    if status in {"invalid", "verdict_mismatch"}:
+        return None, None, status
+    return parsed, confidence, status
+
+
 def assemble_record(custom_id: str, org_uuid: str, model: str, effort_b: str,
                     cohort: str, resp_a: Any, resp_b: Any,
                     latency_a_s: float | None = None,
@@ -263,8 +205,16 @@ def assemble_record(custom_id: str, org_uuid: str, model: str, effort_b: str,
     status is 'completed' only when both passes completed AND parsed; resume
     treats anything else as unfinished and re-runs the row.
     """
-    a = _parse_output(resp_a)
-    b = _parse_output(resp_b) if resp_b is not None else None
+    a, confidence, confidence_status = _validated_pass_a(resp_a)
+    verdict = a.get("ai_native") if a else None
+    result_b_cls = (
+        PassBAINativeResult if verdict == 1 else PassBNotAINativeResult
+    )
+    b = (
+        _validated_output(resp_b, result_b_cls)
+        if resp_b is not None and verdict in (0, 1)
+        else None
+    )
 
     status_a = getattr(resp_a, "status", None)
     status_b = getattr(resp_b, "status", None) if resp_b is not None else None
@@ -280,12 +230,18 @@ def assemble_record(custom_id: str, org_uuid: str, model: str, effort_b: str,
         if status == "completed":
             status = "parse_failed"
 
-    verdict = a.get("ai_native") if a else None
+    pass_a_sources = list(a.get("sources_used") or []) if a else []
+    pass_b_sources = list(b.get("sources_used") or []) if b else []
+    sources_used = (
+        json.loads(stable_source_union(pass_a_sources, pass_b_sources))
+        if a and b
+        else []
+    )
     record: dict[str, Any] = {
         "custom_id": custom_id,
         "org_uuid": org_uuid,
         "model": model,
-        "effort_a": cfg.PASS_A_EFFORT,
+        "effort_a": production_config.PASS_A_EFFORT,
         "effort_b": effort_b,
         "status": status,
         "status_a": status_a,
@@ -295,11 +251,23 @@ def assemble_record(custom_id: str, org_uuid: str, model: str, effort_b: str,
         # RAD is structural for the zero family: not a model opinion.
         "rad_score": (b.get("rad_score") if verdict == 1 else "RAD-NA") if b else None,
         "cohort": cohort,
-        "conf_classification": b.get("conf_classification") if b else None,
-        "conf_rad": (b.get("conf_rad") if verdict == 1 else None) if b else None,
-        "boundary_disagreement": b.get("boundary_disagreement") if b else None,
-        "reasons_3_points": b.get("reasons_3_points") if b else None,
-        "verification_critique": b.get("verification_critique") if b else None,
+        "ai_native_confidence": confidence,
+        "confidence_extraction_status": confidence_status,
+        "subclass_confidence": b.get("subclass_confidence") if b else None,
+        "rad_confidence": (
+            b.get("rad_confidence") if verdict == 1 and b else None
+        ),
+        "sources_used": sources_used,
+        "ai_native_reasoning": a.get("ai_native_reasoning") if a else None,
+        "ai_native_critique": a.get("ai_native_critique") if a else None,
+        "pass_a_sources_used": pass_a_sources,
+        "subclass_reasoning": b.get("subclass_reasoning") if b else None,
+        "rad_reasoning": b.get("rad_reasoning") if b else None,
+        "pass_b_sources_used": pass_b_sources,
+        "subclass_critique": b.get("subclass_critique") if b else None,
+        "rad_critique": (
+            b.get("rad_critique") if verdict == 1 and b else None
+        ),
     }
     record.update(_usage_fields(resp_a, "a"))
     record["a_latency_s"] = latency_a_s
@@ -337,39 +305,42 @@ def _create(client: OpenAI, kwargs: dict[str, Any]) -> Any:
 # Resume refuses to mix changed prompts/schemas/model into an existing run.
 _RESUME_INVARIANTS = (
     "model", "effort_b", "repeat", "n_rows",
-    "prompt_a_sha256", "prompt_b_family1_sha256", "prompt_b_family0_sha256",
-    "schema_a_sha256", "schema_b1_sha256", "schema_b0_sha256",
-    "formatter_sha256",
+    "semantic_request_fingerprint", "pass_a_request_fingerprint",
 )
 
 
 def _ensure_config(run_id: str, model: str, effort_b: str, repeat: int,
                    n_rows: int,
                    pass_a_bank_run_id: str | None = None) -> None:
-    config = {
+    settings = request_settings(model, effort_b)
+    run_config = {
         "run_id": run_id,
         "kind": "classification",
         "model": model,
-        "effort_a": cfg.PASS_A_EFFORT,
+        "effort_a": production_config.PASS_A_EFFORT,
         "effort_b": effort_b,
         "repeat": repeat,
         "n_rows": n_rows,
-        "top_logprobs": cfg.PASS_A_TOP_LOGPROBS,
-        "pass_a_max_output_tokens": cfg.PASS_A_MAX_OUTPUT_TOKENS,
-        "pass_b_max_output_tokens": cfg.MAX_OUTPUT_TOKENS,
-        "pass_a_cache_key": cfg.PASS_A_CACHE_KEY,
-        "pass_b_cache_key": cfg.PASS_B_CACHE_KEY,
+        "top_logprobs": production_config.PASS_A_TOP_LOGPROBS,
+        "pass_a_max_output_tokens": settings.pass_a_max_output_tokens,
+        "pass_b_max_output_tokens": settings.pass_b_max_output_tokens,
+        "pass_a_cache_key": production_config.PASS_A_CACHE_KEY,
+        "pass_b_cache_keys": dict(production_config.PASS_B_CACHE_KEYS),
         "pass_a_bank_run_id": pass_a_bank_run_id,
         "git_commit": _git_commit(),
         "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        **identity_hashes(),
+        **production_request_metadata(model, effort_b),
     }
     path = run_config_path(run_id)
     if not path.exists():
-        path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        path.write_text(json.dumps(run_config, indent=2), encoding="utf-8")
         return
     prior = json.loads(path.read_text(encoding="utf-8"))
-    mismatched = [k for k in _RESUME_INVARIANTS if prior.get(k) != config[k]]
+    mismatched = [
+        key
+        for key in _RESUME_INVARIANTS
+        if prior.get(key) != run_config[key]
+    ]
     if mismatched:
         raise SystemExit(
             f"Cannot resume classification run {run_id}: {mismatched} changed since it "
@@ -413,9 +384,16 @@ def _index_banked_pass_a(bank_run_id: str) -> dict[str, dict[str, Any]]:
         raw_path = raw_root / f"{cid}_a.json"
         if not raw_path.exists():
             continue
+        raw_a = json.loads(raw_path.read_text(encoding="utf-8"))
+        validated, _, _ = _validated_pass_a(_BankedPassAResponse(raw_a))
+        if (
+            validated is None
+            or validated["ai_native"] != int(rec["ai_native"])
+        ):
+            continue
         out[cid] = {
-            "ai_native": int(rec["ai_native"]),
-            "raw_a": json.loads(raw_path.read_text(encoding="utf-8")),
+            "ai_native": int(validated["ai_native"]),
+            "raw_a": raw_a,
             "record": rec,
             "bank_model": bank_config.get("model") or rec.get("model"),
         }
@@ -429,6 +407,7 @@ def load_pass_a_bank(bank_run_id: str) -> dict[str, dict[str, Any]]:
     the banked prediction record}. Raises SystemExit if the bank is missing
     completed Pass A rows or raw ``*_a.json`` files.
     """
+    _assert_bank_identity(bank_run_id)
     preds_path = run_predictions_path(bank_run_id)
     if not preds_path.exists():
         raise SystemExit(
@@ -451,32 +430,26 @@ def load_pass_a_bank(bank_run_id: str) -> dict[str, dict[str, Any]]:
         )
 
     out = _index_banked_pass_a(bank_run_id)
-    missing_raw = [cid for cid in completed_cids if cid not in out]
-    if missing_raw:
+    missing = [cid for cid in completed_cids if cid not in out]
+    if missing:
+        raw_root = run_raw_dir(bank_run_id)
+        invalid = [
+            cid for cid in missing if (raw_root / f"{cid}_a.json").exists()
+        ]
+        missing_raw = [cid for cid in missing if cid not in invalid]
+        if invalid:
+            raise SystemExit(
+                f"Pass A bank {bank_run_id!r} has raw Pass A that no longer "
+                f"validates against production PassAResult for "
+                f"{len(invalid)} row(s), e.g. {invalid[0]}_a.json. "
+                "Re-bank Pass A with --rerun-pass-a."
+            )
         raise SystemExit(
             f"Pass A bank {bank_run_id!r} missing raw Pass A files for "
             f"{len(missing_raw)} row(s), e.g. {missing_raw[0]}_a.json "
             "(raw/ is machine-local; copy it with the bank run)."
         )
     return out
-
-
-def _assert_bank_model(bank: dict[str, dict[str, Any]], bank_id: str,
-                       model: str) -> None:
-    bank_model = next(iter(bank.values()))["bank_model"]
-    if not bank_model:
-        raise SystemExit(
-            f"Pass A bank {bank_id!r} has no model recorded in "
-            "config.json or prediction rows. Cannot verify same-model "
-            "reuse. Re-bank Pass A with --rerun-pass-a or fix the bank "
-            "metadata."
-        )
-    if bank_model != model:
-        raise SystemExit(
-            f"Pass A bank {bank_id!r} was run with model "
-            f"{bank_model!r}, but this run requested {model!r}. "
-            "Bank Pass A once per model."
-        )
 
 
 def pass_a_bank_covers(
@@ -504,34 +477,40 @@ def clear_pass_a_bank(model: str) -> str:
 
 def _ensure_pass_a_bank_config(bank_id: str, model: str, n_rows: int) -> None:
     """Write or validate the stable Pass A bank config snapshot."""
-    hashes = identity_hashes()
-    config = {
+    metadata = production_request_metadata(
+        model,
+        production_config.DEFAULT_PASS_B_EFFORT,
+    )
+    settings = request_settings(
+        model,
+        production_config.DEFAULT_PASS_B_EFFORT,
+    )
+    bank_config = {
         "run_id": bank_id,
         "kind": "pass_a_bank",
         "model": model,
-        "effort_a": cfg.PASS_A_EFFORT,
+        "effort_a": production_config.PASS_A_EFFORT,
         "n_rows": n_rows,
-        "top_logprobs": cfg.PASS_A_TOP_LOGPROBS,
-        "pass_a_max_output_tokens": cfg.PASS_A_MAX_OUTPUT_TOKENS,
-        "pass_a_cache_key": cfg.PASS_A_CACHE_KEY,
+        "top_logprobs": production_config.PASS_A_TOP_LOGPROBS,
+        "pass_a_max_output_tokens": settings.pass_a_max_output_tokens,
+        "pass_a_cache_key": production_config.PASS_A_CACHE_KEY,
         "git_commit": _git_commit(),
         "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "prompt_a_sha256": hashes["prompt_a_sha256"],
-        "schema_a_sha256": hashes["schema_a_sha256"],
-        "formatter_sha256": hashes["formatter_sha256"],
+        "pass_a_request_fingerprint": metadata["pass_a_request_fingerprint"],
+        "pass_a_request_identity": metadata["pass_a_request_identity"],
     }
     path = run_config_path(bank_id)
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        path.write_text(json.dumps(bank_config, indent=2), encoding="utf-8")
         return
     prior = json.loads(path.read_text(encoding="utf-8"))
-    for key in ("model", "n_rows", "prompt_a_sha256", "schema_a_sha256",
-                "formatter_sha256"):
-        if prior.get(key) != config[key]:
+    for key in ("model", "n_rows", "pass_a_request_fingerprint"):
+        if prior.get(key) != bank_config[key]:
             raise SystemExit(
                 f"Cannot extend Pass A bank {bank_id!r}: {key} changed "
-                f"({prior.get(key)!r} -> {config[key]!r}). Pass --rerun-pass-a "
+                f"({prior.get(key)!r} -> {bank_config[key]!r}). "
+                "Pass --rerun-pass-a "
                 "to rebuild the bank."
             )
 
@@ -554,7 +533,7 @@ def _persist_pass_a_bank_row(
     """
     if cid in index:
         return
-    a = _parse_output(resp_a)
+    a, _, _ = _validated_pass_a(resp_a)
     if a is None or a.get("ai_native") not in (0, 1):
         return
     run_raw_dir(bank_id).mkdir(parents=True, exist_ok=True)
@@ -583,25 +562,43 @@ def _persist_pass_a_bank_row(
     }
 
 
-def _assert_bank_identity(bank_id: str) -> None:
-    """Refuse a stable bank whose Pass A prompt/schema no longer match."""
+def _assert_bank_identity(
+    bank_id: str,
+    expected_model: str | None = None,
+) -> None:
+    """Refuse any bank not built from the current production Pass A."""
     path = run_config_path(bank_id)
     if not path.exists():
-        return
+        raise SystemExit(
+            f"Pass A bank {bank_id!r} has no config.json. Historical banks "
+            "without a production fingerprint cannot be reused."
+        )
     prior = json.loads(path.read_text(encoding="utf-8"))
-    if prior.get("kind") != "pass_a_bank":
-        # Historical cell runs used as --pass-a-from pins skip this check.
-        return
-    hashes = identity_hashes()
-    for key in ("prompt_a_sha256", "schema_a_sha256", "formatter_sha256"):
-        if prior.get(key) is None:
-            continue
-        if prior.get(key) != hashes[key]:
-            raise SystemExit(
-                f"Pass A bank {bank_id!r} was built with a different {key}. "
-                "Pass --rerun-pass-a to rebuild (refusing silent reuse of a "
-                "stale bank)."
-            )
+    model = prior.get("model")
+    if not model:
+        raise SystemExit(
+            f"Pass A bank {bank_id!r} has no model in config.json and cannot "
+            "prove production compatibility."
+        )
+    if expected_model is not None and model != expected_model:
+        raise SystemExit(
+            f"Pass A bank {bank_id!r} was run with model {model!r}, but this "
+            f"run requested {expected_model!r}. Bank Pass A once per model."
+        )
+    try:
+        expected = production_request_metadata(
+            str(model),
+            production_config.DEFAULT_PASS_B_EFFORT,
+        )["pass_a_request_fingerprint"]
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    actual = prior.get("pass_a_request_fingerprint")
+    if actual != expected:
+        raise SystemExit(
+            f"Pass A bank {bank_id!r} has an incompatible or missing "
+            "production Pass A fingerprint. Rebuild it with --rerun-pass-a. "
+            "Historical paid artifacts remain readable but cannot be reused."
+        )
 
 
 def resolve_pass_a_source(
@@ -627,8 +624,8 @@ def resolve_pass_a_source(
             "(cannot pin a historical bank and rebuild at once)."
         )
     if pass_a_from:
+        _assert_bank_identity(pass_a_from, model)
         bank = load_pass_a_bank(pass_a_from)
-        _assert_bank_model(bank, pass_a_from, model)
         missing = [cid for cid in custom_ids if cid not in bank]
         if missing:
             raise SystemExit(
@@ -642,10 +639,13 @@ def resolve_pass_a_source(
         # Side-effect free here: caller clears the bank only when not dry-run.
         return bank_id, None, True
 
+    if (
+        run_config_path(bank_id).exists()
+        or run_predictions_path(bank_id).exists()
+    ):
+        _assert_bank_identity(bank_id, model)
     if pass_a_bank_covers(bank_id, custom_ids):
-        _assert_bank_identity(bank_id)
         bank = load_pass_a_bank(bank_id)
-        _assert_bank_model(bank, bank_id, model)
         return bank_id, bank, False
 
     return bank_id, None, True
@@ -683,8 +683,8 @@ class _BankedPassAResponse:
         return self._raw
 
 
-def run_classification(model: str = cfg.EVAL_MODELS[0],
-                 effort_b: str = cfg.PASS_B_EFFORT,
+def run_classification(model: str = cfg.DEFAULT_MODEL,
+                 effort_b: str = cfg.DEFAULT_PASS_B_EFFORT,
                  repeat: int = 1,
                  limit: int | None = None,
                  dry_run: bool = False,
@@ -701,6 +701,7 @@ def run_classification(model: str = cfg.EVAL_MODELS[0],
     """
     if limit is not None and limit < 1:
         raise ValueError(f"--limit must be a positive row cap, got {limit}")
+    request_settings(model, effort_b)
 
     if reuse_pass_a_from and pass_a_from:
         raise SystemExit(
@@ -719,7 +720,6 @@ def run_classification(model: str = cfg.EVAL_MODELS[0],
         rows = rows[:limit]
 
     run_id = run_id or make_run_id(model, effort_b, repeat)
-    prompt_a = load_pass_a_prompt()
     custom_ids = [build_custom_id(r["org_uuid"]) for r in rows]
 
     bank_id, bank, creating_bank = resolve_pass_a_source(
@@ -730,7 +730,7 @@ def run_classification(model: str = cfg.EVAL_MODELS[0],
 
     if dry_run:
         _print_dry_run(
-            rows, prompt_a, model, effort_b, run_id,
+            rows, model, effort_b, run_id,
             pass_a_bank_id=bank_id if bank is not None else None,
         )
         return run_id
@@ -801,7 +801,7 @@ def run_classification(model: str = cfg.EVAL_MODELS[0],
                 # included, so this is the honest per-pass cost a production
                 # caller would feel.
                 started_a = time.monotonic()
-                resp_a = _create(client, pass_a_kwargs(row, prompt_a, model))
+                resp_a = _create(client, pass_a_kwargs(row, model))
                 latency_a_s = round(time.monotonic() - started_a, 3)
                 raw_a = resp_a.model_dump()
             (run_raw_dir(run_id) / f"{cid}_a.json").write_text(
@@ -811,7 +811,7 @@ def run_classification(model: str = cfg.EVAL_MODELS[0],
                 ),
                 encoding="utf-8",
             )
-            a = _parse_output(resp_a)
+            a, _, _ = _validated_pass_a(resp_a)
             if creating_bank and a is not None and a.get("ai_native") in (0, 1):
                 _persist_pass_a_bank_row(
                     bank_id, model, cid, row["org_uuid"], resp_a, latency_a_s,
@@ -825,7 +825,7 @@ def run_classification(model: str = cfg.EVAL_MODELS[0],
             started_b = time.monotonic()
             resp_b = _create(
                 client,
-                pass_b_kwargs(row, a["ai_native"], cohort, model, effort_b),
+                pass_b_kwargs(row, a["ai_native"], model, effort_b),
             )
             latency_b_s = round(time.monotonic() - started_b, 3)
             (run_raw_dir(run_id) / f"{cid}_b.json").write_text(
@@ -873,7 +873,7 @@ def bank_pass_a(
         rows = rows[:limit]
 
     bank_id = pass_a_bank_run_id(model)
-    prompt_a = load_pass_a_prompt()
+    request_settings(model, production_config.DEFAULT_PASS_B_EFFORT)
     custom_ids = [build_custom_id(r["org_uuid"]) for r in rows]
 
     if dry_run:
@@ -916,10 +916,10 @@ def bank_pass_a(
     for i, row in enumerate(todo, start=1):
         cid = build_custom_id(row["org_uuid"])
         started_a = time.monotonic()
-        resp_a = _create(client, pass_a_kwargs(row, prompt_a, model))
+        resp_a = _create(client, pass_a_kwargs(row, model))
         latency_a_s = round(time.monotonic() - started_a, 3)
         raw_a = resp_a.model_dump()
-        a = _parse_output(resp_a)
+        a, _, _ = _validated_pass_a(resp_a)
         if a is not None and a.get("ai_native") in (0, 1):
             _persist_pass_a_bank_row(
                 bank_id, model, cid, row["org_uuid"], resp_a, latency_a_s,
@@ -974,7 +974,7 @@ def validate_matrix_cell(model: str, effort_b: str) -> None:
         )
 
 
-def _print_dry_run(rows: list[dict[str, Any]], prompt_a: str, model: str,
+def _print_dry_run(rows: list[dict[str, Any]], model: str,
                    effort_b: str, run_id: str,
                    pass_a_bank_id: str | None = None) -> None:
     # Single cost formula shared with ``python -m evals cost-preview``.
@@ -992,7 +992,7 @@ def _print_dry_run(rows: list[dict[str, Any]], prompt_a: str, model: str,
     else:
         logger.info("DRY RUN %s (Pass A + Pass B; no bank yet)", run_id)
     logger.info("  model=%s pass A effort=%s, pass B effort=%s, rows=%d",
-                model, cfg.PASS_A_EFFORT, effort_b, est.n_rows)
+                model, production_config.PASS_A_EFFORT, effort_b, est.n_rows)
     logger.info(
         "  est input tokens ~%d (~$%.4f) + rough output/reasoning ~%d (~$%.4f) "
         "→ total ~$%.4f (output estimate is order-of-magnitude only)",
@@ -1006,4 +1006,9 @@ def _print_dry_run(rows: list[dict[str, Any]], prompt_a: str, model: str,
             "tokens; treat the output estimate as a floor, not a cap.",
             effort_b,
         )
-    logger.info("  identity hashes: %s", identity_hashes())
+    logger.info(
+        "  production request fingerprint: %s",
+        production_request_metadata(model, effort_b)[
+            "semantic_request_fingerprint"
+        ],
+    )

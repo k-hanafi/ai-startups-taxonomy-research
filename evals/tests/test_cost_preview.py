@@ -12,6 +12,7 @@ from evals.cost_preview import (
     estimate_pass_b,
     format_matrix_table,
 )
+from two_pass_classifier import config as production_config
 
 
 def _fake_rows(n: int = 3) -> list[dict]:
@@ -63,9 +64,9 @@ def test_nine_cells_cover_locked_matrix():
 
 
 def test_unknown_model_refuses_rather_than_zero():
-    with pytest.raises(SystemExit, match="Unknown model pricing"):
+    with pytest.raises((SystemExit, ValueError), match="unsupported model|unknown pricing"):
         estimate_pass_a("gpt-not-a-real-model", _fake_rows(1))
-    with pytest.raises(SystemExit, match="Unknown model pricing"):
+    with pytest.raises((SystemExit, ValueError), match="unsupported model|unknown pricing"):
         estimate_pass_b("gpt-not-a-real-model", "low", _fake_rows(1))
 
 
@@ -95,5 +96,30 @@ def test_format_matrix_table_mentions_total():
     text = format_matrix_table(matrix)
     assert "TOTAL estimated spend" in text
     assert f"${matrix.total_cost:.4f}" in text
+    assert "TOTAL one-attempt cap projection" in text
+    assert "retries or resumed attempts can exceed it" in text
+    assert "ceiling" not in text.lower()
+    assert "No Batch discount is applied" in text
     for model in cfg.EVAL_MODELS:
         assert model.split("-")[-1] in text
+
+
+def test_preview_uses_production_output_estimates_and_caps():
+    rows = _fake_rows(2)
+    pass_a = estimate_pass_a("gpt-5.4-nano", rows)
+    pass_b = estimate_pass_b("gpt-5.4-nano", "medium", rows)
+
+    assert production_config.PASS_A_PROVISIONAL_OUTPUT_TOKENS == 320
+    assert pass_a.est_output_tokens == (
+        len(rows) * production_config.PASS_A_PROVISIONAL_OUTPUT_TOKENS
+    )
+    assert pass_a.one_attempt_cap_tokens == (
+        len(rows) * production_config.PASS_A_MAX_OUTPUT_TOKENS
+    )
+    assert pass_b.est_output_tokens == (
+        len(rows)
+        * production_config.PASS_B_PREVIEW_OUTPUT_TOKENS["medium"]
+    )
+    assert pass_b.one_attempt_cap_tokens == (
+        len(rows) * production_config.PASS_B_MAX_OUTPUT_TOKENS["medium"]
+    )

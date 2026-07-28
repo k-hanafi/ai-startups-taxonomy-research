@@ -1,29 +1,78 @@
-"""Production cost extrapolation from a golden-set eval run (pivot 8).
+"""Production cost extrapolation from measured golden-set usage.
 
-Turns measured golden-set token usage into an interpretable ladder:
-
-1. Golden-set actual — sync list price on measured tokens
-2. Cache adjustment — measured cache rate + $ after cache discount
-3. Scale: × (N_prod / n_golden) → full-dataset estimate
-4. Assumptions: N, cache source, cache discount, classification, reasoning in output
-
-Priced at sync Responses API rates: production two-pass classification will
-run through the sync API (faster, and far simpler than orchestrating async
-dependencies between Pass A and Pass B), so no Batch API discount is
-assumed. The prompt-cache discount stays (caching applies to the sync API):
-cached input bills at 50% of the sync input rate. Reasoning tokens are
-billed inside output (OpenAI Responses usage).
-
-Legacy runs without ``cached_tokens`` fields do NOT invent a production
-cache rate: the cache step is marked ``unavailable`` and later steps that
-depend on it are omitted or flagged.
+The ladder prices normal Responses API input, cached input, and output with
+the production-owned model table, then scales the measured per-row cost to an
+immutable manifest count. If no manifest exists locally, it labels and uses
+the explicit 37,746-row offline fallback. No Batch discount is applied.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Optional
 
+from two_pass_classifier import config as production_config
+from two_pass_classifier.manifest import load_manifest
+from two_pass_classifier.paths import MANIFESTS_DIR
+from two_pass_classifier.workflow import resolve_manifest_path
+
 from evals import config as cfg
+
+
+@dataclass(frozen=True)
+class ProductionPopulation:
+    row_count: int
+    label: str
+    source: str
+    manifest_path: str | None
+
+
+def resolve_production_population(
+    manifest_path: str | Path | None = None,
+) -> ProductionPopulation:
+    """Use an immutable manifest count, or the explicit offline fallback."""
+    if manifest_path is not None:
+        path = resolve_manifest_path(manifest_path)
+    else:
+        candidates = sorted(
+            MANIFESTS_DIR.glob("manifest_*.jsonl"),
+            key=lambda candidate: (
+                candidate.stat().st_mtime_ns,
+                candidate.name,
+            ),
+            reverse=True,
+        )
+        if not candidates:
+            return ProductionPopulation(
+                row_count=cfg.OFFLINE_PRODUCTION_ROW_FALLBACK,
+                label="offline_fallback_37746",
+                source="offline_fallback",
+                manifest_path=None,
+            )
+        for candidate in candidates:
+            try:
+                load_manifest(candidate)
+            except Exception:
+                continue
+            path = candidate
+            break
+        else:
+            # Corrupt or unreadable local manifests must not abort unpaid
+            # preview/scoring: same offline fallback as an empty directory.
+            return ProductionPopulation(
+                row_count=cfg.OFFLINE_PRODUCTION_ROW_FALLBACK,
+                label="offline_fallback_37746",
+                source="offline_fallback",
+                manifest_path=None,
+            )
+    manifest = load_manifest(path)
+    return ProductionPopulation(
+        row_count=manifest.row_count,
+        label=f"manifest_{manifest.manifest_sha256[:12]}",
+        source="manifest",
+        manifest_path=str(path),
+    )
 
 
 def _sync_cost(
@@ -40,7 +89,7 @@ def _sync_cost(
         uncached = input_tokens - cached
         cost_in = (
             uncached / 1e6 * pricing["input"]
-            + cached / 1e6 * pricing["input"] * cfg.CACHE_DISCOUNT
+            + cached / 1e6 * pricing["cached_input"]
         )
     else:
         cost_in = input_tokens / 1e6 * pricing["input"]
@@ -94,8 +143,9 @@ def extrapolate_production_cost(
     total_output_tokens: int,
     total_cached_tokens: Optional[int],
     cache_field_present: bool,
-    n_prod: int = cfg.N_PROD_DEFAULT,
-    n_prod_label: str = "evidence_universe",
+    n_prod: int | None = None,
+    n_prod_label: str | None = None,
+    manifest_path: str | Path | None = None,
     architecture: str = "classification",
 ) -> dict[str, Any]:
     """Build the sync-priced production cost ladder as a structured dict.
@@ -104,14 +154,30 @@ def extrapolate_production_cost(
     zero hits). When ``cache_field_present=False``, the cache step is
     unavailable and we do not invent a hit rate.
     """
-    pricing = cfg.EVAL_MODEL_PRICING.get(model)
+    if n_prod is None:
+        population = resolve_production_population(manifest_path)
+    else:
+        population = ProductionPopulation(
+            row_count=n_prod,
+            label=n_prod_label or "explicit",
+            source="explicit",
+            manifest_path=str(manifest_path) if manifest_path is not None else None,
+        )
+    try:
+        pricing = production_config.require_model_pricing(model)
+    except ValueError:
+        pricing = None
     assumptions = {
-        "n_prod": n_prod,
-        "n_prod_label": n_prod_label,
+        "n_prod": population.row_count,
+        "n_prod_label": population.label,
+        "production_population_source": population.source,
+        "manifest_path": population.manifest_path,
         "n_golden": n_golden,
         "model": model,
         "architecture": architecture,
-        "cache_discount": cfg.CACHE_DISCOUNT,
+        "cached_input_price_per_million": (
+            pricing["cached_input"] if pricing is not None else None
+        ),
         "cache_source": (
             "measured_from_run"
             if cache_field_present
@@ -119,9 +185,9 @@ def extrapolate_production_cost(
         ),
         "reasoning_billed_inside_output": True,
         "stacking": (
-            "sync Responses API list price on all tokens (production runs "
-            "sync, no Batch API discount); cache_discount on the cached "
-            "input portion (cached input = sync_input * cache)"
+            "normal Responses API list price on uncached input and output, "
+            "plus the production cached-input rate on measured cached tokens; "
+            "no Batch API discount"
         ),
         "do_not_use_historical_production_cache_rate": True,
     }
@@ -146,8 +212,8 @@ def extrapolate_production_cost(
         "total_usd": sync_usd,
         "mean_usd_per_row": sync_usd / n_golden,
         "note": (
-            "Sync list price on measured tokens. Reasoning tokens are inside "
-            "output_tokens. Cache discount not applied at this step."
+            "Normal list price on measured tokens. Reasoning tokens are inside "
+            "output_tokens. The cached-input rate is not applied at this step."
         ),
     }
 
@@ -196,29 +262,30 @@ def extrapolate_production_cost(
         "available": True,
         "total_cached_tokens": cached,
         "cache_hit_rate": hit_rate,
-        "cache_discount": cfg.CACHE_DISCOUNT,
+        "cached_input_price_per_million": pricing["cached_input"],
         "total_usd_after_cache": after_cache,
         "mean_usd_per_row": after_cache / n_golden,
         "note": (
             "Measured cached_tokens from this run. Cached input billed at "
-            f"{cfg.CACHE_DISCOUNT:.0%} of sync input rate."
+            f"${pricing['cached_input']:.4g} per one million tokens."
         ),
     }
 
     # Step 3: scale the cache-adjusted sync total to N_prod. Production runs
     # the sync Responses API, so no Batch API discount is applied.
-    scale = n_prod / n_golden
+    scale = population.row_count / n_golden
     prod_usd = after_cache * scale
     steps["3_scale"] = {
         "label": "scale_to_production_n",
         "available": True,
-        "n_prod": n_prod,
-        "n_prod_label": n_prod_label,
+        "n_prod": population.row_count,
+        "n_prod_label": population.label,
         "scale_factor": scale,
         "estimated_production_usd": prod_usd,
-        "estimated_usd_per_company": prod_usd / n_prod,
+        "estimated_usd_per_company": prod_usd / population.row_count,
         "note": (
-            f"Linear scale × ({n_prod} / {n_golden}) at sync Responses API "
+            f"Linear scale × ({population.row_count} / {n_golden}) at normal "
+            "Responses API "
             "pricing (production runs sync, no Batch API discount). Assumes "
             "golden-set token mix and measured cache rate hold at "
             "production volume."
@@ -234,7 +301,7 @@ def extrapolate_production_cost(
             "golden_after_cache_usd": after_cache,
             "estimated_production_usd": prod_usd,
             "cache_hit_rate": hit_rate,
-            "n_prod": n_prod,
+            "n_prod": population.row_count,
         },
     }
 
@@ -243,8 +310,9 @@ def production_cost_from_records(
     records: list[dict[str, Any]],
     model: str,
     *,
-    n_prod: int = cfg.N_PROD_DEFAULT,
-    n_prod_label: str = "evidence_universe",
+    n_prod: int | None = None,
+    n_prod_label: str | None = None,
+    manifest_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Aggregate token totals from scored records, then extrapolate."""
     from evals.usage import token_totals
@@ -271,6 +339,7 @@ def production_cost_from_records(
         cache_field_present=present,
         n_prod=n_prod,
         n_prod_label=n_prod_label,
+        manifest_path=manifest_path,
         architecture=detected_architecture,
     )
     if partial and not present:
@@ -305,8 +374,9 @@ def format_cost_ladder(estimate: dict[str, Any]) -> str:
     )
     lines.append(f"Cache source: {assumptions.get('cache_source', '?')}")
     lines.append(
-        f"Pricing: sync Responses API list (no Batch API discount), "
-        f"cache discount={assumptions.get('cache_discount')}"
+        "Pricing: normal Responses API list with the production cached-input "
+        f"rate ({assumptions.get('cached_input_price_per_million')}/1M); "
+        "no Batch API discount"
     )
     lines.append("Reasoning tokens: billed inside output")
     lines.append("")
@@ -328,7 +398,7 @@ def format_cost_ladder(estimate: dict[str, Any]) -> str:
                 f"(cached_tokens={s2['total_cached_tokens']:,})"
             )
         else:
-            lines.append(f"2. Cache adjustment:    UNAVAILABLE — {s2.get('reason')}")
+            lines.append(f"2. Cache adjustment:    UNAVAILABLE: {s2.get('reason')}")
     s3 = steps.get("3_scale")
     if s3:
         if s3.get("available"):

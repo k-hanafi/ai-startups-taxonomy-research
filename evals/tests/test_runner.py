@@ -1,218 +1,80 @@
-"""Offline tests for the Stage 3 runner.
-
-No API key and no 249 MB classifier_input.csv are required: request-building,
-identity hashing, resume bookkeeping, and record extraction are all exercised
-against in-memory fixtures.
-"""
+"""Offline tests for shared eval run mechanics."""
 
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 
 import pytest
 
 from evals import runner
+from evals.jsonl_io import MalformedJSONLError
 
 
-@pytest.fixture
-def sample_row() -> dict[str, str]:
-    return {
-        "org_uuid": "abc123-uuid",
-        "name": "Acme AI",
-        "short_description": "An AI thing.",
-        "Long description": "A longer description of the AI thing.",
-        "category_list": "Artificial Intelligence (AI)",
-        "category_groups_list": "Software",
-        "founded_date": "2023-05",
-        "employee_count": "1-10",
-        "total_funding_usd": "1000000",
-        "website_pages_used": "https://acme.ai/",
-        "website_evidence": "We build AI agents.",
+def test_completed_custom_ids_reads_legacy_and_completed_rows(tmp_path):
+    path = tmp_path / "predictions.jsonl"
+    path.write_text(
+        json.dumps({"custom_id": "startup-a"}) + "\n"
+        + json.dumps(
+            {"custom_id": "startup-b", "status": "completed"}
+        )
+        + "\n"
+        + json.dumps({"custom_id": "startup-c", "status": "failed"})
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert runner._completed_custom_ids(path) == {
+        "startup-a",
+        "startup-b",
     }
 
 
-def test_request_kwargs_are_production_faithful(sample_row):
-    from single_pass_classifier.builder import _openai_strict_schema, load_system_prompt
-
-    system_prompt = load_system_prompt()
-    schema = _openai_strict_schema()
-    kwargs = runner.build_request_kwargs(
-        sample_row, system_prompt, schema, "gpt-5.4-nano", "medium"
-    )
-
-    # Prompt + schema + input come verbatim from production builder.
-    assert kwargs["instructions"] == system_prompt
-    assert kwargs["input"].startswith("CompanyID: abc123-uuid")
-    assert kwargs["text"]["format"]["name"] == "ClassificationResult"
-    assert kwargs["store"] is False
-
-    # Experimental deltas are present and match config.
-    from evals import config as cfg
-
-    assert kwargs["reasoning"] == {"effort": "medium"}
-    assert kwargs["max_output_tokens"] == cfg.MAX_OUTPUT_TOKENS
-    # Reasoning models reject temperature, so it is omitted by default.
-    assert ("temperature" in kwargs) == cfg.SEND_TEMPERATURE
-    # A reasoning effort rejects logprobs, so they must not be sent.
-    assert "top_logprobs" not in kwargs
-    assert "include" not in kwargs
-
-
-def test_logprobs_captured_only_when_reasoning_off(sample_row):
-    from single_pass_classifier.builder import _openai_strict_schema, load_system_prompt
-    from evals import config as cfg
-
-    sp = load_system_prompt()
-    schema = _openai_strict_schema()
-
-    off = runner.build_request_kwargs(sample_row, sp, schema, "gpt-5.4-nano", cfg.REASONING_OFF)
-    assert off["top_logprobs"] == cfg.TOP_LOGPROBS
-    assert off["include"] == list(cfg.LOGPROB_INCLUDE)
-
-    on = runner.build_request_kwargs(sample_row, sp, schema, "gpt-5.4-nano", "high")
-    assert "top_logprobs" not in on
-    assert "include" not in on
-
-
-def test_identity_hashes_are_stable_and_shaped():
-    a = runner.identity_hashes()
-    b = runner.identity_hashes()
-    assert a == b
-    assert set(a) == {"prompt_sha256", "schema_sha256", "formatter_sha256"}
-    assert all(len(v) == 64 for v in a.values())
-
-
-def test_make_run_id_encodes_config():
-    rid = runner.make_run_id("gpt-5.4-nano", "high", 2)
-    assert rid.endswith("_gpt-5.4-nano_high_r2")
-
-
-def test_completed_custom_ids_reads_jsonl(tmp_path):
-    p = tmp_path / "predictions.jsonl"
-    p.write_text(
-        json.dumps({"custom_id": "startup-a"}) + "\n"
-        + json.dumps({"custom_id": "startup-b"}) + "\n",
-        encoding="utf-8",
-    )
-    assert runner._completed_custom_ids(p) == {"startup-a", "startup-b"}
-
-
 def test_completed_custom_ids_missing_file(tmp_path):
-    assert runner._completed_custom_ids(tmp_path / "nope.jsonl") == set()
+    assert runner._completed_custom_ids(tmp_path / "missing.jsonl") == set()
 
 
 def test_completed_custom_ids_tolerates_truncated_final_line(tmp_path):
-    p = tmp_path / "predictions.jsonl"
-    p.write_text(
+    path = tmp_path / "predictions.jsonl"
+    path.write_text(
         json.dumps({"custom_id": "startup-a"}) + "\n"
-        + '{"custom_id": "startup-b", "subcl',  # killed mid-append
+        + '{"custom_id": "startup-b", "status": "comple',
         encoding="utf-8",
     )
-    assert runner._completed_custom_ids(p) == {"startup-a"}
+
+    assert runner._completed_custom_ids(path) == {"startup-a"}
 
 
-def test_completed_custom_ids_fails_on_interior_malformed(tmp_path):
-    from evals.jsonl_io import MalformedJSONLError
-
-    p = tmp_path / "predictions.jsonl"
-    p.write_text(
+def test_completed_custom_ids_rejects_interior_corruption(tmp_path):
+    path = tmp_path / "predictions.jsonl"
+    path.write_text(
         json.dumps({"custom_id": "startup-a"}) + "\n"
         + "{broken\n"
         + json.dumps({"custom_id": "startup-c"}) + "\n",
         encoding="utf-8",
     )
+
     with pytest.raises(MalformedJSONLError, match="line 2"):
-        runner._completed_custom_ids(p)
+        runner._completed_custom_ids(path)
 
 
-def test_negative_limit_rejected():
-    with pytest.raises(ValueError):
-        runner.run(limit=-1, dry_run=True)
-
-
-def test_dry_run_refuses_unknown_model_pricing():
-    with pytest.raises(SystemExit, match="Unknown model pricing"):
-        runner.run(model="gpt-not-a-real-model", dry_run=True, limit=1)
-
-
-def test_resume_config_mismatch_refused(tmp_path, monkeypatch):
-    from evals import paths
-
-    monkeypatch.setattr(paths, "RUNS_DIR", tmp_path)
-    monkeypatch.setattr(runner, "run_config_path",
-                        lambda rid: tmp_path / rid / "config.json")
-    (tmp_path / "run1").mkdir()
-    # A prior config for a different model must block resume under run1.
-    runner.run_config_path("run1").write_text(
-        json.dumps({"model": "gpt-5.4-mini", "reasoning_effort": "medium",
-                    "prompt_sha256": "x", "schema_sha256": "y",
-                    "formatter_sha256": "z"}),
+def test_load_golden_rows_preserves_committed_order(tmp_path, monkeypatch):
+    golden = tmp_path / "golden.csv"
+    classifier_input = tmp_path / "classifier_input.csv"
+    golden.write_text("org_uuid\nu2\nu1\n", encoding="utf-8")
+    classifier_input.write_text(
+        "org_uuid,name,website_evidence\n"
+        "u1,First,evidence one\n"
+        "u2,Second,evidence two\n",
         encoding="utf-8",
     )
-    with pytest.raises(SystemExit):
-        runner._ensure_config("run1", "gpt-5.4-nano", "medium", 1, 100)
+    monkeypatch.setattr(runner, "GOLDEN_SET_CSV", golden)
+    monkeypatch.setattr(runner, "CLASSIFIER_INPUT_CSV", classifier_input)
+
+    rows = runner.load_golden_rows()
+
+    assert [row["org_uuid"] for row in rows] == ["u2", "u1"]
 
 
-def test_prediction_record_extracts_labels_and_usage():
-    resp = SimpleNamespace(
-        status="completed",
-        output_text=json.dumps(
-            {
-                "ai_native": 1,
-                "subclass": "1E",
-                "rad_score": "RAD-M",
-                "cohort": "GENAI-ERA",
-                "conf_classification": 4,
-                "conf_rad": 3,
-            }
-        ),
-        usage=SimpleNamespace(
-            input_tokens=1200,
-            output_tokens=350,
-            output_tokens_details=SimpleNamespace(reasoning_tokens=180),
-            input_tokens_details=SimpleNamespace(cached_tokens=400),
-        ),
-    )
-    rec = runner._prediction_record("startup-x", "x", "gpt-5.4-nano", "medium", resp,
-                                    latency_s=2.345)
-    assert rec["subclass"] == "1E"
-    assert rec["ai_native"] == 1
-    assert rec["reasoning_tokens"] == 180
-    assert rec["input_tokens"] == 1200
-    assert rec["cached_tokens"] == 400
-    assert rec["org_uuid"] == "x"
-    assert rec["latency_s"] == 2.345
-
-
-def test_prediction_record_cached_tokens_zero_when_usage_missing():
-    resp = SimpleNamespace(status="incomplete", output_text="", usage=None)
-    rec = runner._prediction_record("startup-y", "y", "gpt-5.4-nano", "medium", resp)
-    assert rec["cached_tokens"] == 0
-    assert rec["input_tokens"] is None
-
-
-def test_prediction_record_cached_tokens_from_dict_usage():
-    # Dict-shaped usage (as in raw JSON dumps) must parse the same way.
-    from evals.usage import cached_tokens_from_usage
-
-    assert cached_tokens_from_usage({
-        "input_tokens": 100,
-        "input_tokens_details": {"cached_tokens": 55},
-    }) == 55
-    assert cached_tokens_from_usage({
-        "prompt_tokens": 100,
-        "prompt_tokens_details": {"cached_tokens": 12},
-    }) == 12
-    assert cached_tokens_from_usage({}) == 0
-    assert cached_tokens_from_usage(None) == 0
-
-
-def test_prediction_record_survives_empty_output():
-    resp = SimpleNamespace(status="incomplete", output_text="", usage=None)
-    rec = runner._prediction_record("startup-y", "y", "gpt-5.4-nano", "medium", resp)
-    assert rec["subclass"] is None
-    assert rec["status"] == "incomplete"
-    assert rec["input_tokens"] is None
-    assert rec["cached_tokens"] == 0
-    assert rec["latency_s"] is None
+def test_runner_contains_no_classifier_builder():
+    assert not hasattr(runner, "build_request_kwargs")
+    assert not hasattr(runner, "run")
