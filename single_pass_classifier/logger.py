@@ -15,7 +15,7 @@ from logging.handlers import RotatingFileHandler
 
 from rich.logging import RichHandler
 
-from src.paths import LOGS_DIR
+from .paths import LOGS_DIR
 
 _LOG_DIR = LOGS_DIR
 _LOG_FILE = _LOG_DIR / "run.log"

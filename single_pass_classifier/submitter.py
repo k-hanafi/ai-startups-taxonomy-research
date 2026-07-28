@@ -22,7 +22,7 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from src.config import DEFAULT_MODEL, OPENAI_API_KEY
+from .config import DEFAULT_MODEL, OPENAI_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,8 @@ def create_batch(
             raise BillingLimitError(
                 "OpenAI billing hard limit reached (monthly budget cap). "
                 "Raise the limit at https://platform.openai.com/settings/organization/limits "
-                "(and check project budgets), then resume with: python classify.py submit"
+                "(and check project budgets), then resume with: "
+                "python -m single_pass_classifier submit"
             ) from e
         raise
 

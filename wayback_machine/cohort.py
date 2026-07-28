@@ -1,9 +1,8 @@
-"""Column contracts and cohort helpers, vendored so this package needs no ``src``.
+"""Vendored column contracts and cohort helpers.
 
-Holds the three things the live pipeline defines in ``src/master_csv.py`` that we
-must agree with exactly (the classifier input schema and the URL validity rule),
-plus the two Wayback-specific helpers: how to read a coverage probe row and how
-to turn it into a raw archive snapshot URL.
+Holds the contracts from ``tavily_crawler/master_csv.py`` that must agree
+exactly, plus the two Wayback-specific helpers for reading a coverage probe row
+and turning it into a raw archive snapshot URL.
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from urllib.parse import urlparse
 from .config import COHORT_FOUNDED_CUTOFF, SNAPSHOT_HOST, SNAPSHOT_SUFFIX
 
 # ---------------------------------------------------------------------------
-# Vendored schema (must match src/master_csv.py exactly)
+# Vendored schema (must match tavily_crawler/master_csv.py exactly)
 # ---------------------------------------------------------------------------
 
 # Static company metadata in master_csv.csv (11 fields, pre-crawl).
@@ -31,8 +30,8 @@ MASTER_CSV_COLUMNS = [
     "website_alive",
 ]
 
-# What classify.py consumes. The 2023 output must have these columns, in order,
-# so the existing classifier runs on it unchanged.
+# What the single-pass classifier consumes. The 2023 output must have these
+# columns, in order, so the existing classifier runs on it unchanged.
 CLASSIFIER_INPUT_COLUMNS = MASTER_CSV_COLUMNS + [
     "website_pages_used",
     "website_evidence",
@@ -47,7 +46,7 @@ COVERAGE_FIELDS = [
 
 
 def is_valid_homepage_url(value: object) -> bool:
-    """Return True for crawlable HTTP(S) homepage URLs (vendored from src)."""
+    """Return True for crawlable HTTP(S) homepage URLs."""
     raw = str(value).strip() if value is not None else ""
     if not raw or raw.lower() in {"nan", "none", "nat"}:
         return False

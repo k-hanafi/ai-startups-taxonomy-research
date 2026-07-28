@@ -24,14 +24,14 @@ from typing import Any
 import pandas as pd
 from dotenv import load_dotenv
 
-from src.master_csv import (
+from .master_csv import (
     CLASSIFIER_INPUT_COLUMNS,
     DEFAULT_MASTER_CSV,
     is_valid_homepage_url,
     tavily_eligible_mask,
 )
-from src.paths import LOGS_DIR, PROJECT_ROOT, TAVILY_PROCESSED_DIR, TAVILY_RAW_DIR
-from src.website_evidence import compact_tavily_response
+from .paths import LOGS_DIR, PROJECT_ROOT, TAVILY_PROCESSED_DIR, TAVILY_RAW_DIR
+from .website_evidence import compact_tavily_response
 
 TAVILY_CRAWL_ENDPOINT = "https://api.tavily.com/crawl"
 DEFAULT_RAW_RESULTS_JSONL = TAVILY_RAW_DIR / "raw_results.jsonl"

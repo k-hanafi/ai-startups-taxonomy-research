@@ -37,9 +37,9 @@ from typing import Any, Literal, Optional
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from src.builder import _add_additional_properties_false
-from src.config import OPENAI_API_KEY
-from src.formatter import _normalize_founded_date, build_custom_id, format_user_message
+from single_pass_classifier.builder import _add_additional_properties_false
+from single_pass_classifier.config import OPENAI_API_KEY
+from single_pass_classifier.formatter import _normalize_founded_date, build_custom_id, format_user_message
 
 from evals import config as cfg
 from evals.jsonl_io import append_jsonl, iter_jsonl

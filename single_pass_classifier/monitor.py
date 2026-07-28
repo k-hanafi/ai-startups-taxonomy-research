@@ -19,14 +19,14 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
-from src.config import (
+from .config import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_MODEL,
     ESTIMATED_TOKENS_PER_REQUEST,
     MAX_BATCH_QUEUE_TOKENS,
 )
-from src.state import BatchRecord, PipelineState
-from src.submitter import (
+from .state import BatchRecord, PipelineState
+from .submitter import (
     BillingLimitError,
     create_batch,
     generate_run_id,
@@ -51,10 +51,10 @@ def _emit_billing_resume_help(state: PipelineState) -> None:
         "    [link=https://platform.openai.com/settings/organization/limits]"
         "https://platform.openai.com/settings/organization/limits[/]\n\n"
         "[bold]2.[/] Resume submission and wait for completion:\n"
-        "    [green]python classify.py submit[/]\n\n"
+        "    [green]python -m single_pass_classifier submit[/]\n\n"
         "[bold]3.[/] Fetch results (writes to production_classifications.csv):\n"
-        "    [green]python classify.py download[/]\n"
-        "    [green]python classify.py merge[/]  # optional: print report\n\n"
+        "    [green]python -m single_pass_classifier download[/]\n"
+        "    [green]python -m single_pass_classifier merge[/]  # optional: print report\n\n"
         "State is saved; you do not need to re-run [italic]prepare[/]."
     )
     Console().print()
@@ -223,7 +223,7 @@ def submit_and_monitor(
 
 
 def print_status(state: PipelineState) -> None:
-    """Print a one-shot status table (for classify.py status).
+    """Print a one-shot status table for the ``status`` command.
 
     Refreshes in-flight batches from the API when any exist. Uses
     :func:`poll_all` so an empty in-flight set never calls

@@ -16,9 +16,9 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
-from src.paths import DEFAULT_CLASSIFICATION_OUTPUT_CSV
-from src.state import PipelineState
-from src.tokens import BATCH_DISCOUNT, CACHE_DISCOUNT, MODEL_PRICING
+from .paths import DEFAULT_CLASSIFICATION_OUTPUT_CSV
+from .state import PipelineState
+from .tokens import BATCH_DISCOUNT, CACHE_DISCOUNT, MODEL_PRICING
 
 logger = logging.getLogger(__name__)
 

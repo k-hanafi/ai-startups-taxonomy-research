@@ -47,26 +47,26 @@ git commit -m "Your descriptive message"
 git push origin "$(git branch --show-current)"
 ```
 
-## Helper Scripts
+## Helper Commands
 
 ```bash
 # Sync with remote (interactive)
 ./scripts/sync_with_remote.sh
 
 # Update website liveness
-python scripts/update_website_liveness.py
+python -m tavily_crawler liveness
 
 # Run Tavily crawl
-python scripts/run_tavily_crawl.py
+python -m tavily_crawler crawl
 ```
 
 ## Common Tasks
 
 ### Run Classification Pipeline
 ```bash
-python classify.py prepare --dry-run  # Cost estimate
-python classify.py status             # Check progress
-python classify.py run                # Full run
+python -m single_pass_classifier prepare --dry-run  # Cost estimate
+python -m single_pass_classifier status             # Check progress
+python -m single_pass_classifier run                # Full run
 ```
 
 ### Survivorship Pipeline
@@ -79,10 +79,11 @@ python wayback_machine/scripts/run_extract_dead.py
 
 ### Testing
 ```bash
-pytest                        # Live pipeline tests
-pytest wayback_machine/tests  # Wayback tests
-pytest -v                     # Verbose output
-pytest tests/test_schema.py   # Specific test file
+pytest                                           # All offline tests
+pytest single_pass_classifier/tests              # V1 classifier tests
+pytest tavily_crawler/tests                       # Live crawler tests
+pytest wayback_machine/tests                      # Wayback tests
+pytest single_pass_classifier/tests/test_schema.py  # Specific test file
 ```
 
 ## Key Files to Read
@@ -106,24 +107,23 @@ pytest tests/test_schema.py   # Specific test file
 
 ```
 /
-├── src/                    # Live classification pipeline
-│   ├── config.py          # Tunables, rate limits, costs
-│   ├── schema.py          # ClassificationResult model
-│   └── ...
+├── single_pass_classifier/ # Live V1 classifier application
+├── tavily_crawler/         # Live liveness and crawl application
+├── evals/                  # Golden-set eval harness
+├── prompts/                # Two-pass prompt drafts (still at repo root)
 ├── wayback_machine/        # Historical + survivorship
 │   ├── scripts/           # CDX probe, crawl, merge
 │   └── tests/             # Wayback tests
-├── scripts/                # Network operations
+├── scripts/                # Supporting utilities
 ├── data/                   # Git-ignored: input data
 ├── outputs/                # Git-ignored: results
 ├── keys/                   # Git-ignored: API keys
-├── tests/                  # Live pipeline tests
 └── AGENTS.md              # The authoritative guide
 ```
 
 ## Important Conventions
 
-- **No magic numbers** outside `src/config.py` or `wayback_machine/config.py`
+- **Classifier tunables** live in `single_pass_classifier/config.py`
 - **Match by `custom_id`**, never by position (batch results)
 - **Only `website_evidence` differs** between strands
 - **CDX rate limit:** Max 58 req/min (60 risks IP ban)
@@ -133,7 +133,7 @@ pytest tests/test_schema.py   # Specific test file
 
 - Read `AGENTS.md` for architecture
 - Check test files for usage examples
-- Run commands with `--help`: `python classify.py --help`
+- Run commands with `--help`: `python -m single_pass_classifier --help`
 - Ask the cloud agent for clarification
 
 ---

@@ -15,20 +15,20 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.config import (
+from .config import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_MODEL,
     MAX_FILE_SIZE_MB,
     MAX_OUTPUT_TOKENS,
     PROMPT_CACHE_KEY,
 )
-from src.formatter import build_custom_id, format_user_message
-from src.paths import BATCH_REQUESTS_DIR
-from src.schema import ClassificationResult
+from .formatter import build_custom_id, format_user_message
+from .paths import BATCH_REQUESTS_DIR
+from .schema import ClassificationResult
 
 logger = logging.getLogger(__name__)
 
-PROMPT_FILE = Path(__file__).resolve().parents[1] / "prompts" / "system_classifier_prompt.txt"
+PROMPT_FILE = Path(__file__).resolve().parent / "prompts" / "system_classifier_prompt.txt"
 OUTPUT_DIR = BATCH_REQUESTS_DIR
 
 

@@ -8,7 +8,7 @@ until they fail silently at 267K rows.
 import pytest
 from pydantic import ValidationError
 
-from src.schema import ClassificationResult
+from single_pass_classifier.schema import ClassificationResult
 
 # -- Fixtures ------------------------------------------------------------------
 

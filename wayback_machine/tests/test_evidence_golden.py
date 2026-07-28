@@ -1,9 +1,9 @@
-"""Tripwire: the vendored cleaner must match the live src cleaner exactly.
+"""Tripwire: the vendored cleaner must match the live crawler cleaner exactly.
 
 The 2023 vs today comparison is only valid if both evidence sets are cleaned
-identically. evidence.py is a frozen copy of src/website_evidence.py; if either
-drifts, this test fails and tells us to re-vendor. Skips cleanly if src isn't
-importable (e.g. the folder was lifted into its own repo).
+identically. evidence.py is a frozen copy of
+tavily_crawler/website_evidence.py; if either drifts, this test fails and tells
+us to re-vendor. Skips cleanly if the crawler package is not importable.
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ import pytest
 
 from wayback_machine.evidence import compact_tavily_response as vendored
 
-src_evidence = pytest.importorskip("src.website_evidence")
-live = src_evidence.compact_tavily_response
+live_evidence = pytest.importorskip("tavily_crawler.website_evidence")
+live = live_evidence.compact_tavily_response
 
 CASES = [
     {"results": [{"url": "https://acme.ai/", "raw_content": (

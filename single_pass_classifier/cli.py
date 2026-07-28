@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""CLI entry point for the v2 startup classification pipeline.
+"""CLI entry point for the legacy V1 single-pass classification pipeline.
 
 Uses the OpenAI Responses API (`POST /v1/responses`) for batch jobs and for
-`classify.py test` (structured JSON via `text.format`).
+the ``test`` command (structured JSON via ``text.format``).
 
 Each subcommand does exactly one thing and reads state.json to know where
 to start. --dry-run on prepare and run prints the full cost plan without
 touching the API.
 
 Usage:
-    python classify.py prepare  [--dry-run] [--data path/to/input.csv]
-    python classify.py submit   [--concurrency 50]
-    python classify.py status
-    python classify.py download
-    python classify.py retry
-    python classify.py merge    [--output path]   # prints report only
-    python classify.py run      [--dry-run] [--concurrency 50] [--data path/to/input.csv]
+    python -m single_pass_classifier prepare  [--dry-run] [--data path/to/input.csv]
+    python -m single_pass_classifier submit   [--concurrency 50]
+    python -m single_pass_classifier status
+    python -m single_pass_classifier download
+    python -m single_pass_classifier retry
+    python -m single_pass_classifier merge    [--output path]
+    python -m single_pass_classifier run      [--dry-run] [--concurrency 50]
 """
 
 from __future__ import annotations
@@ -27,21 +27,21 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.builder import build_batch_files, load_system_prompt
-from src.config import DEFAULT_BATCH_SIZE, DEFAULT_MODEL, ESTIMATED_TOKENS_PER_REQUEST
-from src.downloader import collect_failed_custom_ids, download_completed
-from src.formatter import build_custom_id, format_user_message
-from src.logger import setup_logging
-from src.merger import DEFAULT_OUTPUT_PATH, print_report
-from src.monitor import print_status, submit_and_monitor
-from src.submitter import BillingLimitError
-from src.state import BatchRecord, PipelineState
-from src.tokens import estimate_cost
-from src.tavily_crawl import DEFAULT_CLASSIFIER_INPUT_CSV
+from .builder import build_batch_files, load_system_prompt
+from .config import DEFAULT_BATCH_SIZE, DEFAULT_MODEL, ESTIMATED_TOKENS_PER_REQUEST
+from .downloader import collect_failed_custom_ids, download_completed
+from .formatter import build_custom_id, format_user_message
+from .logger import setup_logging
+from .merger import DEFAULT_OUTPUT_PATH, print_report
+from .monitor import print_status, submit_and_monitor
+from .paths import DEFAULT_CLASSIFIER_INPUT_CSV
+from .state import BatchRecord, PipelineState
+from .submitter import BillingLimitError
+from .tokens import estimate_cost
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parent
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_CSV = DEFAULT_CLASSIFIER_INPUT_CSV
 
 
@@ -100,7 +100,10 @@ def _cmd_prepare(args: argparse.Namespace) -> None:
         )
 
     state.save()
-    logger.info("Prepared %d batch files. Run 'classify.py submit' next.", len(files))
+    logger.info(
+        "Prepared %d batch files. Run 'python -m single_pass_classifier submit' next.",
+        len(files),
+    )
 
 
 def _cmd_submit(args: argparse.Namespace) -> None:
@@ -109,7 +112,9 @@ def _cmd_submit(args: argparse.Namespace) -> None:
     state = PipelineState.load()
 
     if not state.batches:
-        logger.error("No batches prepared. Run 'classify.py prepare' first.")
+        logger.error(
+            "No batches prepared. Run 'python -m single_pass_classifier prepare' first."
+        )
         sys.exit(1)
 
     submit_and_monitor(
@@ -136,8 +141,8 @@ def _cmd_download(args: argparse.Namespace) -> None:
 
 def _download_error_files(state: PipelineState) -> None:
     """Download error JSONL files for batches that had failures."""
-    from src.downloader import ERRORS_DIR, _download_file
-    from src.submitter import get_client
+    from .downloader import ERRORS_DIR, _download_file
+    from .submitter import get_client
 
     batches_needing_download = [
         rec for rec in state.completed_batches() + state.failed_batches()
@@ -163,8 +168,8 @@ def _cmd_retry(args: argparse.Namespace) -> None:
     """
     setup_logging()
     import json
-    from src.builder import OUTPUT_DIR
-    from src.downloader import ERRORS_DIR
+    from .builder import OUTPUT_DIR
+    from .downloader import ERRORS_DIR
 
     state = PipelineState.load()
 
@@ -224,7 +229,8 @@ def _cmd_retry(args: argparse.Namespace) -> None:
 
     state.save()
     logger.info(
-        "Created %d retry batch file(s) with %d total requests. Run 'classify.py submit'.",
+        "Created %d retry batch file(s) with %d total requests. "
+        "Run 'python -m single_pass_classifier submit'.",
         len(written_files), len(retry_lines),
     )
 
@@ -266,9 +272,9 @@ def _cmd_test(args: argparse.Namespace) -> None:
     row_dict = row.to_dict()
     user_msg = format_user_message(row_dict)
 
-    from src.builder import _openai_strict_schema, load_system_prompt, responses_text_format_json_schema
-    from src.config import MAX_OUTPUT_TOKENS, PROMPT_CACHE_KEY
-    from src.submitter import get_client
+    from .builder import _openai_strict_schema, load_system_prompt, responses_text_format_json_schema
+    from .config import MAX_OUTPUT_TOKENS, PROMPT_CACHE_KEY
+    from .submitter import get_client
 
     client = get_client()
     system_prompt = load_system_prompt()
@@ -303,7 +309,7 @@ def _cmd_test(args: argparse.Namespace) -> None:
         result = _call("auto")
         tier_used = "auto"
 
-    from src.schema import ClassificationResult
+    from .schema import ClassificationResult
     validated = ClassificationResult.model_validate(result)
 
     console = Console()
@@ -363,8 +369,8 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser with all subcommands."""
     parser = argparse.ArgumentParser(
-        prog="classify.py",
-        description="v2 AI-native startup classifier: two-axis taxonomy via OpenAI Batch API",
+        prog="python -m single_pass_classifier",
+        description="Legacy V1 single-pass AI-native classifier via OpenAI Batch API",
     )
     subs = parser.add_subparsers(dest="command", required=True)
 

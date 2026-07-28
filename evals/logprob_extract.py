@@ -25,9 +25,9 @@ banked 2026-07-06 gpt-5.4-nano effort=none run):
 - The chosen token is not guaranteed to appear in its own top_logprobs list;
   the entry's own {token, logprob} is merged into the pool first.
 
-Deliberately dependency-free (stdlib only): nothing here may import src.*
+Deliberately dependency-free (stdlib only): nothing here may import single_pass_classifier.*
 (OPENAI_API_KEY at import time) — extraction must run fully offline. This is
-the prototype of the future src/logprobs.py.
+the prototype of the future single_pass_classifier/logprobs.py.
 """
 
 from __future__ import annotations

@@ -4,7 +4,8 @@ The research design hinges on one thing: the only difference between the live
 input and the 2023 input is the website evidence. So we take the SAME static
 metadata base the live crawl used (``master_csv.csv``) and swap in the 2023
 evidence for the companies we scraped. Companies without 2023 evidence are
-dropped (the panel is retrievable-only), so the file is ready for ``classify.py``
+dropped (the panel is retrievable-only), so the file is ready for the
+single-pass classifier
 unchanged.
 """
 

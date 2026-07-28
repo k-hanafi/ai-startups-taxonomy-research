@@ -3,10 +3,11 @@
 
 Sets ``CLASSIFY_NS=wayback_dead`` BEFORE importing the classifier, which reroutes
 all batch state + the output CSV under ``outputs/wayback_dead/`` (see
-``src/paths.py``). The finished modern run under ``outputs/batch_data`` and
+``single_pass_classifier/paths.py``). The finished modern run under
+``outputs/batch_data`` and
 ``outputs/production_csvs`` is therefore physically untouchable from here.
 
-Every ``classify.py`` subcommand works through this wrapper — same model, prompt,
+Every single-pass subcommand works through this wrapper with the same model, prompt,
 and schema as the live cohort. Only the input evidence differs:
 
     python wayback_machine/scripts/classify_dead.py run \\
@@ -19,7 +20,7 @@ import os
 import sys
 from pathlib import Path
 
-# Bind the namespace before any src import so src/paths picks it up at import.
+# Bind the namespace before the classifier package imports its path constants.
 os.environ.setdefault("CLASSIFY_NS", "wayback_dead")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -29,7 +30,7 @@ DEFAULT_DEAD_INPUT = (
     PROJECT_ROOT / "wayback_machine" / "outputs" / "processed" / "classifier_input_dead.csv"
 )
 
-from classify import main  # noqa: E402
+from single_pass_classifier.cli import main  # noqa: E402
 
 _DATA_COMMANDS = frozenset({"prepare", "submit", "retry", "test", "run"})
 

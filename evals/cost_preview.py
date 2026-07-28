@@ -1,6 +1,6 @@
 """Offline cost estimates for the locked eval matrix.
 
-No OpenAI import and no src.config import: cost-preview must run without
+No OpenAI import and no single_pass_classifier.config import: cost-preview must run without
 an API key. The formula here is the single source of truth for both
 ``python -m evals cost-preview`` and classification ``--dry-run``.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from src.formatter import format_user_message
+from single_pass_classifier.formatter import format_user_message
 
 from evals import config as cfg
 from evals.paths import (

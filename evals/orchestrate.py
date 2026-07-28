@@ -88,7 +88,7 @@ class Job:
 def require_openai_key() -> None:
     """Refuse with a plain-English message if the API key is missing/placeholder.
 
-    ``src.config`` already loads ``keys/openai.env``; this only preflights so
+    ``single_pass_classifier.config`` already loads ``keys/openai.env``; this only preflights so
     beginners see a clear fix instead of a KeyError traceback.
     """
     from dotenv import load_dotenv

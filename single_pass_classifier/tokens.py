@@ -13,12 +13,12 @@ from pathlib import Path
 
 import tiktoken
 
-from src.config import (
+from .config import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_MODEL,
     MAX_OUTPUT_TOKENS,
 )
-from src.schema import ClassificationResult
+from .schema import ClassificationResult
 
 # ── Pricing ($ per 1M tokens, sync API, before batch discount) ────────────
 MODEL_PRICING: dict[str, dict[str, float]] = {

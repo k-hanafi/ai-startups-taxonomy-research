@@ -62,7 +62,7 @@ OPENAI_API_KEY=placeholder pytest
 OPENAI_API_KEY=placeholder PYTHONPATH=. pytest wayback_machine/tests
 
 # Optional: cost estimate once classifier input exists locally
-# OPENAI_API_KEY=placeholder python classify.py prepare --dry-run
+# OPENAI_API_KEY=placeholder python -m single_pass_classifier prepare --dry-run
 # (requires outputs/tavilycrawl/processed/classifier_input.csv from a completed crawl)
 ```
 
@@ -88,9 +88,13 @@ pytest
 pytest wayback_machine/tests
 
 # Classification pipeline (requires real API key)
-python classify.py prepare --dry-run  # Cost estimate
-python classify.py run                # Full run
-python classify.py status             # Check progress
+python -m single_pass_classifier prepare --dry-run  # Cost estimate
+python -m single_pass_classifier run                # Full run
+python -m single_pass_classifier status             # Check progress
+
+# Live website enrichment
+python -m tavily_crawler liveness
+python -m tavily_crawler crawl
 
 # Survivorship pipeline commands (see wayback_machine/README.md)
 python wayback_machine/scripts/probe_death_coverage.py
@@ -102,14 +106,15 @@ python wayback_machine/scripts/run_extract_dead.py
 
 ```
 /
-├── src/                  # Live classification pipeline
+├── single_pass_classifier/ # Live V1 classifier application
+├── tavily_crawler/       # Live liveness and crawl application
+├── evals/                # Golden-set eval harness
+├── prompts/              # Two-pass prompt drafts (still at repo root)
 ├── wayback_machine/      # Historical + survivorship strands
-├── scripts/              # Network-touching scripts (run locally)
+├── scripts/              # Supporting utilities
 ├── data/                 # Input data (git-ignored, not indexed)
 ├── outputs/              # Generated results (git-ignored)
 ├── keys/                 # API keys (git-ignored)
-├── prompts/              # System prompts
-├── tests/                # Pytest tests
 └── AGENTS.md             # Agent briefing (read this!)
 ```
 
@@ -261,8 +266,8 @@ git fetch origin
 - Read `AGENTS.md` for project architecture and data flow
 - Read `wayback_machine/README.md` for survivorship pipeline details
 - Check `plans/` directory for detailed project plans
-- Run commands with `--help` flag: `python classify.py --help`
-- Check test files in `tests/` for usage examples
+- Run commands with `--help`: `python -m single_pass_classifier --help`
+- Check package test folders for usage examples
 
 ## Next Steps
 
@@ -270,7 +275,7 @@ After setup:
 
 1. Read `AGENTS.md` thoroughly
 2. Run `pytest` to verify everything works
-3. Explore the codebase starting from `classify.py` and `src/`
+3. Explore the V1 app from `single_pass_classifier/cli.py`
 4. Check what the cloud agent has been working on: `git log --oneline -20`
 5. Review current branch status: `git status`
 

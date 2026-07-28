@@ -1,7 +1,7 @@
 """All filesystem paths for the Wayback Machine sub-project.
 
 One place for every path so no module hard-codes a string. Mirrors the role of
-``src/paths.py`` but rooted at this package, keeping generated artifacts inside
+``single_pass_classifier/paths.py`` but rooted here, keeping generated artifacts inside
 ``wayback_machine/`` (so the folder is self-contained and liftable).
 
 Both ``data/`` and ``outputs/`` are git-ignored: ``data/`` holds frozen inputs,

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 import pandas as pd
 
-from src.paths import DATA_DIR
+from .paths import DATA_DIR
 
 DEFAULT_MASTER_CSV = DATA_DIR / "master_csv.csv"
 

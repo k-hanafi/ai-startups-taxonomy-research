@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Literal
 
-from src.paths import BATCH_DATA_DIR, BATCH_STATE_FILE
+from .paths import BATCH_DATA_DIR, BATCH_STATE_FILE
 
 logger = logging.getLogger(__name__)
 
