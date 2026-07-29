@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-28 | Active branch: `pr/align-evals-to-v2` (evals import production V2 contracts)
+Last updated: 2026-07-29 | Active branch: `cursor/v2-appendix-revision-guidelines-eb9e` (professor-facing V2 appendix revision guide)
 
 ---
 
@@ -232,6 +232,7 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | Path | Purpose |
 |------|---------|
 | `data visualization/01_Presentation_Materials/*.html` | Generated dashboards (`eval_dashboard.html` is overwritten every build) |
+| `data visualization/01_Presentation_Materials/v2_appendix_revision_guidelines.md` | Professor-facing checklist for rewriting Appendix B.2 to the V2 evidence + two-pass method (not finished appendix prose) |
 | `data visualization/01_Presentation_Materials/eval_instances/` | Kept eval suite builds: `eval_instance_NN.html` pages, `index.html` to browse them, `instances.json` registry |
 | `data visualization/02_Analysis_Code/*.py` | Scripts that build those dashboards |
 | `data visualization/02_Analysis_Code/survivorship_analysis.py` | Survivor-vs-dead compute on the evidence-only universe: distributions, BH-tested subclass deltas, funding/thin-history/snapshot-age cuts, coverage funnel, 3 logistic models (pure metrics dict; PREVIEW from production if `survivorship_corrected.csv` absent) |
