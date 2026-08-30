@@ -73,10 +73,10 @@ OPENAI_API_KEY=placeholder PYTHONPATH=. pytest wayback_machine/tests
 The repository has three strands, all feeding the same classifier:
 
 1. **Live strand** (DONE): Classifies companies based on current websites
-2. **Historical strand** (PAUSED): Re-classifies using March 2023 Internet Archive snapshots
-3. **Survivorship strand** (IN PROGRESS): Dead-cohort pipeline merged to `main`; Stage C crawl is the next manual run
+2. **Historical strand** (FROZEN): Re-classifies using March 2023 Internet Archive snapshots (infra built, paid extract not run)
+3. **Survivorship strand** (FROZEN): Dead-cohort extract is complete; classify/merge not landed in this snapshot
 
-**Current focus:** Run the survivorship dead-cohort crawl on `main` (see `plans/tavily_runner_workflow.md`)
+**Current focus:** Local setup only. The research snapshot on `main` is frozen.
 
 ### Key Commands
 
@@ -265,7 +265,6 @@ git fetch origin
 
 - Read `AGENTS.md` for project architecture and data flow
 - Read `wayback_machine/README.md` for survivorship pipeline details
-- Check `plans/` directory for detailed project plans
 - Run commands with `--help`: `python -m single_pass_classifier --help`
 - Check package test folders for usage examples
 

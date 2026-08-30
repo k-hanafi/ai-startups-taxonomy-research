@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the survivorship-bias Wayback findings dashboard.
 
-Same house style as build_tavily_dashboard.py (fixed left nav, serif headers,
+Same house style as the other presentation dashboards (fixed left nav, serif headers,
 metric cards, Plotly charts). The data is produced by
 wayback_machine/scripts/summarize_death_coverage.py so the HTML and the in-Cursor
 canvas share one source of truth and cannot drift. That summarizer lives under a

@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-08-30 | Active branch: `main` (V2 alive-vs-dead dashboard on the production CSV)
+Last updated: 2026-08-30 | Active branch: `chore/clean-my-repo` (portfolio cleanup; do not resume paid strands)
 
 ---
 
@@ -25,12 +25,12 @@ them with an LLM via the OpenAI Batch API. There are **three strands**, all
 feeding the *same* classifier:
 
 1. **Live** (built, run): classify companies on today's websites.
-2. **Historical / wayback** (built; paused awaiting recovery probe): re-run the
+2. **Historical / wayback** (infra built, paid extract not run): re-run the
    *unchanged* classifier on each company's **March-2023 (GPT-4 launch)** homepage
    from the Internet Archive, to measure how AI messaging shifted.
-3. **Survivorship-bias** (merged to `main`): recover **pre-death** snapshots for
-   the ~22k companies Tavily couldn't extract, classify them, and merge back so the
-   dataset isn't biased toward survivors.
+3. **Survivorship-bias** (extract complete, classify/merge not landed): recover
+   **pre-death** snapshots for the ~22k companies Tavily couldn't extract, classify
+   them, and merge back so the dataset isn't biased toward survivors.
 
 **Core invariant:** `python -m single_pass_classifier` consumes the stable
 `CLASSIFIER_INPUT_COLUMNS` contract. Each strand is just a different way to
@@ -39,23 +39,14 @@ thing that differs across strands is the evidence.
 
 ## Status / roadmap
 
+This snapshot is **frozen**. Do not resume paid crawl, extract, or classify
+work from this repo without an explicit new brief.
+
 | Strand | Stage | Status |
 |--------|-------|--------|
 | Live | crawl → classify → merge | DONE — 44,387 companies classified (`production_classifications.csv`) |
-| Historical (wayback) | coverage probe done; infra built | PAUSED — GO verdict (~16k retrievable at Mar-2023); awaiting recovery probe before paid extract |
-| Survivorship-bias | probe done → extract DONE → classify → merge | IN PROGRESS — paid Stage C extract complete (19,044 targets covered, 15,714 with evidence in `scrape_processed_dead.csv`); next: `build_classifier_input_dead.py` → `classify_dead.py` (paid) → `merge_survivorship.py` |
-
-
-Authoritative plans (read when resuming a strand; committed under **`.cursor/plans/`**):
-- `.cursor/plans/roadmap-to-july-deliverable.plan.md` — master roadmap for the July professor-meeting deliverables (read first).
-- `.cursor/plans/PLAN.md` — historical/wayback master plan.
-- `.cursor/plans/survivorship_bias_wayback_*.plan.md` — death-anchored CDX probe (active survivorship strand).
-- `.cursor/plans/survivorship_tavily_pipeline_*.plan.md` — post-probe Tavily extract + classify pipeline.
-- `.cursor/plans/logprob_confidence_classifier_*.plan.md` — logprob-based confidence methodology (active).
-- `.cursor/plans/golden_set_eval_harness_*.plan.md` — golden-set eval harness (active; production-aligned contracts built; prior local matrix uses the old fingerprint and stays historical; next = `python -m evals run-evals` for a fresh aligned 9-cell matrix).
-- `.cursor/plans/v1_alive_dead_dashboard.plan.md` — V1 alive-vs-dead dashboard PRD (implemented; evidence-only universe, 4-act survivorship section, coverage checklist for the retired insights dashboard).
-- `.cursor/plans/eval_suite_redesign.plan.md` — Classifier Eval Suite redesign contract + per-tab spec (implemented on `eval/suite-redesign`).
-- `.cursor/plans/eval_cli_redesign.plan.md` — beginner-friendly paid eval CLI (`cost-preview` / `run-evals` / `open-dashboard`) on `eval/cli-redesign`.
+| Historical (wayback) | coverage probe done; infra built | FROZEN — GO verdict (~16k retrievable at Mar-2023); paid extract not run |
+| Survivorship-bias | probe done → extract DONE | FROZEN — 19,044 targets covered, 15,714 with evidence in `scrape_processed_dead.csv`; classify/merge not landed |
 
 Eval alignment: `two_pass_classifier` owns every classifier contract used by
 `evals` (prompts, schemas, request bodies, formatting, cohort, confidence,
@@ -63,7 +54,9 @@ models, defaults, output caps, and normal Responses pricing). The eval package
 keeps golden-data research and orchestration only. Existing local eval results
 that used the prior prompt fingerprint remain historical until a new paid sweep.
 
-Cursor writes new plans to `~/.cursor/plans/` by default; copy or sync them into **`.cursor/plans/`** in this repo so they are version-controlled. Legacy copies may still exist in **`plans/`** at repo root. Repo agent skills (committed): **`portfolio-git-messages`**, **`git-commit-batch-plan`**, **`code-structure`**, **`clean-my-repo`** under **`.cursor/skills/`**. **`.cursor/rules/`** stays local.
+Repo agent skills (committed): **`portfolio-git-messages`**, **`git-commit-batch-plan`**,
+**`code-structure`**, **`clean-my-repo`** under **`.cursor/skills/`**. **`.cursor/rules/`**
+stays local. Implementation notes that used to live under `.cursor/plans/` are in git history.
 
 ## Tech stack
 
@@ -87,7 +80,7 @@ coverage_full.csv ──build_targets.py──▶ scrape_targets.csv
         └──run_extract.py (Tavily /extract on archive URLs)──▶ outputs/raw/snapshots.jsonl
                 └──build_classifier_input_2023.py──▶ classifier_input_2023.csv ──▶ python -m wayback_machine.classify_2023 (CLASSIFY_NS=wayback_2023)
 
-SURVIVORSHIP strand (active; GO = archive crawl matching the live cohort)
+SURVIVORSHIP strand (frozen; GO = archive crawl matching the live cohort)
 classifier_input.csv (empty-evidence rows) ──build_not_found_cohort.py──▶ not_found_cohort.csv
  └──probe_death_coverage.py (death-anchored CDX)──▶ death_coverage.csv
  └──build_targets_dead.py──▶ scrape_targets_dead.csv (if_ snapshot URL + per-company scope)
@@ -112,11 +105,10 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `tavily_crawler/` | Live liveness and Tavily crawl application and `python -m tavily_crawler` CLI |
 | `two_pass_classifier/` | Production V2 application: immutable manifest, offline cost preview, 10-row smoke gate, async Responses runner, status/resume/retry, confidence, professor exporter |
 | `README.md` | Public-facing writeup (taxonomy + pipeline narrative + mermaid diagrams) |
+| `LOCAL_SETUP.md` | Local clone, venv, keys, and pytest |
 | `pyproject.toml` | Dependencies + pytest config |
 | `AGENTS.md` | This file |
-| `.cursor/plans/` | Committed Cursor plans (sync from `~/.cursor/plans/` after planning sessions) |
 | `.cursor/skills/` | Four committed repo skills: `portfolio-git-messages`, `git-commit-batch-plan`, `code-structure`, `clean-my-repo` |
-| `plans/` | Legacy plan copies (prefer `.cursor/plans/` for new work) |
 
 ### `single_pass_classifier/` (legacy V1 classifier)
 | File | Responsibility |
@@ -128,7 +120,7 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `schema.py` | `ClassificationResult` Pydantic model (11 fields); auto-generates the JSON schema injected into every request |
 | `formatter.py` | Maps a CSV row → user message; builds `custom_id` |
 | `builder.py` | Writes JSONL batch files (identical cacheable prefix + 1 user msg/line); loads system prompt |
-| `prompts/` | V1 active and reference one-pass prompts |
+| `prompts/` | V1 one-pass prompt (`system_classifier_prompt.txt`) |
 | `tokens.py` | tiktoken token counting + `MODEL_PRICING`; powers `--dry-run` cost reports |
 | `submitter.py` | Fault-tolerant file upload + batch create (tenacity backoff); `BillingLimitError` |
 | `monitor.py` | Async concurrent batch monitor; sliding-window queue-pressure control (stays under 15B token queue) |
@@ -152,7 +144,6 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | File | Purpose |
 |------|---------|
 | `smoke_test_logprobs.py` | Paid diagnostic for Responses logprobs and the V1 structured-output schema |
-| `sync_with_remote.sh` | Interactive Git synchronization helper |
 
 
 ### `two_pass_classifier/` (production V2)

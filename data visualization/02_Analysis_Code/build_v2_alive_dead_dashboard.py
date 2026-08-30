@@ -2,8 +2,8 @@
 """Build the V2 alive-vs-dead presentation dashboard.
 
 Reads the V2 professor CSV (18 columns, evidence-only alive + dead). Confidence
-is three fields with measurement explainers. Chart inventory follows the
-consolidation cuts in .cursor/plans/v2_production_dashboard.plan.md.
+is three fields with measurement explainers. Chart inventory is consolidated
+so each survivorship finding appears once.
 
 Writes:
     data visualization/01_Presentation_Materials/v2_alive_dead_cohort.html
