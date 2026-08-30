@@ -101,13 +101,29 @@ def _read(path: Path) -> pd.DataFrame:
     return pd.read_csv(path, dtype=str, keep_default_na=False, on_bad_lines="skip")
 
 
+def _join_covariates(base: pd.DataFrame, paths: Paths) -> pd.DataFrame:
+    """Attach master covariates and dead-target provenance to a verdict frame."""
+    if not paths.master.exists():
+        raise SystemExit(f"master_csv not found: {paths.master}")
+    master = _read(paths.master)
+    meta_cols = ["org_uuid", "founded_date", "employee_count", "total_funding_usd",
+                 "category_list", "category_groups_list", "website_alive"]
+    master_slim = master[[c for c in meta_cols if c in master.columns]].copy()
+    df = base.merge(master_slim, left_on="CompanyID", right_on="org_uuid", how="left")
+
+    targets = _read(paths.targets_dead) if paths.targets_dead.exists() else pd.DataFrame()
+    if not targets.empty:
+        tcols = ["org_uuid", "death_ts", "days_before_death", "closest_ts", "thin_history"]
+        tgt = targets[[c for c in tcols if c in targets.columns]].copy()
+        df = df.merge(tgt, left_on="CompanyID", right_on="org_uuid", how="left", suffixes=("", "_tgt"))
+    for c in ["death_ts", "days_before_death", "closest_ts", "thin_history"]:
+        if c not in df.columns:
+            df[c] = ""
+    return df
+
+
 def load_frame(paths: Paths) -> tuple[pd.DataFrame, dict]:
     """Build the analysis frame and a meta dict (incl. the preview flag)."""
-    if paths.master.exists():
-        master = _read(paths.master)
-    else:
-        raise SystemExit(f"master_csv not found: {paths.master}")
-
     targets = _read(paths.targets_dead) if paths.targets_dead.exists() else pd.DataFrame()
     dead_ids = set(targets["org_uuid"]) if "org_uuid" in targets else set()
 
@@ -130,11 +146,7 @@ def load_frame(paths: Paths) -> tuple[pd.DataFrame, dict]:
                 base["CompanyID"].isin(dead_ids), "wayback_dead", "live"
             )
 
-    # Static metadata join (funding, category, founded, liveness).
-    meta_cols = ["org_uuid", "founded_date", "employee_count", "total_funding_usd",
-                 "category_list", "category_groups_list", "website_alive"]
-    master_slim = master[[c for c in meta_cols if c in master.columns]].copy()
-    df = base.merge(master_slim, left_on="CompanyID", right_on="org_uuid", how="left")
+    df = _join_covariates(base, paths)
 
     # Live evidence presence: a true survivor has non-empty website_evidence.
     if paths.classifier_input.exists():
@@ -144,18 +156,11 @@ def load_frame(paths: Paths) -> tuple[pd.DataFrame, dict]:
     else:
         df["has_live_evidence"] = df["evidence_source"].eq("live")
 
-    # Death timing + thin-history provenance (always from the frozen work list).
-    if not targets.empty:
-        tcols = ["org_uuid", "death_ts", "days_before_death", "closest_ts", "thin_history"]
-        tgt = targets[[c for c in tcols if c in targets.columns]].copy()
-        df = df.merge(tgt, left_on="CompanyID", right_on="org_uuid", how="left", suffixes=("", "_tgt"))
-    for c in ["death_ts", "days_before_death", "closest_ts", "thin_history"]:
-        if c not in df.columns:
-            df[c] = ""
-
     df = _derive(df, preview)
     meta = {
         "preview": preview,
+        "partial": False,
+        "classifier_version": "v1",
         "gpt4_launch": GPT4_LAUNCH,
         "n_total": int(len(df)),
         "n_universe": int((df["is_survivor"] | df["is_dead"]).sum()),
@@ -164,6 +169,80 @@ def load_frame(paths: Paths) -> tuple[pd.DataFrame, dict]:
         "n_dead_recovered": int(df["is_dead_recovered"].sum()),
         "n_dead_strict": int(df["is_dead_strict"].sum()),
         "n_excluded": int(df["is_excluded"].sum()),
+        "n_expected": None,
+        "n_completed": int(len(df)),
+    }
+    return df, meta
+
+
+def load_v2_frame(
+    paths: Paths,
+    v2_csv: Path,
+    *,
+    expected_rows: int | None = None,
+) -> tuple[pd.DataFrame, dict]:
+    """Load a V2 professor CSV into the survivorship analysis frame.
+
+    Maps company_alive to evidence_source (yes=live, no=wayback_dead). Keeps the
+    three V2 confidence fields and mirrors subclass/rad confidence into the V1
+    conf_* columns so shared base-metric helpers keep working.
+
+    expected_rows is optional. Leave it None for a final production build (no
+    PARTIAL banner). Pass a manifest size only when you want a partial-run warning.
+    """
+    if not v2_csv.exists():
+        raise SystemExit(f"V2 classifications CSV not found: {v2_csv}")
+    raw = _read(v2_csv)
+    required = {
+        "company_id", "company_name", "cohort", "company_alive",
+        "ai_native", "subclass", "rad_score",
+        "ai_native_confidence", "subclass_confidence", "rad_confidence",
+    }
+    missing = sorted(required - set(raw.columns))
+    if missing:
+        raise SystemExit(f"V2 CSV missing columns: {missing}")
+
+    base = pd.DataFrame({
+        "CompanyID": raw["company_id"],
+        "CompanyName": raw["company_name"],
+        "cohort": raw["cohort"],
+        "company_alive": raw["company_alive"].str.lower().str.strip(),
+        "website_snapshot_date": raw.get("website_snapshot_date", ""),
+        "ai_native": raw["ai_native"],
+        "subclass": raw["subclass"],
+        "rad_score": raw["rad_score"],
+        "ai_native_confidence": raw["ai_native_confidence"],
+        "subclass_confidence": raw["subclass_confidence"],
+        "rad_confidence": raw["rad_confidence"],
+    })
+    alive = base["company_alive"].eq("yes")
+    base["evidence_source"] = np.where(alive, "live", "wayback_dead")
+    # Shared V1 helpers expect these names for discrete 1-5 charts / filters.
+    base["conf_classification"] = base["subclass_confidence"]
+    base["conf_rad"] = base["rad_confidence"]
+
+    df = _join_covariates(base, paths)
+    # V2 production rows are evidence-only by construction.
+    df["has_live_evidence"] = df["evidence_source"].eq("live")
+    preview = False
+    df = _derive(df, preview)
+    n_completed = int(len(df))
+    partial = bool(expected_rows is not None and n_completed < expected_rows)
+    meta = {
+        "preview": preview,
+        "partial": partial,
+        "classifier_version": "v2",
+        "gpt4_launch": GPT4_LAUNCH,
+        "n_total": n_completed,
+        "n_universe": int((df["is_survivor"] | df["is_dead"]).sum()),
+        "n_survivor": int(df["is_survivor"].sum()),
+        "n_dead": int(df["is_dead"].sum()),
+        "n_dead_recovered": int(df["is_dead_recovered"].sum()),
+        "n_dead_strict": int(df["is_dead_strict"].sum()),
+        "n_excluded": int(df["is_excluded"].sum()),
+        "n_expected": expected_rows,
+        "n_completed": n_completed,
+        "v2_csv": str(v2_csv),
     }
     return df, meta
 
@@ -479,6 +558,72 @@ def _confidence(f: pd.DataFrame) -> dict:
     }
 
 
+def _hist_bins(values: pd.Series, edges: list[float]) -> dict:
+    """Return counts keyed by left-edge label for a fixed bin grid."""
+    v = pd.to_numeric(values, errors="coerce").dropna()
+    if v.empty:
+        return {"n": 0, "mean": None, "median": None, "bins": [], "counts": []}
+    labels = []
+    counts = []
+    for i in range(len(edges) - 1):
+        lo, hi = edges[i], edges[i + 1]
+        if i == len(edges) - 2:
+            mask = (v >= lo) & (v <= hi)
+        else:
+            mask = (v >= lo) & (v < hi)
+        labels.append(f"{lo:.1f}-{hi:.1f}")
+        counts.append(int(mask.sum()))
+    return {
+        "n": int(len(v)),
+        "mean": round(float(v.mean()), 4),
+        "median": round(float(v.median()), 4),
+        "bins": labels,
+        "counts": counts,
+    }
+
+
+def _v2_confidence(f: pd.DataFrame) -> dict:
+    """Distributions for the three V2 professor confidence fields."""
+    edges = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0000001]
+
+    def discrete(mask: pd.Series, col: str) -> dict:
+        v = pd.to_numeric(f[mask][col], errors="coerce").dropna()
+        dist = {int(k): int(c) for k, c in v.value_counts().sort_index().items()}
+        return {
+            "n": int(len(v)),
+            "mean": round(float(v.mean()), 2) if len(v) else None,
+            "median": float(v.median()) if len(v) else None,
+            "dist": dist,
+        }
+
+    universe = f["is_survivor"] | f["is_dead"]
+    by_subclass = {}
+    for s in SUBCLASS_ORDER:
+        vals = pd.to_numeric(
+            f[universe & f["subclass"].eq(s)]["subclass_confidence"],
+            errors="coerce",
+        ).dropna()
+        by_subclass[s] = {
+            "mean": round(float(vals.mean()), 2) if len(vals) else 0.0,
+            "count": int(len(vals)),
+        }
+
+    return {
+        "ai_native": {
+            "all": _hist_bins(f[universe]["ai_native_confidence"], edges),
+            "survivor": _hist_bins(f[f["is_survivor"]]["ai_native_confidence"], edges),
+            "dead": _hist_bins(f[f["is_dead"]]["ai_native_confidence"], edges),
+        },
+        "subclass": {
+            "all": discrete(universe, "subclass_confidence"),
+            "by_subclass": by_subclass,
+        },
+        "rad": {
+            "all": discrete(universe & f["rad_score"].ne("RAD-NA"), "rad_confidence"),
+        },
+    }
+
+
 def _flips(f: pd.DataFrame, paths: Paths, preview: bool) -> dict:
     """Metadata-only (production) vs recovered-evidence (corrected) verdict flips
     on the dead cohort. Only meaningful once the real corrected CSV exists."""
@@ -581,7 +726,7 @@ def _regression(f: pd.DataFrame) -> dict:
 
 
 def compute_metrics(df: pd.DataFrame, meta: dict, paths: Paths) -> dict:
-    return {
+    out = {
         "meta": meta,
         "correction": _correction(df),
         "ai_vs_survival": _ai_vs_survival(df),
@@ -597,6 +742,9 @@ def compute_metrics(df: pd.DataFrame, meta: dict, paths: Paths) -> dict:
         "flips": _flips(df, paths, meta["preview"]),
         "regression": _regression(df),
     }
+    if meta.get("classifier_version") == "v2" and "ai_native_confidence" in df.columns:
+        out["v2_confidence"] = _v2_confidence(df)
+    return out
 
 
 def analyze(paths: Paths | None = None) -> dict:

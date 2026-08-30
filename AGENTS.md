@@ -6,7 +6,7 @@ replaces an exhaustive codebase search. It is auto-injected into every chat.
 If you change the repo's structure, architecture, data flow, commands, or
 status, **update this file in the same change**. See [Maintaining this file](#maintaining-this-file).
 
-Last updated: 2026-07-28 | Active branch: `pr/align-evals-to-v2` (evals import production V2 contracts)
+Last updated: 2026-08-30 | Active branch: `main` (V2 alive-vs-dead dashboard on the production CSV)
 
 ---
 
@@ -236,6 +236,7 @@ reads a checkpoint and skips finished work, so a 44k-row run is fully resumable.
 | `data visualization/02_Analysis_Code/*.py` | Scripts that build those dashboards |
 | `data visualization/02_Analysis_Code/survivorship_analysis.py` | Survivor-vs-dead compute on the evidence-only universe: distributions, BH-tested subclass deltas, funding/thin-history/snapshot-age cuts, coverage funnel, 3 logistic models (pure metrics dict; PREVIEW from production if `survivorship_corrected.csv` absent) |
 | `data visualization/02_Analysis_Code/build_v1_alive_dead_dashboard.py` | Flagship V1 alive-vs-dead dashboard: 5 corrected base sections + 4-act survivorship story (bias / who dies / why / robustness); writes `v1_alive_dead_cohort.html`; loud PREVIEW banner pre-merge (replaces the retired `build_survivorship_insights_dashboard.py`) |
+| `data visualization/02_Analysis_Code/build_v2_alive_dead_dashboard.py` | V2 alive-vs-dead dashboard on the professor CSV (`outputs/two_pass_classifier/production_classifications.csv`); three confidence explainers; consolidated survivorship charts; writes `v2_alive_dead_cohort.html` |
 | `data visualization/02_Analysis_Code/build_eval_dashboard.py` | Classifier Eval Suite (flat enterprise SPA, three tabs): Pipeline robustness (checks panel), Model benchmarks (leaderboard + cost-ladder popover + Pareto + latency), Confidence correctness correlation (reliability diagram, per-model ECE, selective curves). Shared filter shell (chips + search) on benchmarks and confidence tabs. Header run-instance card names the run (synthetic on the fixture, run date and time on real loads). Defaults to mock fixture; `--runs`/`--scored` for real runs. Writes a self-contained `eval_dashboard.html` (Plotly inlined from `vendor/plotly-2.35.2.min.js`, no CDN) via `write_dashboard`, which archives real runs to `eval_instances/` automatically (mock builds need `--save-instance`). |
 | `data visualization/02_Analysis_Code/vendor/plotly-2.35.2.min.js` | Vendored Plotly for offline/email-safe dashboard HTML (inlined at build time) |
 | `single_pass_classifier/tests/` | V1 schema, formatter, token, and cross-package input-contract tests |
@@ -377,7 +378,7 @@ python -m evals score <run_id> --confidence-from-raw --allow-missing-confidence 
 | Survivorship death probe | `wayback_machine/scripts/probe_death_coverage.py` + `wayback_machine/cdx.py` |
 | Survivorship extract→classify→merge | `wayback_machine/extract_dead.py` + `scripts/{build_targets_dead,run_extract_dead,build_classifier_input_dead,classify_dead,merge_survivorship}.py` |
 | Dashboards | `data visualization/02_Analysis_Code/` |
-| Alive-vs-dead dashboard / survivorship stats | `survivorship_analysis.py` (compute) + `build_v1_alive_dead_dashboard.py` (render); rebuild after `merge_survivorship.py` to leave PREVIEW mode |
+| Alive-vs-dead dashboard / survivorship stats | `survivorship_analysis.py` (compute) + `build_v1_alive_dead_dashboard.py` (V1) or `build_v2_alive_dead_dashboard.py` (V2 professor CSV); rebuild V2 after the final production CSV lands |
 | Eval dashboard (Classifier Eval Suite) | `evals/dashboard_metrics.py` (metrics + robustness checks) + `build_eval_dashboard.py` (three tabs: robustness / benchmarks / confidence; mock fixture until paid matrix runs; `--runs` for real data) |
 | Kept dashboard builds / instance index | `evals/instances.py` (numbering, registry, index page) |
 | Eval matrix / scoring | `evals/config.py` (`EVAL_MODELS` + `MATRIX_PASS_B_EFFORTS`); paid path `cost-preview` → `run-evals` → `open-dashboard` (`evals/orchestrate.py`); lower-level `run-classification` / `matrix` / `score --confidence-from-raw` |
